@@ -1,0 +1,264 @@
+@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;800&display=swap');
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --font-size: 16px;
+  /* Typography variables for Figtree font family */
+  --text-5xl: 48px;
+  --text-3xl: 30px;
+  --text-2xl: 24px;
+  --text-xl: 20px;
+  --text-lg: 18px;
+  --text-base: 16px;
+  --text-sm: 14px;
+  --font-weight-extrabold: 800;
+  --font-weight-semibold: 600;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  
+  /* The default background color for the application. */
+  --background: rgba(255, 255, 255, 1);
+  /* The default color for elements or text that appears on top of the background. */
+  --foreground: rgba(2, 6, 23, 1);
+  /* The background color for cards, modals, and other containers. */
+  --card: rgba(255, 255, 255, 1);
+  /* The default color for text or elements that appear on top of cards, modals and other background containers. */
+  --card-foreground: rgba(2, 6, 23, 1);
+  /* The background color for dropdowns and tooltips. */
+  --popover: rgba(255, 255, 255, 1);
+  /* The default color for text or elements that appear on top of dropdowns and tooltips. */
+  --popover-foreground: rgba(2, 6, 23, 1);
+  /* The primary color used for buttons, links, and other interactive elements. */
+  --primary: rgba(0, 85, 212, 1);
+  /* The default color for text or elements that appear on top of primary colored elements. */
+  --primary-foreground: rgba(248, 250, 252, 1);
+  /* The secondary color used for secondary(but NOT-DESTRUCTIVE) buttons and interactive elements. */
+  --secondary: rgba(241, 245, 249, 1);
+  /* The default color for text or elements that appear on top of secondary colored elements. */
+  --secondary-foreground: rgba(15, 23, 42, 1);
+  /* The muted color used for less prominent elements, such as disabled buttons or disabled text. */
+  --muted: rgba(241, 245, 249, 1);
+  /* The default color for text or elements that appear on top of muted colored elements. */
+  --muted-foreground: rgba(100, 116, 139, 1);
+  /* The accent color used for highlights, links, and other interactive elements. */
+  --accent: rgba(241, 245, 249, 1);
+  /* The default color for text or elements that appear on top of accent colored elements. */
+  --accent-foreground: rgba(15, 23, 42, 1);
+  /* The color used for background in destructive actions, such as delete buttons or error messages. */
+  --destructive: rgba(220, 38, 38, 1);
+  /* The default color for text or elements that appear on top of destructive colored elements. */
+  --destructive-foreground: rgba(254, 242, 242, 1);
+  /* The default border color for elements such as inputs, buttons, and other containers. */
+  --border: rgba(203, 213, 225, 1);
+  /* The default background color for input fields once the text has been filled. Should be either transparent or match the input-background. */
+  --input: rgba(226, 232, 240, 1);
+  /* The default background color for input fields, text areas, and other input elements. */
+  --input-background: rgba(255, 255, 255, 1);
+  /* The color for focus rings, outlines, and other focus indicators. */
+  --ring: rgba(148, 163, 184, 1);
+  /* Shadow for small elevations, such as cards or modals. */
+  --elevation-sm: 0px 1px 2px 0px rgba(2, 6, 23, 0.05);
+  /* The color for chart elements, such as a bar or line in a chart. */
+  --chart-1: rgba(0, 85, 212, 1);
+  /* The color for another chart element, such as a bar or line in a chart. */
+  --chart-2: rgba(13, 148, 136, 1);
+  /* The color for another chart element, such as a bar or line in a chart. */
+  --chart-3: rgba(22, 78, 99, 1);
+  /* The color for another chart element, such as a bar or line in a chart. */
+  --chart-4: rgba(251, 191, 36, 1);
+  /* The color for another chart element, such as a bar or line in a chart. */
+  --chart-5: rgba(245, 158, 11, 1);
+  /* The default border radius for elements such as buttons, tooltip, and other containers. */
+  --radius: 8px;
+  /* The border radius for cards and larger containers. */
+  --radius-card: 10px;
+  /* The background color for sidebars, navigation menus, and other persistent elements. */
+  --sidebar: rgba(248, 250, 252, 1);
+  /* The default color for text or elements that appear on top of sidebars, navigation menus, and other persistent elements. */
+  --sidebar-foreground: rgba(2, 6, 23, 1);
+  /* The primary color used for buttons, links, and other interactive elements in sidebars and navigation menus. */
+  --sidebar-primary: rgba(15, 23, 42, 1);
+  /* The default color for text or elements that appear on top of primary colored elements in sidebars and navigation menus. */
+  --sidebar-primary-foreground: rgba(248, 250, 252, 1);
+  /* The accent color used for highlights, links, and other interactive elements in sidebars and navigation menus. */
+  --sidebar-accent: rgba(241, 245, 249, 1);
+  /* The default color for text or elements that appear on top of accent colored elements in sidebars and navigation menus. */
+  --sidebar-accent-foreground: rgba(15, 23, 42, 1);
+  /* The default border color for elements in sidebars and navigation menus. */
+  --sidebar-border: rgba(226, 232, 240, 1);
+  /* The default color for focus rings, outlines, and other focus indicators in sidebars and navigation menus. */
+  --sidebar-ring: rgba(148, 163, 184, 1);
+}
+
+.dark {
+  --background: rgba(15, 23, 42, 1);
+  --foreground: rgba(248, 250, 252, 1);
+  --card: rgba(15, 23, 42, 1);
+  --card-foreground: rgba(248, 250, 252, 1);
+  --popover: rgba(15, 23, 42, 1);
+  --popover-foreground: rgba(248, 250, 252, 1);
+  --primary: rgba(59, 130, 246, 1);
+  --primary-foreground: rgba(15, 23, 42, 1);
+  --secondary: rgba(51, 65, 85, 1);
+  --secondary-foreground: rgba(248, 250, 252, 1);
+  --muted: rgba(51, 65, 85, 1);
+  --muted-foreground: rgba(148, 163, 184, 1);
+  --accent: rgba(51, 65, 85, 1);
+  --accent-foreground: rgba(248, 250, 252, 1);
+  --destructive: rgba(220, 38, 38, 1);
+  --destructive-foreground: rgba(254, 242, 242, 1);
+  --border: rgba(51, 65, 85, 1);
+  --input: rgba(51, 65, 85, 1);
+  --ring: rgba(100, 116, 139, 1);
+  --chart-1: rgba(59, 130, 246, 1);
+  --chart-2: rgba(20, 184, 166, 1);
+  --chart-3: rgba(34, 197, 94, 1);
+  --chart-4: rgba(251, 191, 36, 1);
+  --chart-5: rgba(249, 115, 22, 1);
+  --sidebar: rgba(30, 41, 59, 1);
+  --sidebar-foreground: rgba(248, 250, 252, 1);
+  --sidebar-primary: rgba(59, 130, 246, 1);
+  --sidebar-primary-foreground: rgba(248, 250, 252, 1);
+  --sidebar-accent: rgba(51, 65, 85, 1);
+  --sidebar-accent-foreground: rgba(248, 250, 252, 1);
+  --sidebar-border: rgba(51, 65, 85, 1);
+  --sidebar-ring: rgba(100, 116, 139, 1);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-card: var(--radius-card);
+  --shadow-sm: var(--elevation-sm);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Figtree', sans-serif;
+  }
+}
+
+/**
+ * Base typography. This is not applied to elements which have an ancestor with a Tailwind text class.
+ */
+@layer base {
+  :where(:not(:has([class*=" text-"]), :not(:has([class^="text-"])))) {
+    h1 {
+      font-family: 'Figtree', sans-serif;
+      font-size: var(--text-5xl);
+      font-weight: var(--font-weight-extrabold);
+      line-height: 1.5;
+    }
+
+    h2 {
+      font-family: 'Figtree', sans-serif;
+      font-size: var(--text-3xl);
+      font-weight: var(--font-weight-semibold);
+      line-height: 1.5;
+    }
+
+    h3 {
+      font-family: 'Figtree', sans-serif;
+      font-size: var(--text-2xl);
+      font-weight: var(--font-weight-semibold);
+      line-height: 1.5;
+    }
+
+    h4 {
+      font-family: 'Figtree', sans-serif;
+      font-size: var(--text-xl);
+      font-weight: var(--font-weight-semibold);
+      line-height: 1.5;
+    }
+
+    p {
+      font-family: 'Figtree', sans-serif;
+      font-size: var(--text-sm);
+      font-weight: var(--font-weight-normal);
+      line-height: 1.5;
+    }
+
+    label {
+      font-family: 'Figtree', sans-serif;
+      font-size: var(--text-sm);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    button {
+      font-family: 'Figtree', sans-serif;
+      font-size: var(--text-sm);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    input {
+      font-family: 'Figtree', sans-serif;
+      font-size: var(--text-sm);
+      font-weight: var(--font-weight-normal);
+      line-height: 1.5;
+    }
+  }
+}
+
+/* Dialog title typography */
+.dialog-title {
+  font-family: 'Figtree', sans-serif;
+  font-size: var(--text-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.5;
+}
+
+/* Card title typography */
+.card-title {
+  font-family: 'Figtree', sans-serif;
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.5;
+}
+
+html {
+  font-size: var(--font-size);
+  font-family: 'Figtree', sans-serif;
+}

@@ -1,0 +1,78 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build outputs
+dist/
+build/
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+logs/
+api-gateway*.log
+frontend.log
+mcp-server*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test coverage
+coverage/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Production secrets
+secrets/
+*.pem
+*.key
+
+# Docker
+.dockerignore
+
+# TypeScript
+*.tsbuildinfo
+
+# Process files
+*.pid
+*.seed
+*.pid.lock
+
+# MCP server specific
+mcp-server/.env
+mcp-server/dist/
+mcp-server/node_modules/
+
+# API Gateway specific
+api-gateway/.env
+api-gateway/dist/
+api-gateway/node_modules/
+
+# Frontend specific
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+
+# Test outputs
+tests/**/*.log
+tests/**/output/

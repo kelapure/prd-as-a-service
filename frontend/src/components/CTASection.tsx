@@ -1,0 +1,44 @@
+import { Button } from "./ui/button";
+
+interface CTASectionProps {
+  onEvaluateClick: () => void;
+}
+
+export function CTASection({ onEvaluateClick }: CTASectionProps) {
+  return (
+    <section className="px-6 py-24 bg-background">
+      <div className="text-center space-y-6 max-w-2xl mx-auto">
+        <h2 className="text-foreground">
+          Stop shipping vague PRDs
+        </h2>
+        <h4 className="text-muted-foreground">
+          Get objective PASS/FAIL evaluation
+          <br />
+          Concrete fix plans and agent-ready task decomposition
+        </h4>
+
+        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <Button
+            variant="outline"
+            size="lg"
+            className="px-8 py-3"
+            asChild
+          >
+            <a href="https://docs.google.com/document/d/121jGQMd0n5nkMW6a32CURKZonBf7t-elGh70G0idV4w/edit?usp=sharing" target="_blank" rel="noopener noreferrer">
+              View Documentation
+            </a>
+          </Button>
+        </div>
+
+        {/* Attribution */}
+        <div className="pt-12 border-t border-border">
+          <div className="text-center">
+            <p className="text-muted-foreground">
+              Built with 8090.ai Software Factory
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}

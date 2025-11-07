@@ -1,0 +1,3 @@
+{
+  "prd_text": "# Test PRD\n\n## Problem\nUsers cannot upload files.\n\n## Solution\nAdd file upload button.\n\n## Requirements\n- Support PDF files\n- Max 10MB file size"
+}
