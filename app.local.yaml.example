@@ -1,0 +1,4 @@
+env_variables:
+  # Provide your OpenAI API key here for local deployment to App Engine.
+  # Do NOT commit app.local.yaml. Copy this file to app.local.yaml and set the value.
+  OPENAI_API_KEY: "sk-..."

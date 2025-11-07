@@ -73,6 +73,9 @@ frontend/node_modules/
 frontend/dist/
 frontend/.env
 
+# App Engine local overlay (contains secrets) — do not commit
+app.local.yaml
+
 # Test outputs
 tests/**/*.log
 tests/**/output/

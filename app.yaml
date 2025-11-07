@@ -8,6 +8,8 @@ env_variables:
   # Set this to your domain when mapped (not used for same-origin requests via dispatch)
   ALLOWED_ORIGIN: https://evalgpt.com
   EVALPRD_MODEL: gpt-4o
+  # Ensure MCP server path resolves inside container
+  MCP_SERVER_ARGS: /app/mcp-server/dist/index.js
   # OPENAI_API_KEY should be set via 'gcloud app deploy --set-env-vars' or Secret Manager
 
 resources:

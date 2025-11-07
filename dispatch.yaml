@@ -1,12 +1,8 @@
 dispatch:
-  # Route API paths to the api service
-  - url: "evalgpt.com/api/*"
-    service: api
-  - url: "www.evalgpt.com/api/*"
+  # Wildcard routing for default *.appspot.com domain during testing
+  - url: "*/api/*"
     service: api
 
-  # Everything else goes to the frontend SPA
-  - url: "evalgpt.com/*"
-    service: frontend
-  - url: "www.evalgpt.com/*"
+  # All other paths go to the frontend
+  - url: "*/"
     service: frontend
