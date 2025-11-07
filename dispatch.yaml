@@ -1,0 +1,12 @@
+dispatch:
+  # Route API paths to the api service
+  - url: "evalgpt.com/api/*"
+    service: api
+  - url: "www.evalgpt.com/api/*"
+    service: api
+
+  # Everything else goes to the frontend SPA
+  - url: "evalgpt.com/*"
+    service: frontend
+  - url: "www.evalgpt.com/*"
+    service: frontend

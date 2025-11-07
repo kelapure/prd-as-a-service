@@ -1,0 +1,11 @@
+service: frontend
+runtime: nodejs20
+env: standard
+
+handlers:
+  # Let the Node server handle all routes (SPA)
+  - url: /.*
+    script: auto
+
+env_variables:
+  NODE_ENV: production

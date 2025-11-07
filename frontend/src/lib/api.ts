@@ -6,7 +6,11 @@ import type {
   AgentTasksOutput,
 } from "../types/api";
 
-const API_BASE_URL = "http://localhost:8080";
+// Use local API during dev, relative path in production (works with App Engine dispatch)
+const API_BASE_URL =
+  typeof window !== "undefined" && window.location.hostname === "localhost"
+    ? "http://localhost:8080"
+    : "";
 const API_TIMEOUT = 180000; // 3 minutes to match backend
 
 interface APIError {
