@@ -30,8 +30,9 @@ function FixPlanItem({ item }: { item: FixPlanOutput['items'][0] }) {
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <div className="bg-card rounded-[var(--radius-card)] border border-border shadow-[var(--elevation-sm)] overflow-hidden hover:shadow-md transition-shadow">
-        <CollapsibleTrigger className="w-full text-left">
-          <div className="p-6">
+        {/* Ensure header text aligns left regardless of inherited alignment */}
+        <CollapsibleTrigger className="w-full">
+          <div className="p-6" style={{ textAlign: "left" }}>
             {/* Header Row */}
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 space-y-3">
@@ -61,8 +62,8 @@ function FixPlanItem({ item }: { item: FixPlanOutput['items'][0] }) {
                     </div>
                   )}
                 </div>
-                <h4 className="text-foreground text-left font-semibold">{item.title}</h4>
-                <p className="text-sm text-muted-foreground text-left leading-relaxed">
+                <h4 className="text-foreground font-semibold">{item.title}</h4>
+                <p className="text-sm text-muted-foreground leading-relaxed" style={{ maxWidth: "70ch" }}>
                   {item.description}
                 </p>
               </div>
