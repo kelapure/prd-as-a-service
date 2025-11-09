@@ -20,7 +20,7 @@ export function Hero({ onEvaluateClick }: HeroProps) {
             Ship Faster with AI Agent Ready PRDs
           </h1>
           <h4 className="text-muted-foreground">
-            Evaluate your product requirements against 11 critical criteria
+            Evaluate your product requirements against 11 criteria
             <br />
             Get binary PASS/FAIL scoring, prioritized fix plans, and AI agent-executable tasks
           </h4>
