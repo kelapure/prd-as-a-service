@@ -34,7 +34,24 @@ export function CTASection({ onEvaluateClick }: CTASectionProps) {
         <div className="pt-12 border-t border-border">
           <div className="text-center">
             <p className="text-muted-foreground">
-              Built with 8090.ai Software Factory
+              Built with{" "}
+              <a
+                href="https://8090.ai"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline transition-colors"
+              >
+                8090.ai
+              </a>
+              {" "}Software Factory by{" "}
+              <a
+                href="https://www.linkedin.com/in/rohitkelapure/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline transition-colors"
+              >
+                Rohit Kelapure
+              </a>
             </p>
           </div>
         </div>
