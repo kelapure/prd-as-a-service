@@ -69,10 +69,15 @@ export function UploadDialog({ open, onOpenChange, onComplete }: UploadDialogPro
         throw new Error(validation.error);
       }
 
-      // Step 3: Evaluate PRD (binary score only)
+      // Step 3: Evaluate PRD (binary score only) with streaming
       setProgressMessage("Evaluating PRD against 11 criteria...");
-      setProgressPercent(50);
-      const binaryScore = await evaluatePRD(prdText);
+      setProgressPercent(30);
+      const binaryScore = await evaluatePRD(prdText, (delta, accumulated) => {
+        // Update progress based on accumulated characters
+        // Estimate: typical response is ~3000 chars
+        const progress = 30 + Math.min((accumulated / 3000) * 70, 70);
+        setProgressPercent(progress);
+      });
 
       // Success! Close dialog and pass results + prdText for background processing
       setProgressPercent(100);

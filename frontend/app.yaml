@@ -1,4 +1,4 @@
-service: frontend
+service: default
 runtime: nodejs20
 env: standard
 

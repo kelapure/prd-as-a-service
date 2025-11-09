@@ -1,0 +1,229 @@
+{
+  "rubric_version": "v1.0",
+  "prd_title": "Spotify Rewards System PRD",
+  "pass_count": 2,
+  "fail_count": 9,
+  "criteria": [
+    {
+      "id": "C1",
+      "name": "Business Problem Clarity",
+      "pass": true,
+      "status": "pass",
+      "rationale": "Problem, audience, and impact are stated with survey data and MAU sizing.",
+      "evidence": [
+        {
+          "quote": "Users aged 18–24 are dissatisfied… poor song recommendations and excessive ads… low conversion to premium",
+          "locator": {
+            "section": "Problem Statement",
+            "page": "1"
+          }
+        },
+        {
+          "quote": "86%… a lot of ads… 28%… poor music recommendation… only 6%… premium is expensive",
+          "locator": {
+            "section": "Survey Results",
+            "page": "2"
+          }
+        }
+      ]
+    },
+    {
+      "id": "C2",
+      "name": "Current Process Documentation",
+      "pass": false,
+      "status": "fail",
+      "rationale": "No 'current state' of free-tier listening journey, ad cadence, or recos pipeline is documented.",
+      "evidence": [
+        {
+          "quote": "No narrative/flow of 'today' (only personas and proposed solutions, pp.3–5)",
+          "locator": {
+            "section": "Missing",
+            "page": "3-5"
+          }
+        }
+      ]
+    },
+    {
+      "id": "C3",
+      "name": "Solution–Problem Alignment",
+      "pass": false,
+      "status": "fail",
+      "rationale": "Rewards and hyper-local/chatbot partly address discovery but do not reduce ad load—the #1 pain—and include unrelated features.",
+      "evidence": [
+        {
+          "quote": "Daily Reward… 90 minutes → premium playlist… Weekly Reward… 1-day Premium",
+          "locator": {
+            "section": "Proposed Solutions",
+            "page": "4-5"
+          }
+        },
+        {
+          "quote": "86%… a lot of ads",
+          "locator": {
+            "section": "Survey Results",
+            "page": "2"
+          }
+        },
+        {
+          "quote": "no requirement to reduce ads in free tier",
+          "locator": {
+            "section": "Missing",
+            "page": "N/A"
+          }
+        }
+      ]
+    },
+    {
+      "id": "C4",
+      "name": "Narrative Clarity & Plain Language",
+      "pass": true,
+      "status": "pass",
+      "rationale": "Language is plain and understandable; acronyms are minimal.",
+      "evidence": [
+        {
+          "quote": "Clear, active statements in Goals/Metrics",
+          "locator": {
+            "section": "Goals/Metrics",
+            "page": "1,5"
+          }
+        }
+      ]
+    },
+    {
+      "id": "C5",
+      "name": "Technical Requirements Completeness",
+      "pass": false,
+      "status": "fail",
+      "rationale": "Lacks API/endpoint/auth specs, data validation, privacy/consent details for location, fraud/abuse rules, and performance targets.",
+      "evidence": [
+        {
+          "quote": "Integration: Provide temporary premium playlist access via tokens",
+          "locator": {
+            "section": "Integration",
+            "page": "6"
+          }
+        },
+        {
+          "quote": "no API/auth/SLAs; location used in 'Hyper Localised' without consent policy",
+          "locator": {
+            "section": "Missing",
+            "page": "4"
+          }
+        }
+      ]
+    },
+    {
+      "id": "C6",
+      "name": "Feature Specificity & Implementation Clarity",
+      "pass": false,
+      "status": "fail",
+      "rationale": "Features are high-level; acceptance criteria, business rules, and UI/UX states are mostly missing.",
+      "evidence": [
+        {
+          "quote": "Reward thresholds given (90 mins) but no exact unlock/expiry rules; chatbot logic unspecified",
+          "locator": {
+            "section": "Features",
+            "page": "4-6"
+          }
+        }
+      ]
+    },
+    {
+      "id": "C7",
+      "name": "Measurability & Success Criteria",
+      "pass": false,
+      "status": "fail",
+      "rationale": "Metrics listed but no numeric targets, baselines, or acceptance conditions.",
+      "evidence": [
+        {
+          "quote": "Key Metrics… Time Spent Listening, Avg Session Duration… without thresholds",
+          "locator": {
+            "section": "Key Metrics",
+            "page": "5,7"
+          }
+        }
+      ]
+    },
+    {
+      "id": "C8",
+      "name": "Formatting & Structure",
+      "pass": false,
+      "status": "fail",
+      "rationale": "Sections mix bullets/tables/images without a consistent template; diagrams embedded without cross-refs.",
+      "evidence": [
+        {
+          "quote": "Personas/solutions as blocks; 'System Design' image lacks figure ref",
+          "locator": {
+            "section": "Multiple",
+            "page": "3-6"
+          }
+        }
+      ]
+    },
+    {
+      "id": "C9",
+      "name": "Scope, Discipline, Anti-Explosion",
+      "pass": false,
+      "status": "fail",
+      "rationale": "Three divergent solutions (rewards, chatbot, hyper-local) plus marketing plan create scope sprawl vs. one problem.",
+      "evidence": [
+        {
+          "quote": "Proposed Solutions: Reward System… Mood AI Chat Bot… Hyper Localised Playlist",
+          "locator": {
+            "section": "Proposed Solutions",
+            "page": "4-5"
+          }
+        }
+      ]
+    },
+    {
+      "id": "C10",
+      "name": "Implementability & Eng Readiness",
+      "pass": false,
+      "status": "fail",
+      "rationale": "Engineers can't build without API contracts, data schemas, consent flows, or ad-stack changes.",
+      "evidence": [
+        {
+          "quote": "Schema Changes… daily_listening_time… but no full ERD, endpoints, or error contracts; only generic tracking plan",
+          "locator": {
+            "section": "Schema Changes / Tracking",
+            "page": "6-7"
+          }
+        }
+      ]
+    },
+    {
+      "id": "C11",
+      "name": "AI Agent Task Decomposability",
+      "pass": false,
+      "status": "fail",
+      "rationale": "Insufficient granularity (no API params, validation rules, or deterministic states) to auto-generate 2–4h tasks.",
+      "evidence": [
+        {
+          "quote": "Chatbot and hyper-local features lack input/output formats and error states",
+          "locator": {
+            "section": "Features",
+            "page": "4"
+          }
+        }
+      ]
+    }
+  ],
+  "compliance": {
+    "gaps_count": 0,
+    "gaps": []
+  },
+  "gating_failures": ["C3", "C5", "C10", "C11"],
+  "readiness_gate": {
+    "state": "HOLD",
+    "must_pass_met": false,
+    "total_pass": 2,
+    "reason": "Fails all four must-pass gates (C3 Solution Alignment, C5 Technical Requirements, C10 Implementability, C11 Agent Decomposability). Needs Fix Plan items 1–8 completed to move to Revise, then target ≥9/11 with must-pass = PASS for Go."
+  },
+  "agreement": {
+    "present": false,
+    "percent_agreement": 0,
+    "by_criterion": []
+  }
+}
+

@@ -1,0 +1,61 @@
+# .gcloudignore - Exclude unnecessary files from App Engine deployments
+
+# Git files
+.git/
+.gitignore
+.gitattributes
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Node modules (will be installed during build)
+node_modules/
+**/node_modules/
+
+# Build artifacts (will be built during deployment)
+frontend/build/
+api-gateway/dist/
+mcp-server/dist/
+
+# Development files
+*.log
+*.swp
+*.swo
+*~
+.DS_Store
+.vscode/
+.idea/
+
+# Test files and data
+tests/
+data/
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+
+# Infrastructure files (not needed in deployed app)
+infra/
+docker-compose.yml
+Dockerfile.frontend
+Dockerfile.mcp-server
+Dockerfile.api-gateway
+
+# Documentation
+README.md
+CLAUDE.md
+AGENTS.md
+DEPLOY_APP_ENGINE.md
+*.md
+!app.yaml
+!dispatch.yaml
+
+# CI/CD
+.github/
+
+# Temp files
+tmp/
+temp/
+*.tmp

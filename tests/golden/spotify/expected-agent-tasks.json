@@ -1,0 +1,372 @@
+{
+  "tasks": [
+    {
+      "id": "task-1",
+      "feature": "F1: Progress Tracking",
+      "title": "Define Daily Progress Counter",
+      "description": "Create counter that tracks daily playback progress for eligibility determination, handling timezone rollovers and out-of-order events.",
+      "duration": "2h",
+      "est_hours": 2,
+      "owner_role": "Backend Engineer",
+      "entry": "Event schema validated; timezone resolved",
+      "exit": "Counter updates idempotently per event",
+      "test": "Aggregation matches ground truth on 50 sessions; handles cross-day rollover",
+      "entry_conditions": [
+        "Event schema validated",
+        "Timezone resolved"
+      ],
+      "exit_conditions": [
+        "Counter updates idempotently per event"
+      ],
+      "tests": [
+        "Aggregation matches ground truth on 50 sessions",
+        "Handles cross-day rollover"
+      ],
+      "inputs": [
+        "user_id",
+        "playback events (start/stop, ms_played, device_id)"
+      ],
+      "outputs": [
+        "daily_ms_listened",
+        "eligible_state"
+      ],
+      "status": "ready"
+    },
+    {
+      "id": "task-2",
+      "feature": "F1: Progress Tracking",
+      "title": "Streak Engine",
+      "description": "Implement streak calculation logic that determines consecutive days meeting 90m threshold, with DST and timezone change handling.",
+      "duration": "3h",
+      "est_hours": 3,
+      "owner_role": "Backend Engineer",
+      "entry": "Daily progress counter operational",
+      "exit": "Streak calculations pass all boundary tests",
+      "test": "Boundary at 89m59s vs 90m00s; DST, travel (tz change)",
+      "entry_conditions": [
+        "Daily progress counter operational"
+      ],
+      "exit_conditions": [
+        "Streak calculations pass all boundary tests"
+      ],
+      "tests": [
+        "Boundary at 89m59s vs 90m00s",
+        "DST transitions handled correctly",
+        "Travel timezone changes work"
+      ],
+      "inputs": [
+        "daily_ms_listened"
+      ],
+      "outputs": [
+        "current_streak",
+        "last_met_at",
+        "streak_break_reason"
+      ],
+      "status": "blocked"
+    },
+    {
+      "id": "task-3",
+      "feature": "F2: Reward Grant",
+      "title": "Reward Grant Service",
+      "description": "Service to grant playlist tokens and premium trials with idempotency, cooldown enforcement, and audit logging.",
+      "duration": "3h",
+      "est_hours": 3,
+      "owner_role": "Backend Engineer",
+      "entry": "Eligibility = true; cooldown not active",
+      "exit": "Exactly one grant/period; append audit log",
+      "test": "Duplicate-grant prevention; token TTL respected",
+      "entry_conditions": [
+        "Eligibility = true",
+        "Cooldown not active"
+      ],
+      "exit_conditions": [
+        "Exactly one grant per period",
+        "Audit log appended"
+      ],
+      "tests": [
+        "Duplicate-grant prevention works",
+        "Token TTL respected"
+      ],
+      "inputs": [
+        "eligible_state",
+        "current_streak"
+      ],
+      "outputs": [
+        "playlist_token{token_id, expires_at}",
+        "trial_grant{starts_at, ends_at}"
+      ],
+      "status": "blocked"
+    },
+    {
+      "id": "task-4",
+      "feature": "F2: Reward Grant",
+      "title": "Playlist Token Validation API",
+      "description": "API endpoint to validate playlist access tokens with proper error codes for expired/used/invalid tokens.",
+      "duration": "3h",
+      "est_hours": 3,
+      "owner_role": "Backend Engineer",
+      "entry": "Token grant service operational",
+      "exit": "API returns correct status codes for all scenarios",
+      "test": "p95 read ≤300ms; 0% unauth access in fuzz test",
+      "entry_conditions": [
+        "Token grant service operational"
+      ],
+      "exit_conditions": [
+        "API returns correct status codes for all scenarios"
+      ],
+      "tests": [
+        "p95 read ≤300ms",
+        "0% unauthorized access in fuzz test"
+      ],
+      "inputs": [
+        "token_id",
+        "user_id",
+        "device_id"
+      ],
+      "outputs": [
+        "access_granted:boolean",
+        "playlist_ids[]"
+      ],
+      "status": "blocked"
+    },
+    {
+      "id": "task-5",
+      "feature": "F3: Premium Trial",
+      "title": "Premium Trial Switcher",
+      "description": "Switch user entitlement to trial status for 24h after 7-day streak, then revert with metrics emission.",
+      "duration": "3h",
+      "est_hours": 3,
+      "owner_role": "Backend Engineer",
+      "entry": "7-day streak achieved; cooldown OK",
+      "exit": "Trial active for 24h; reverts to FREE; metrics emitted",
+      "test": "Reversion at boundary; multiple devices consistent",
+      "entry_conditions": [
+        "7-day streak achieved",
+        "Cooldown OK"
+      ],
+      "exit_conditions": [
+        "Trial active for 24h",
+        "Reverts to FREE",
+        "Metrics emitted"
+      ],
+      "tests": [
+        "Reversion at 24h boundary",
+        "Multiple devices show consistent state"
+      ],
+      "inputs": [
+        "trial_grant"
+      ],
+      "outputs": [
+        "entitlement_state: FREE|TRIAL|PREMIUM"
+      ],
+      "status": "blocked"
+    },
+    {
+      "id": "task-6",
+      "feature": "F4: Fraud Prevention",
+      "title": "Fraud/Abuse Guards",
+      "description": "Detect and prevent progress fraud via concurrent device detection and mute/volume analysis.",
+      "duration": "3h",
+      "est_hours": 3,
+      "owner_role": "Backend Engineer + Security",
+      "entry": "Device fingerprinting available",
+      "exit": "Abuse detection active with <1% false positives",
+      "test": "Simulate abuse patterns; false positive rate <1%",
+      "entry_conditions": [
+        "Device fingerprinting available"
+      ],
+      "exit_conditions": [
+        "Abuse detection active",
+        "False positive rate <1%"
+      ],
+      "tests": [
+        "Simulate abuse patterns",
+        "Measure false positive rate <1%"
+      ],
+      "inputs": [
+        "device fingerprints",
+        "concurrent plays",
+        "volume/mute flags"
+      ],
+      "outputs": [
+        "abuse_detected:boolean",
+        "rejection_reason"
+      ],
+      "status": "ready"
+    },
+    {
+      "id": "task-7",
+      "feature": "F5: Client UI",
+      "title": "Client Progress UI + State Machine",
+      "description": "Build progress bar, unlock CTA, and cooldown badge UI with state machine covering all states.",
+      "duration": "3h",
+      "est_hours": 3,
+      "owner_role": "Frontend Engineer",
+      "entry": "Authenticated free-tier user, target cohort",
+      "exit": "All states reachable: Not-started/In-progress/Unlocked/Expired",
+      "test": "Snapshot tests of all states; RTL test for a11y labels",
+      "entry_conditions": [
+        "Authenticated free-tier user",
+        "Target cohort verified"
+      ],
+      "exit_conditions": [
+        "All states reachable: Not-started/In-progress/Unlocked/Expired"
+      ],
+      "tests": [
+        "Snapshot tests of all states",
+        "RTL test for a11y labels"
+      ],
+      "inputs": [
+        "eligible_state",
+        "current_streak"
+      ],
+      "outputs": [
+        "Progress bar component",
+        "Unlock CTA",
+        "Cooldown badge"
+      ],
+      "status": "blocked"
+    },
+    {
+      "id": "task-8",
+      "feature": "F6: Analytics",
+      "title": "Analytics & Dashboards",
+      "description": "Implement event tracking for all reward system interactions with completeness monitoring.",
+      "duration": "3h",
+      "est_hours": 3,
+      "owner_role": "Data Engineer",
+      "entry": "Event schema defined",
+      "exit": "All events tracked with >99% daily completeness",
+      "test": "Event schema validation; daily completeness >99%",
+      "entry_conditions": [
+        "Event schema defined"
+      ],
+      "exit_conditions": [
+        "All events tracked",
+        "Daily completeness >99%"
+      ],
+      "tests": [
+        "Event schema validation passes",
+        "Daily completeness >99%"
+      ],
+      "inputs": [
+        "progress_deltas",
+        "user_actions"
+      ],
+      "outputs": [
+        "SessionStart/End events",
+        "StreakProgress events",
+        "RewardGranted events",
+        "PlaylistOpened events",
+        "TrialStarted events",
+        "Conversion events"
+      ],
+      "status": "ready"
+    },
+    {
+      "id": "task-9",
+      "feature": "F7: Notifications",
+      "title": "Comms/Notifications",
+      "description": "Send timely notifications for progress milestones, unlocks, and weekly congratulations.",
+      "duration": "2h",
+      "est_hours": 2,
+      "owner_role": "Backend Engineer",
+      "entry": "Notification service configured",
+      "exit": "Delivery <5s p95; opt-out honored",
+      "test": "Delivery <5s p95; opt-out honored",
+      "entry_conditions": [
+        "Notification service configured"
+      ],
+      "exit_conditions": [
+        "Delivery <5s p95",
+        "Opt-out honored"
+      ],
+      "tests": [
+        "Delivery latency <5s p95",
+        "Opt-out preferences respected"
+      ],
+      "inputs": [
+        "progress deltas"
+      ],
+      "outputs": [
+        "Nudge at T–20m",
+        "Unlock toast ≤2s after eligibility",
+        "Weekly congrats message"
+      ],
+      "status": "blocked"
+    },
+    {
+      "id": "task-10",
+      "feature": "F8: Operations",
+      "title": "Runbook & Alerts",
+      "description": "Set up monitoring, alerts, and runbooks for reward system operations.",
+      "duration": "2h",
+      "est_hours": 2,
+      "owner_role": "SRE",
+      "entry": "Services deployed to staging",
+      "exit": "Monitors active; runbooks documented",
+      "test": "Alert fires on simulated error rate >0.5%",
+      "entry_conditions": [
+        "Services deployed to staging"
+      ],
+      "exit_conditions": [
+        "Monitors active",
+        "Runbooks documented"
+      ],
+      "tests": [
+        "Alert fires on simulated error rate >0.5%",
+        "Token validation p95>500ms triggers alert"
+      ],
+      "inputs": [
+        "Service metrics",
+        "Error logs"
+      ],
+      "outputs": [
+        "Monitors for grant error rate >0.5%",
+        "Monitors for token validation p95>500ms",
+        "Retry procedures playbook",
+        "Grace grant playbook"
+      ],
+      "status": "blocked"
+    }
+  ],
+  "edges": [
+    {
+      "from": "task-1",
+      "to": "task-2",
+      "type": "depends_on"
+    },
+    {
+      "from": "task-2",
+      "to": "task-3",
+      "type": "depends_on"
+    },
+    {
+      "from": "task-3",
+      "to": "task-4",
+      "type": "depends_on"
+    },
+    {
+      "from": "task-3",
+      "to": "task-5",
+      "type": "depends_on"
+    },
+    {
+      "from": "task-3",
+      "to": "task-7",
+      "type": "depends_on"
+    },
+    {
+      "from": "task-1",
+      "to": "task-8",
+      "type": "related"
+    },
+    {
+      "from": "task-2",
+      "to": "task-9",
+      "type": "depends_on"
+    }
+  ],
+  "mermaid": ""
+}
+

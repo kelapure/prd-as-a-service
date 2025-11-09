@@ -1,0 +1,585 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://evalgpt.com/schemas/evalgpt-output.schema.json",
+  "title": "EvalGPT PRD Evaluation Output",
+  "description": "Output envelope for EvalGPT using an 11-criterion binary rubric with agent handoff data.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "title": "Metadata",
+      "additionalProperties": false,
+      "properties": {
+        "prd_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string"
+        },
+        "evaluator": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string",
+          "description": "ISO 8601 date or datetime (e.g., 2025-10-12 or 2025-10-12T19:03:00Z).",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+\\-]\\d{2}:\\d{2}))?$"
+        }
+      },
+      "required": [
+        "prd_id",
+        "title"
+      ]
+    },
+    "scores": {
+      "type": "object",
+      "title": "Per-criterion PASS/FAIL scores",
+      "additionalProperties": false,
+      "properties": {
+        "C1": {
+          "title": "Business Problem Clarity and Justification",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pass": {
+              "type": "boolean",
+              "description": "Binary verdict for this criterion (true = PASS, false = FAIL)."
+            },
+            "evidence": {
+              "type": "array",
+              "description": "Quoted evidence and/or location markers supporting the verdict.",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 0
+            },
+            "note": {
+              "type": "string",
+              "description": "Short rationale or clarifying note."
+            }
+          },
+          "required": [
+            "pass"
+          ]
+        },
+        "C2": {
+          "title": "Current Process Documentation Completeness",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pass": {
+              "type": "boolean",
+              "description": "Binary verdict for this criterion (true = PASS, false = FAIL)."
+            },
+            "evidence": {
+              "type": "array",
+              "description": "Quoted evidence and/or location markers supporting the verdict.",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 0
+            },
+            "note": {
+              "type": "string",
+              "description": "Short rationale or clarifying note."
+            }
+          },
+          "required": [
+            "pass"
+          ]
+        },
+        "C3": {
+          "title": "Solution-Problem Alignment",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pass": {
+              "type": "boolean",
+              "description": "Binary verdict for this criterion (true = PASS, false = FAIL)."
+            },
+            "evidence": {
+              "type": "array",
+              "description": "Quoted evidence and/or location markers supporting the verdict.",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 0
+            },
+            "note": {
+              "type": "string",
+              "description": "Short rationale or clarifying note."
+            }
+          },
+          "required": [
+            "pass"
+          ]
+        },
+        "C4": {
+          "title": "Narrative Clarity and Plain Language",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pass": {
+              "type": "boolean",
+              "description": "Binary verdict for this criterion (true = PASS, false = FAIL)."
+            },
+            "evidence": {
+              "type": "array",
+              "description": "Quoted evidence and/or location markers supporting the verdict.",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 0
+            },
+            "note": {
+              "type": "string",
+              "description": "Short rationale or clarifying note."
+            }
+          },
+          "required": [
+            "pass"
+          ]
+        },
+        "C5": {
+          "title": "Completeness of Technical Requirements",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pass": {
+              "type": "boolean",
+              "description": "Binary verdict for this criterion (true = PASS, false = FAIL)."
+            },
+            "evidence": {
+              "type": "array",
+              "description": "Quoted evidence and/or location markers supporting the verdict.",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 0
+            },
+            "note": {
+              "type": "string",
+              "description": "Short rationale or clarifying note."
+            }
+          },
+          "required": [
+            "pass"
+          ]
+        },
+        "C6": {
+          "title": "Feature Specificity and Implementation Clarity",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pass": {
+              "type": "boolean",
+              "description": "Binary verdict for this criterion (true = PASS, false = FAIL)."
+            },
+            "evidence": {
+              "type": "array",
+              "description": "Quoted evidence and/or location markers supporting the verdict.",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 0
+            },
+            "note": {
+              "type": "string",
+              "description": "Short rationale or clarifying note."
+            }
+          },
+          "required": [
+            "pass"
+          ]
+        },
+        "C7": {
+          "title": "Measurability and Success Criteria",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pass": {
+              "type": "boolean",
+              "description": "Binary verdict for this criterion (true = PASS, false = FAIL)."
+            },
+            "evidence": {
+              "type": "array",
+              "description": "Quoted evidence and/or location markers supporting the verdict.",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 0
+            },
+            "note": {
+              "type": "string",
+              "description": "Short rationale or clarifying note."
+            }
+          },
+          "required": [
+            "pass"
+          ]
+        },
+        "C8": {
+          "title": "Consistent Formatting and Structure",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pass": {
+              "type": "boolean",
+              "description": "Binary verdict for this criterion (true = PASS, false = FAIL)."
+            },
+            "evidence": {
+              "type": "array",
+              "description": "Quoted evidence and/or location markers supporting the verdict.",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 0
+            },
+            "note": {
+              "type": "string",
+              "description": "Short rationale or clarifying note."
+            }
+          },
+          "required": [
+            "pass"
+          ]
+        },
+        "C9": {
+          "title": "Scope, Discipline, and Anti-Explosion",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pass": {
+              "type": "boolean",
+              "description": "Binary verdict for this criterion (true = PASS, false = FAIL)."
+            },
+            "evidence": {
+              "type": "array",
+              "description": "Quoted evidence and/or location markers supporting the verdict.",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 0
+            },
+            "note": {
+              "type": "string",
+              "description": "Short rationale or clarifying note."
+            }
+          },
+          "required": [
+            "pass"
+          ]
+        },
+        "C10": {
+          "title": "Implementability and Engineering Readiness",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pass": {
+              "type": "boolean",
+              "description": "Binary verdict for this criterion (true = PASS, false = FAIL)."
+            },
+            "evidence": {
+              "type": "array",
+              "description": "Quoted evidence and/or location markers supporting the verdict.",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 0
+            },
+            "note": {
+              "type": "string",
+              "description": "Short rationale or clarifying note."
+            }
+          },
+          "required": [
+            "pass"
+          ]
+        },
+        "C11": {
+          "title": "AI Agent Task Decomposability",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pass": {
+              "type": "boolean",
+              "description": "Binary verdict for this criterion (true = PASS, false = FAIL)."
+            },
+            "evidence": {
+              "type": "array",
+              "description": "Quoted evidence and/or location markers supporting the verdict.",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 0
+            },
+            "note": {
+              "type": "string",
+              "description": "Short rationale or clarifying note."
+            }
+          },
+          "required": [
+            "pass"
+          ]
+        }
+      },
+      "required": [
+        "C1",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C7",
+        "C8",
+        "C9",
+        "C10",
+        "C11"
+      ]
+    },
+    "totals": {
+      "type": "object",
+      "title": "Aggregate results and gate",
+      "additionalProperties": false,
+      "properties": {
+        "passed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "gate": {
+          "type": "string",
+          "enum": [
+            "Go",
+            "Revise",
+            "Hold"
+          ]
+        }
+      },
+      "required": [
+        "passed",
+        "failed",
+        "gate"
+      ]
+    },
+    "defects": {
+      "type": "array",
+      "title": "Defects and rewrite plan",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "criterion": {
+            "type": "string",
+            "enum": [
+              "C1",
+              "C2",
+              "C3",
+              "C4",
+              "C5",
+              "C6",
+              "C7",
+              "C8",
+              "C9",
+              "C10",
+              "C11"
+            ]
+          },
+          "issue": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rewrite": {
+            "type": "string",
+            "minLength": 1
+          },
+          "owner": {
+            "type": "string"
+          },
+          "effort": {
+            "type": "string",
+            "enum": [
+              "S",
+              "M",
+              "L"
+            ]
+          },
+          "blocking": {
+            "type": "boolean"
+          },
+          "acceptance_tests": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 0
+          }
+        },
+        "required": [
+          "criterion",
+          "issue",
+          "rewrite"
+        ]
+      },
+      "default": []
+    },
+    "agent_handoff": {
+      "type": "object",
+      "title": "Agent Handoff Pack",
+      "additionalProperties": false,
+      "properties": {
+        "tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "inputs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 0
+              },
+              "outputs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 0
+              },
+              "api": {
+                "type": "object",
+                "description": "HTTP method map. Each key is an HTTP method like GET/POST and value is either an endpoint string or an object with details.",
+                "patternProperties": {
+                  "^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)$": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "endpoint": {
+                            "type": "string"
+                          },
+                          "timeout_seconds": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "retries": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "retry_backoff": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "endpoint"
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              "logic": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 0
+              },
+              "tests": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 0
+              },
+              "deps": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 0
+              },
+              "entry_conditions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 0
+              },
+              "exit_conditions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 0
+              },
+              "error_handling": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 0
+              },
+              "duration_hours": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            },
+            "required": [
+              "name",
+              "duration_hours"
+            ]
+          },
+          "minItems": 0
+        }
+      }
+    },
+    "agreement": {
+      "type": "object",
+      "title": "Inter-evaluator agreement stats",
+      "additionalProperties": false,
+      "properties": {
+        "kappa": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "per_criterion_agreement": {
+          "type": "object",
+          "patternProperties": {
+            "^C(10|11|[1-9])$": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  },
+  "required": [
+    "meta",
+    "scores",
+    "totals"
+  ]
+}

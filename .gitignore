@@ -47,9 +47,6 @@ secrets/
 *.pem
 *.key
 
-# Docker
-.dockerignore
-
 # TypeScript
 *.tsbuildinfo
 
@@ -79,3 +76,7 @@ app.local.yaml
 # Test outputs
 tests/**/*.log
 tests/**/output/
+output-*.json
+
+# CLI and temporary scripts
+eval-cli.mjs

@@ -1,0 +1,218 @@
+{
+  "items": [
+    {
+      "id": "fix-1",
+      "title": "Narrow Scope to a Single MVP: Rewards for Free-Tier Listening (R1)",
+      "priority": "P0",
+      "owner": "PM",
+      "blocking": true,
+      "effort": "S",
+      "impact": "High",
+      "description": "Rewrite: 'R1 focuses solely on Rewards MVP; Chatbot and Hyper-Local move to R2 backlog.'",
+      "steps": [
+        "Remove chatbot and hyper-local features from R1 scope",
+        "Update release plan to show only Rewards features",
+        "Move chatbot/hyper-local to R2 backlog with dependencies"
+      ],
+      "acceptance_tests": [
+        "PRD contains only Rewards features",
+        "Release plan excludes chatbot/hyper-local"
+      ],
+      "linked_criteria": ["C3", "C9"]
+    },
+    {
+      "id": "fix-2",
+      "title": "Add Current-State Journey & Baseline Metrics",
+      "priority": "P0",
+      "owner": "UX Research",
+      "blocking": true,
+      "effort": "M",
+      "impact": "High",
+      "description": "Rewrite: 'Document free-tier session: Open → first play → ad break timing → skip/exit. Include baseline: TSL p50, ad exposures/session, recos CTR, bounce.'",
+      "steps": [
+        "Create current-state journey map showing free-tier user flow",
+        "Document ad cadence and timing",
+        "Measure baseline metrics (TSL p50, ad exposures, CTR, bounce rate)",
+        "Add swimlane diagram or detailed narrative"
+      ],
+      "acceptance_tests": [
+        "One page narrative + swimlane showing current state",
+        "Numeric baselines logged in appendix"
+      ],
+      "linked_criteria": ["C2"]
+    },
+    {
+      "id": "fix-3",
+      "title": "Tie Solution to Top Pain (Ads) or Declare Non-Goal",
+      "priority": "P0",
+      "owner": "PM + Ads Eng",
+      "blocking": true,
+      "effort": "S",
+      "impact": "High",
+      "description": "Rewrite: Add either (a) 'free-tier ad load stays constant; goal is engagement despite ads' or (b) 'R1 reduces ad frequency for streaking users by X%.'",
+      "steps": [
+        "Decide on ad policy: constant vs reduced frequency",
+        "If reducing ads: specify exact reduction amount (e.g., ≤4 ad pods/hour)",
+        "Document in PRD as explicit goal or non-goal"
+      ],
+      "acceptance_tests": [
+        "Explicit non-goal OR measurable ad policy change (e.g., '≤4 ad pods/hour for on-track users')"
+      ],
+      "linked_criteria": ["C3"]
+    },
+    {
+      "id": "fix-4",
+      "title": "Write Implementable Requirements for Rewards",
+      "priority": "P0",
+      "owner": "PM + Backend",
+      "blocking": true,
+      "effort": "M",
+      "impact": "High",
+      "description": "Rewrite (example spec): 'Daily goal = 90m playback (≥85% foreground or cast; excludes muted/background>10m). Unlock: 1 premium playlist token valid until 23:59 local; single device; non-transferable. Weekly streak: 7 consecutive days → 24h Premium Trial; cooldown 30 days.'",
+      "steps": [
+        "Define daily goal with specific thresholds (90m playback)",
+        "Specify foreground vs background detection rules",
+        "Define token properties (validity, device restriction, transferability)",
+        "Specify streak logic and cooldown periods"
+      ],
+      "acceptance_tests": [
+        "Unit tests for threshold edges",
+        "Timezone rollover tests",
+        "Cooldown validation tests"
+      ],
+      "linked_criteria": ["C6", "C10", "C11"]
+    },
+    {
+      "id": "fix-5",
+      "title": "Define API Contracts & Auth",
+      "priority": "P0",
+      "owner": "Backend",
+      "blocking": true,
+      "effort": "M",
+      "impact": "High",
+      "description": "Rewrite: Specify endpoints (e.g., POST /v1/rewards/claim, GET /v1/rewards/status), OAuth2 flows, idempotency keys, latency/availability SLOs, error codes.",
+      "steps": [
+        "Document all API endpoints with HTTP methods",
+        "Specify OAuth2 authentication flow",
+        "Define idempotency key handling",
+        "Set SLOs (p95≤300ms for reads, 99.9% uptime)",
+        "Document error codes (401, 403, 409, 410, 429, 5xx)"
+      ],
+      "acceptance_tests": [
+        "OpenAPI spec v3 with examples",
+        "p95≤300ms for reads",
+        "99.9% uptime target documented"
+      ],
+      "linked_criteria": ["C5", "C10"]
+    },
+    {
+      "id": "fix-6",
+      "title": "Data Model & Validation Rules",
+      "priority": "P0",
+      "owner": "Data Eng",
+      "blocking": true,
+      "effort": "M",
+      "impact": "High",
+      "description": "Rewrite: Full schema for user_rewards, streaks, playlist_tokens with field types, constraints, TTLs; deterministic streak reset logic; duplicate-grant prevention.",
+      "steps": [
+        "Create full database schema with field types",
+        "Define constraints and TTLs",
+        "Specify streak reset logic deterministically",
+        "Add duplicate-grant prevention mechanism"
+      ],
+      "acceptance_tests": [
+        "Migration scripts complete",
+        "Invariants checks (no overlapping tokens; max 1 trial/30d)"
+      ],
+      "linked_criteria": ["C5", "C10"]
+    },
+    {
+      "id": "fix-7",
+      "title": "Privacy/Consent & Abuse Controls",
+      "priority": "P0",
+      "owner": "Legal + Security",
+      "blocking": true,
+      "effort": "M",
+      "impact": "High",
+      "description": "Rewrite: Consent UX copy; opt-in storage; location granularity; retention; spoofing detection; geo-fencing.",
+      "steps": [
+        "Draft consent UX copy for location features",
+        "Define opt-in storage mechanism",
+        "Specify location granularity (city-level vs precise)",
+        "Set data retention policies",
+        "Add spoofing detection logic",
+        "Implement geo-fencing boundaries"
+      ],
+      "acceptance_tests": [
+        "Privacy review passes",
+        "Location features degrade gracefully when denied"
+      ],
+      "linked_criteria": ["C5", "C10"]
+    },
+    {
+      "id": "fix-8",
+      "title": "Measurement Plan with Targets",
+      "priority": "P0",
+      "owner": "Analytics",
+      "blocking": true,
+      "effort": "S",
+      "impact": "High",
+      "description": "Rewrite: 'Success = +12% p50 TSL and −18% 7-day bounce in target cohort within 8 weeks; guardrail = premium conversion not ↓.'",
+      "steps": [
+        "Set specific numeric targets (+12% TSL, -18% bounce)",
+        "Define target cohort precisely",
+        "Set time horizon (8 weeks)",
+        "Add guardrail metrics (premium conversion)"
+      ],
+      "acceptance_tests": [
+        "Dashboard with cohort definitions",
+        "Target lines visible",
+        "Power analysis documented"
+      ],
+      "linked_criteria": ["C7"]
+    },
+    {
+      "id": "fix-9",
+      "title": "Error/Edge UX Spec to Acceptance Criteria",
+      "priority": "P1",
+      "owner": "Design",
+      "blocking": false,
+      "effort": "S",
+      "impact": "Med",
+      "description": "Rewrite: For each failure (pp.8–9), define exact copy, retry timing, and state transitions.",
+      "steps": [
+        "List all error scenarios from pp.8-9",
+        "Write exact error copy for each",
+        "Define retry timing and logic",
+        "Map state transitions (error → retry → success/fail)"
+      ],
+      "acceptance_tests": [
+        "Figma spec with state map",
+        "Copy reviewed and approved"
+      ],
+      "linked_criteria": ["C6", "C10"]
+    },
+    {
+      "id": "fix-10",
+      "title": "Template & Structure Clean-up",
+      "priority": "P2",
+      "owner": "PM",
+      "blocking": false,
+      "effort": "S",
+      "impact": "Low",
+      "description": "Rewrite: Adopt rubric's PRD order and formatting; move all diagrams to Appendix with figure refs.",
+      "steps": [
+        "Reorder sections to match template",
+        "Move diagrams to Appendix",
+        "Add figure references in main text",
+        "Standardize formatting (consistent headings, bullets)"
+      ],
+      "acceptance_tests": [
+        "Lint against template passes",
+        "Figure captions added"
+      ],
+      "linked_criteria": ["C8"]
+    }
+  ]
+}
+

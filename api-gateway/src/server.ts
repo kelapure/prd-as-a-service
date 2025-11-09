@@ -1,22 +1,22 @@
-// API Gateway - HTTP endpoints for EvalPRD MCP tools
+// API Gateway - HTTP endpoints for EvalPRD evaluation tools
 
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import pino from "pino";
 import dotenv from "dotenv";
-import { spawn } from "child_process";
+
+// Direct evaluation imports
+import { evaluateBinaryScore } from "./evaluators/binaryScore.js";
+import { evaluateFixPlan } from "./evaluators/fixPlan.js";
+import { evaluateAgentTasks } from "./evaluators/agentTasks.js";
 
 dotenv.config();
 
 const logger = pino({ level: process.env.LOG_LEVEL || "info" });
 
 const PORT = Number(process.env.PORT) || 8080;
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || "http://localhost:3000";
-const MCP_SERVER_COMMAND = process.env.MCP_SERVER_COMMAND || "node";
-const MCP_SERVER_ARGS = process.env.MCP_SERVER_ARGS?.split(" ") || ["../mcp-server/dist/index.js"];
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || "http://localhost:3001";
 
 // Create Fastify instance
 const fastify = Fastify({
@@ -25,10 +25,11 @@ const fastify = Fastify({
   }
 });
 
-// Register CORS
+// Register CORS with additional headers for SSE
 await fastify.register(cors, {
   origin: ALLOWED_ORIGIN,
-  credentials: true
+  credentials: true,
+  exposedHeaders: ["Content-Type", "Cache-Control", "Connection"]
 });
 
 // Register rate limiting
@@ -37,103 +38,100 @@ await fastify.register(rateLimit, {
   timeWindow: Number(process.env.RATE_LIMIT_WINDOW_MS) || 60000
 });
 
-// MCP Client connection
-let mcpClient: Client | null = null;
+// Streaming Routes using Server-Sent Events
+fastify.post("/api/evalprd/binary_score", async (request, reply) => {
+  const { prd_text } = request.body as { prd_text?: string };
 
-async function connectToMCP() {
-  logger.info({ command: MCP_SERVER_COMMAND, args: MCP_SERVER_ARGS }, "Connecting to MCP server");
-
-  const transport = new StdioClientTransport({
-    command: MCP_SERVER_COMMAND,
-    args: MCP_SERVER_ARGS,
-    env: {
-      ...process.env,
-      OPENAI_API_KEY: process.env.OPENAI_API_KEY || "",
-      EVALPRD_MODEL: process.env.EVALPRD_MODEL || "gpt-4o",
-      LOG_LEVEL: process.env.LOG_LEVEL || "info"
-    }
-  });
-
-  const client = new Client({
-    name: "evalprd-api-gateway",
-    version: "1.0.0"
-  }, {
-    capabilities: {}
-  });
-
-  await client.connect(transport);
-  logger.info("Connected to MCP server");
-
-  return client;
-}
-
-// Tool endpoint handler
-async function callTool(toolName: string, args: any) {
-  if (!mcpClient) {
-    throw new Error("MCP client not connected");
+  if (!prd_text) {
+    return reply.status(400).send({ error: "prd_text is required" });
   }
 
-  const startTime = Date.now();
+  reply.raw.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
+    "Access-Control-Allow-Credentials": "true"
+  });
 
   try {
-    const result = await mcpClient.callTool(
-      {
-        name: toolName,
-        arguments: args
-      },
-      undefined,
-      {
-        timeout: 180000  // 180 seconds (3 minutes) for GPT-5 processing
+    const result = await evaluateBinaryScore(
+      { prd_text },
+      (delta, accumulated) => {
+        reply.raw.write(`data: ${JSON.stringify({ type: "delta", delta, accumulated: accumulated.length })}\n\n`);
       }
     );
 
-    const latency = Date.now() - startTime;
-    logger.info({ toolName, latency }, "Tool call completed");
-
-    // Extract JSON from result
-    if (result.content && Array.isArray(result.content) && result.content.length > 0) {
-      const textContent = result.content.find((c: any) => c.type === "text");
-      if (textContent && "text" in textContent) {
-        return JSON.parse(textContent.text);
-      }
-    }
-
-    throw new Error("No valid content in tool response");
+    reply.raw.write(`data: ${JSON.stringify({ type: "done", result })}\n\n`);
+    reply.raw.end();
   } catch (error: any) {
-    const latency = Date.now() - startTime;
-    logger.error({ toolName, latency, error: error.message }, "Tool call failed");
-    throw error;
-  }
-}
-
-// Routes
-fastify.post("/api/evalprd/binary_score", async (request, reply) => {
-  try {
-    const result = await callTool("binary_score", request.body);
-    return reply.send(result);
-  } catch (error: any) {
-    logger.error({ error: error.message }, "binary_score endpoint failed");
-    return reply.status(500).send({ error: error.message });
+    logger.error({ error: error.message }, "binary_score streaming failed");
+    reply.raw.write(`data: ${JSON.stringify({ type: "error", error: error.message })}\n\n`);
+    reply.raw.end();
   }
 });
 
 fastify.post("/api/evalprd/fix_plan", async (request, reply) => {
+  const { prd_text } = request.body as { prd_text?: string };
+
+  if (!prd_text) {
+    return reply.status(400).send({ error: "prd_text is required" });
+  }
+
+  reply.raw.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
+    "Access-Control-Allow-Credentials": "true"
+  });
+
   try {
-    const result = await callTool("fix_plan", request.body);
-    return reply.send(result);
+    const result = await evaluateFixPlan(
+      { prd_text },
+      (delta, accumulated) => {
+        reply.raw.write(`data: ${JSON.stringify({ type: "delta", delta, accumulated: accumulated.length })}\n\n`);
+      }
+    );
+
+    reply.raw.write(`data: ${JSON.stringify({ type: "done", result })}\n\n`);
+    reply.raw.end();
   } catch (error: any) {
-    logger.error({ error: error.message }, "fix_plan endpoint failed");
-    return reply.status(500).send({ error: error.message });
+    logger.error({ error: error.message }, "fix_plan streaming failed");
+    reply.raw.write(`data: ${JSON.stringify({ type: "error", error: error.message })}\n\n`);
+    reply.raw.end();
   }
 });
 
 fastify.post("/api/evalprd/agent_tasks", async (request, reply) => {
+  const { prd_text } = request.body as { prd_text?: string };
+
+  if (!prd_text) {
+    return reply.status(400).send({ error: "prd_text is required" });
+  }
+
+  reply.raw.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
+    "Access-Control-Allow-Credentials": "true"
+  });
+
   try {
-    const result = await callTool("agent_tasks", request.body);
-    return reply.send(result);
+    const result = await evaluateAgentTasks(
+      { prd_text },
+      (delta, accumulated) => {
+        reply.raw.write(`data: ${JSON.stringify({ type: "delta", delta, accumulated: accumulated.length })}\n\n`);
+      }
+    );
+
+    reply.raw.write(`data: ${JSON.stringify({ type: "done", result })}\n\n`);
+    reply.raw.end();
   } catch (error: any) {
-    logger.error({ error: error.message }, "agent_tasks endpoint failed");
-    return reply.status(500).send({ error: error.message });
+    logger.error({ error: error.message }, "agent_tasks streaming failed");
+    reply.raw.write(`data: ${JSON.stringify({ type: "error", error: error.message })}\n\n`);
+    reply.raw.end();
   }
 });
 
@@ -145,10 +143,6 @@ fastify.get("/health", async (request, reply) => {
 // Start server
 async function start() {
   try {
-    // Connect to MCP server
-    mcpClient = await connectToMCP();
-
-    // Start Fastify
     await fastify.listen({ port: PORT, host: "0.0.0.0" });
     logger.info({ port: PORT }, "API Gateway started");
   } catch (error) {
@@ -161,9 +155,6 @@ async function start() {
 process.on("SIGTERM", async () => {
   logger.info("SIGTERM received, shutting down gracefully");
   await fastify.close();
-  if (mcpClient) {
-    await mcpClient.close();
-  }
   process.exit(0);
 });
 

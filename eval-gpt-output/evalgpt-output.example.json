@@ -1,0 +1,263 @@
+{
+  "meta": {
+    "prd_id": "PRD-2025-001",
+    "title": "Prior Auth Copay Eligibility \u2013 MVP",
+    "version": "v0.8",
+    "evaluator": "EvalGPT",
+    "date": "2025-10-12T19:40:00Z"
+  },
+  "scores": {
+    "C1": {
+      "pass": true,
+      "evidence": [
+        "\u00a71.1 Problem: 18% abandonment due to eligibility friction",
+        "\u00a71.3 Justification: ROI model \u2192 +$2.1M/yr"
+      ],
+      "note": "Clear business impact and financial rationale."
+    },
+    "C2": {
+      "pass": true,
+      "evidence": [
+        "\u00a72.0 Current workflow swimlane (PharmD\u2192Hub\u2192Payer)",
+        "\u00a72.2 Pain points enumerated with timings"
+      ],
+      "note": "Happy path + exception path documented."
+    },
+    "C3": {
+      "pass": true,
+      "evidence": [
+        "\u00a73.1 Solution directly addresses top-3 pains from \u00a72.2"
+      ],
+      "note": "No orphan features; tight mapping."
+    },
+    "C4": {
+      "pass": true,
+      "evidence": [
+        "Glossary in \u00a70.4; avoids jargon; examples provided"
+      ],
+      "note": "Plain English + defined acronyms."
+    },
+    "C5": {
+      "pass": true,
+      "evidence": [
+        "\u00a75.1 API spec (OAuth2 CC, p95\u22642s, retries 3x)",
+        "\u00a75.4 Audit log fields + retention 7y (ALCOA+)"
+      ],
+      "note": "CFR Part 11 eSig, HIPAA, RBAC stated."
+    },
+    "C6": {
+      "pass": true,
+      "evidence": [
+        "\u00a76.2 Feature tables with inputs/outputs, edge cases",
+        "\u00a76.3 Error UX for 401/403/429/5xx"
+      ],
+      "note": "Implementation-ready stories."
+    },
+    "C7": {
+      "pass": true,
+      "evidence": [
+        "\u00a77.1 OKRs: \u221230% time-to-fill; +15% first-pass approval",
+        "\u00a77.3 SLAs: p95 API \u22642s; error \u22640.5%"
+      ],
+      "note": "Measurable success criteria."
+    },
+    "C8": {
+      "pass": false,
+      "evidence": [
+        "\u00a74.0 + \u00a76.0 use different numbering styles",
+        "Inconsistent capitalization in headings"
+      ],
+      "note": "Formatting not consistent; standardize template."
+    },
+    "C9": {
+      "pass": false,
+      "evidence": [
+        "\u00a79.2 adds real-time benefits card scanning (out-of-scope)"
+      ],
+      "note": "Scope creep beyond MVP; defer to R2."
+    },
+    "C10": {
+      "pass": true,
+      "evidence": [
+        "\u00a710.1 Sequenced milestones; env matrix; rollout plan",
+        "\u00a710.3 Monitoring: logs, metrics, alerts defined"
+      ],
+      "note": "Ready for engineering kick-off."
+    },
+    "C11": {
+      "pass": true,
+      "evidence": [
+        "\u00a711.0 Task graph: 2\u20134h units with entry/exit tests"
+      ],
+      "note": "Agent-friendly decomposition."
+    }
+  },
+  "totals": {
+    "passed": 9,
+    "failed": 2,
+    "gate": "Go"
+  },
+  "defects": [
+    {
+      "criterion": "C8",
+      "issue": "Inconsistent section numbering and H2/H3 styles.",
+      "rewrite": "Apply PRD v3 template: unified numbering (1.0, 1.1), title case for all H2/H3, single glossary location.",
+      "owner": "PM",
+      "effort": "S",
+      "blocking": false,
+      "acceptance_tests": [
+        "Automated lint passes on heading structure",
+        "Single glossary section; no duplicate definitions"
+      ]
+    },
+    {
+      "criterion": "C9",
+      "issue": "Included out-of-scope feature: real-time card scanning.",
+      "rewrite": "Move card scanning to R2 backlog with dependency on payer SDK readiness; remove from R1 acceptance tests.",
+      "owner": "PM",
+      "effort": "S",
+      "blocking": true,
+      "acceptance_tests": [
+        "R1 backlog has no card-scanning tasks",
+        "Release notes state exclusion and R2 dependency"
+      ]
+    }
+  ],
+  "agent_handoff": {
+    "tasks": [
+      {
+        "name": "Eligibility API \u2013 GET /eligibility/{memberId}",
+        "inputs": [
+          "memberId",
+          "payerId",
+          "access_token"
+        ],
+        "outputs": [
+          "eligibility_status",
+          "coverage_window",
+          "copay_amount"
+        ],
+        "api": {
+          "GET": {
+            "endpoint": "/eligibility/{memberId}?payer={payerId}",
+            "timeout_seconds": 2,
+            "retries": 3,
+            "retry_backoff": "exponential: base=200ms, max=2s"
+          }
+        },
+        "logic": [
+          "If 401/403 \u2192 refresh token once; else surface error UX",
+          "If 429/timeout \u2192 retry with jitter"
+        ],
+        "tests": [
+          "p95\u22642s",
+          "error_rate\u22640.5%",
+          "handles 401/403/429/5xx"
+        ],
+        "deps": [
+          "Auth service",
+          "Payer sandbox credentials"
+        ],
+        "entry_conditions": [
+          "Valid OAuth2 client credentials",
+          "MemberId format validated"
+        ],
+        "exit_conditions": [
+          "Normalized eligibility payload stored",
+          "Audit event recorded"
+        ],
+        "error_handling": [
+          "Map 4xx/5xx to user-facing messages",
+          "Structured error codes"
+        ],
+        "duration_hours": 4
+      },
+      {
+        "name": "Audit Logging (ALCOA+)",
+        "inputs": [
+          "request_id",
+          "actor_id",
+          "event_type",
+          "payload_hash"
+        ],
+        "outputs": [
+          "append-only log entry"
+        ],
+        "api": {},
+        "logic": [
+          "Write-once; immutable hash chain",
+          "7-year retention; PII encryption-at-rest"
+        ],
+        "tests": [
+          "Log tamper check passes",
+          "PII fields encrypted"
+        ],
+        "deps": [
+          "KMS keys",
+          "Log archive bucket"
+        ],
+        "entry_conditions": [
+          "KMS policy allows service role"
+        ],
+        "exit_conditions": [
+          "All CRUD events generate logs"
+        ],
+        "error_handling": [
+          "On write failure, queue and alert"
+        ],
+        "duration_hours": 3
+      },
+      {
+        "name": "eSignature (21 CFR Part 11) Configuration",
+        "inputs": [
+          "user_id",
+          "role",
+          "document_id"
+        ],
+        "outputs": [
+          "signed_record",
+          "signature_manifest"
+        ],
+        "api": {},
+        "logic": [
+          "Dual-factor auth before signature",
+          "Bind signature to record + timestamp + reason"
+        ],
+        "tests": [
+          "Signature manifest immutability",
+          "Time-stamped audit trail presence"
+        ],
+        "deps": [
+          "IdP (OIDC)",
+          "HSM-backed signing keys"
+        ],
+        "entry_conditions": [
+          "User assigned compliant role"
+        ],
+        "exit_conditions": [
+          "Signature passes validator checks"
+        ],
+        "error_handling": [
+          "Signature failure triggers re-auth and capture reason"
+        ],
+        "duration_hours": 4
+      }
+    ]
+  },
+  "agreement": {
+    "kappa": 0.82,
+    "per_criterion_agreement": {
+      "C1": 0.9,
+      "C2": 0.85,
+      "C3": 0.88,
+      "C4": 0.92,
+      "C5": 0.86,
+      "C6": 0.83,
+      "C7": 0.9,
+      "C8": 0.7,
+      "C9": 0.68,
+      "C10": 0.84,
+      "C11": 0.88
+    }
+  }
+}

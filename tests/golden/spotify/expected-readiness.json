@@ -1,0 +1,20 @@
+{
+  "decision": "HOLD",
+  "must_pass_met": false,
+  "total_pass": 2,
+  "total_fail": 9,
+  "reason": "Fails all four must-pass gates (C3 Solution Alignment, C5 Technical Requirements, C10 Implementability, C11 Agent Decomposability). Needs Fix Plan items 1–8 completed to move to Revise, then target ≥9/11 with must-pass = PASS for Go.",
+  "gating_failures": ["C3", "C5", "C10", "C11"],
+  "must_pass_criteria": {
+    "C3": false,
+    "C5": false,
+    "C10": false,
+    "C11": false
+  },
+  "next_steps": [
+    "Complete Fix Plan items 1-8 (all P0/blocking items)",
+    "Focus first on C3 (Solution Alignment) and C5 (Technical Requirements)",
+    "Resubmit for evaluation after fixes implemented"
+  ]
+}
+

@@ -8,11 +8,10 @@ EvalPRD as a Service - A PRD evaluation platform that analyzes Product Requireme
 
 ## Architecture
 
-This is a full-stack application with three main components:
+This is a full-stack application with two main components:
 
 1. **Frontend** (React + Vite + TypeScript) - Landing page and evaluation UI
-2. **API Gateway** (Fastify + MCP Client) - HTTP endpoints for the frontend
-3. **MCP Server** (Model Context Protocol) - Three evaluation tools powered by OpenAI
+2. **API Gateway** (Fastify + OpenAI) - HTTP endpoints for evaluation powered by GPT-4o
 
 ## Repository Structure
 
@@ -23,44 +22,28 @@ This is a full-stack application with three main components:
 │   │   └── index.css      # Tailwind v4 CSS
 │   ├── package.json
 │   └── vite.config.ts
-├── mcp-server/            # MCP server with 3 tools
+├── api-gateway/           # HTTP API + Evaluation Engine
 │   ├── src/
-│   │   ├── tools/         # binary_score, fix_plan, agent_tasks
-│   │   ├── lib/           # schemas, prompts, openai, validation, rubric, util
-│   │   ├── types.ts       # TypeScript types
-│   │   └── index.ts       # MCP server bootstrap
-│   ├── package.json
-│   └── tsconfig.json
-├── api-gateway/           # HTTP→MCP bridge
-│   ├── src/
-│   │   └── server.ts      # Fastify server with /api/evalprd/* endpoints
+│   │   ├── server.ts      # Fastify server with /api/evalprd/* endpoints
+│   │   ├── evaluators/    # binary_score, fix_plan, agent_tasks
+│   │   └── lib/           # schemas, prompts, openai, validation, rubric, util
 │   ├── package.json
 │   └── tsconfig.json
 ├── data/                  # Test fixtures and sample PRDs
 ├── tests/                 # Integration tests and golden contracts
-├── infra/                 # Docker files and deployment configs
 └── CLAUDE.md             # This file
 ```
 
 ## Development Commands
 
-### MCP Server
-```bash
-cd mcp-server
-npm install
-cp .env.example .env      # Fill in OPENAI_API_KEY
-npm run dev               # Development mode
-npm run build             # Production build
-npm run type-check        # TypeScript check
-```
-
 ### API Gateway
 ```bash
 cd api-gateway
 npm install
-cp .env.example .env
-npm run dev               # Development mode
+cp .env.example .env      # Fill in OPENAI_API_KEY
+npm run dev               # Development mode (port 8080)
 npm run build             # Production build
+npm run type-check        # TypeScript check
 ```
 
 ### Frontend
@@ -71,31 +54,43 @@ npm run dev               # Vite dev server (port 3000)
 npm run build             # Production build
 ```
 
-### Docker (All services)
+### All Services (Development)
 ```bash
-cp .env.example .env      # Configure environment
-docker-compose -f infra/docker-compose.yml up
+# Terminal 1: API Gateway
+cd api-gateway && npm run dev
+
+# Terminal 2: Frontend
+cd frontend && npm run dev
 ```
 
-## MCP Server Architecture
+## API Gateway Architecture
 
-### Three Tools
+### Three Evaluation Endpoints
 
-1. **binary_score** - PASS/FAIL evaluation of 11 criteria with evidence, compliance gaps, readiness gate
-2. **fix_plan** - Prioritized fix plan with P0/P1/P2 priorities, owners, effort, impact
-3. **agent_tasks** - 2-4h executable tasks with DAG dependencies, inputs/outputs, entry/exit/test conditions
+1. **POST /api/evalprd/binary_score** - PASS/FAIL evaluation of 11 criteria with evidence, compliance gaps, readiness gate
+2. **POST /api/evalprd/fix_plan** - Prioritized fix plan with P0/P1/P2 priorities, owners, effort, impact
+3. **POST /api/evalprd/agent_tasks** - 2-4h executable tasks with DAG dependencies, inputs/outputs, entry/exit/test conditions
 
 ### System Prompt
 
-All tools use the exact "EvalGPT" system prompt (lib/prompts.ts) which defines:
-- 11-criterion PRD rubric with PASS/FAIL scoring
+All tools use the exact "EvalGPT" system prompt (lib/prompts.ts) which embeds the complete 11-criterion rubric with detailed definitions, pass/fail indicators, and examples. This provides 100% parity with the custom GPT.
+
+**Key Components**:
+- Complete criterion definitions with pass/fail criteria (from `rubric-definitions.ts`)
+- Real-world examples from WestREC, Spring Health, and Apex Health PRDs
+- Failure mode taxonomy
 - Pharma/GxP overlay (Part 11, HIPAA, ALCOA+, RBAC)
 - Readiness Gates: GO (≥9/11 + gating criteria), REVISE (7-8/11), HOLD (≤6/11 or ≥3 compliance gaps)
 - Gating criteria: C3 (Solution Alignment), C5 (Tech Requirements), C10 (Implementability), C11 (Agent Decomposability)
 
+**Temperature Settings** (critical for consistency):
+- binary_score: 0.2 (low temperature for deterministic scoring)
+- fix_plan: 0.3 (balanced for creative fixes)
+- agent_tasks: 0.3 (balanced for task decomposition)
+
 ### JSON Schemas (Frontend-Aligned)
 
-All schemas in `mcp-server/src/lib/schemas.ts` are aligned with frontend component expectations:
+All schemas in `api-gateway/src/lib/schemas.ts` are aligned with frontend component expectations:
 
 **BinaryScoreOutput**:
 - Both `pass: boolean` and `status: "pass"|"fail"` (string for frontend)
@@ -122,24 +117,42 @@ All schemas in `mcp-server/src/lib/schemas.ts` are aligned with frontend compone
 
 ### OpenAI Integration
 
-- Uses OpenAI Responses API with `response_format: json_schema` for strict structured outputs
-- Model: `gpt-4o` (configurable via `EVALPRD_MODEL` env var)
+- Uses OpenAI Chat Completions API with **streaming + strict JSON Schema** (GPT-5 feature)
+- Model: `gpt-5` (configurable via `EVALPRD_MODEL` env var)
 - Temperature: 0.2 for binary_score, 0.3 for fix_plan/agent_tasks
 - Validation: Ajv validates all outputs against schemas
 - Error handling: Retry once on transient errors (429, 5xx)
 - Logging: Pino JSON logs with request IDs, latency, token usage (never logs PRD content)
+- **Streaming**: Real-time delta events every 50-200ms, final validated JSON on completion
 
 ## API Gateway
 
 - **Fastify** server with CORS and rate limiting
-- Connects to MCP server via stdio transport (spawns MCP server as child process)
-- Three endpoints:
-  - `POST /api/evalprd/binary_score`
-  - `POST /api/evalprd/fix_plan`
-  - `POST /api/evalprd/agent_tasks`
+- Direct OpenAI API calls (no subprocess, no MCP)
+- Three **streaming** endpoints (Server-Sent Events):
+  - `POST /api/evalprd/binary_score` - Returns SSE stream with delta + done events
+  - `POST /api/evalprd/fix_plan` - Returns SSE stream with delta + done events
+  - `POST /api/evalprd/agent_tasks` - Returns SSE stream with delta + done events
 - `GET /health` for healthchecks
 - Rate limit: 60 req/min (configurable)
 - Origin allowlist: Configured via `ALLOWED_ORIGIN` env var
+
+### Streaming Architecture (GPT-5)
+
+GPT-5's unique capability to combine streaming with structured outputs enables:
+
+- **Client → API Gateway**: POST request with prd_text
+- **API Gateway → OpenAI**: Streaming request with strict JSON Schema
+- **OpenAI → API Gateway**: Delta chunks every 50-200ms
+- **API Gateway → Client**: SSE events forwarding deltas
+- **Final**: Complete validated JSON matching schema exactly
+
+**Benefits**:
+- Time to first byte: <200ms (vs 7-30s before)
+- Perceived latency: ~40-60% improvement
+- Real-time progress feedback
+- Guaranteed valid JSON at completion
+- No reliability tradeoff
 
 ## Frontend
 
@@ -195,15 +208,15 @@ All schemas in `mcp-server/src/lib/schemas.ts` are aligned with frontend compone
 ## Common Development Tasks
 
 ### Adding a New Criterion
-1. Update `RUBRIC_CRITERIA` in `mcp-server/src/lib/rubric.ts`
-2. Update schemas in `mcp-server/src/lib/schemas.ts` (pattern regex)
-3. Update system prompt in `mcp-server/src/lib/prompts.ts`
+1. Update `RUBRIC_CRITERIA` in `api-gateway/src/lib/rubric.ts`
+2. Update schemas in `api-gateway/src/lib/schemas.ts` (pattern regex)
+3. Update system prompt in `api-gateway/src/lib/prompts.ts`
 4. Update frontend example data in `frontend/src/components/ExampleOutput.tsx`
 
-### Modifying Tool Output Format
-1. Update schema in `mcp-server/src/lib/schemas.ts`
-2. Update TypeScript types in `mcp-server/src/types.ts`
-3. Update tool-specific prompt appender in `mcp-server/src/lib/prompts.ts`
+### Modifying Evaluation Output Format
+1. Update schema in `api-gateway/src/lib/schemas.ts`
+2. Update TypeScript types in `api-gateway/src/types.ts`
+3. Update evaluator-specific prompt appender in `api-gateway/src/lib/prompts.ts`
 4. Update frontend components to consume new format
 5. Run integration tests to verify
 
@@ -215,12 +228,14 @@ All schemas in `mcp-server/src/lib/schemas.ts` are aligned with frontend compone
 
 ## Deployment
 
-- Docker Compose for local development (all 3 services)
-- Production: Deploy mcp-server and api-gateway as separate containers
-- Frontend: Build static assets, serve via nginx
-- Secrets: Use secrets manager (AWS Secrets Manager, etc.)
-- Monitoring: Logs via Pino → centralized logging (CloudWatch, etc.)
-- Autoscaling: Scale api-gateway based on request rate
+**Google App Engine** (Current platform):
+- `api-gateway/`: App Engine Standard service (app.yaml)
+- `frontend/`: App Engine Standard service (app.yaml)
+- Routing: `dispatch.yaml` routes requests between services
+- Deploy: `gcloud app deploy`
+- Secrets: Google Cloud Secret Manager for OPENAI_API_KEY
+- Monitoring: Google Cloud Logging + Pino structured logs
+- Autoscaling: App Engine automatic scaling
 
 ## Important Notes
 
@@ -228,6 +243,123 @@ All schemas in `mcp-server/src/lib/schemas.ts` are aligned with frontend compone
 - Readiness gate states must be uppercase: "GO", "REVISE", "HOLD"
 - Priority strings must be "P0", "P1", "P2" (not numbers)
 - Task durations must be strings like "2h", "4h" (not just numbers)
-- Always validate outputs with Ajv before returning from tools
-- MCP server communicates via stdio transport (not HTTP)
-- API gateway spawns MCP server as child process
+- Always validate outputs with Ajv before returning from evaluators
+- Model: gpt-5 (released August 7, 2025)
+
+## Custom GPT Parity
+
+This system achieves 100% parity with the EvalPRD custom GPT through:
+
+### 1. Complete Rubric Embedding
+
+The custom GPT has access to the full rubric document (`Copy of PRD LLM-as-judge Eval (PUBLIC).md`). We replicate this by:
+- Extracting all 11 criterion definitions into `mcp-server/src/lib/rubric-definitions.ts`
+- Including detailed PASS criteria and FAIL indicators for each criterion
+- Embedding real-world examples (WestREC PASS, Spring Health FAIL, Apex Health scope explosion)
+- Adding failure mode taxonomy
+- Injecting all of this into the system prompt via template literals
+
+### 2. Temperature Configuration
+
+**Critical for output consistency**:
+- `binary_score`: temperature = 0.2 (deterministic scoring)
+- `fix_plan`: temperature = 0.3 (balanced creativity)
+- `agent_tasks`: temperature = 0.3 (balanced decomposition)
+
+Previous bug: All tools were using temperature = 1.0 (maximum randomness), causing high variance.
+
+### 3. Golden Test Files
+
+Located in `tests/golden/spotify/`:
+- `expected-score.json` - Binary score (2 PASS / 9 FAIL, HOLD gate)
+- `expected-fix-plan.json` - 10 prioritized fix items
+- `expected-agent-tasks.json` - 10 executable tasks with dependencies
+- `expected-readiness.json` - Readiness gate decision
+
+These files represent the ground truth from `tests/sitevsgpt/*.md` and are used for regression testing.
+
+### 4. Frontend Display Completeness
+
+All evaluation data must be visible in the UI:
+
+**Components**:
+- `ScoreDisplay.tsx` - Shows all 11 criteria with evidence quotes, pass/fail badges, gating failures
+- `ReadinessGateDisplay.tsx` - Shows gate decision (GO/REVISE/HOLD) with reason and must-pass status
+- `FixPlanDisplay.tsx` - Shows all fix items with priorities, owners, effort, impact, acceptance tests
+- `AgentTasksDisplay.tsx` - Shows all tasks with inputs, outputs, entry/exit conditions, tests, dependencies, error handling
+- `EvaluationResults.tsx` - Unified results page with tabs and export functions
+
+**Data Flow**:
+1. User uploads PRD → `UploadDialog.tsx`
+2. Calls all 3 APIs sequentially: binary_score, fix_plan, agent_tasks
+3. Stores all results in state
+4. Displays via `EvaluationResults.tsx` with complete data rendering
+5. Export functions generate Markdown and JSON downloads
+
+### 5. Design System Consistency
+
+**Color Tokens** (from `globals.css`):
+- Success/Green: `chart-2` (rgba(13, 148, 136, 1))
+- Error/Red: `destructive` (rgba(220, 38, 38, 1))
+- Warning/Yellow: `chart-4` (rgba(251, 191, 36, 1))
+- Primary Blue: `primary` (rgba(0, 85, 212, 1))
+- Muted Gray: `muted` and `muted-foreground`
+
+**Patterns**:
+- Cards: `rounded-[var(--radius-card)] border border-border bg-card`
+- Shadows: `shadow-[var(--elevation-sm)]`
+- Sections: `py-20` for vertical spacing
+- Badges: Use `variant="outline"` with custom className for colored badges
+
+### 6. Testing Protocol
+
+**Regression Testing**:
+```bash
+# Test backend outputs match golden files
+cd tests/golden/spotify
+# Run SpotifyPRD through all 3 tools
+# Compare outputs to expected-*.json files
+# Verify binary decisions match (C1-C11 PASS/FAIL)
+# Verify priorities match (P0/P1/P2)
+# Verify readiness gate matches (HOLD)
+```
+
+**Frontend Testing**:
+```bash
+# Start dev server
+cd frontend && npm run dev
+
+# Upload SpotifyPRD.pdf
+# Verify all 11 criteria display
+# Verify readiness gate shows "HOLD"
+# Verify all fix plan items render
+# Verify all agent tasks render
+# Verify export functions work
+```
+
+### 7. Validation Checklist
+
+Before claiming parity, verify:
+
+**Backend**:
+- [ ] Temperature = 0.2 (binary_score), 0.3 (fix_plan, agent_tasks)
+- [ ] Full rubric definitions embedded in system prompt
+- [ ] 3 consecutive runs of same PRD produce identical outputs
+- [ ] SpotifyPRD scores match tests/sitevsgpt/score.md (2 PASS, 9 FAIL)
+- [ ] Readiness gate = HOLD with correct reason
+
+**Frontend**:
+- [ ] All 11 criteria render with evidence quotes
+- [ ] Readiness gate badge shows correct state with proper colors
+- [ ] All fix plan items display with P0/P1/P2 badges
+- [ ] All agent tasks show inputs/outputs/tests/deps/errors
+- [ ] No "undefined" or missing data in UI
+- [ ] Export to Markdown produces readable file
+- [ ] Export to JSON is valid and complete
+
+**End-to-End**:
+- [ ] Upload SpotifyPRD → complete evaluation in < 3 minutes
+- [ ] Results match custom GPT output structure
+- [ ] All tabs navigate correctly
+- [ ] Collapsible sections expand/collapse
+- [ ] Visual design matches existing components

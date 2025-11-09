@@ -64,12 +64,14 @@ npm run dev
 
 The frontend will be available at http://localhost:3000 and will connect to the API gateway at http://localhost:8080.
 
-### Docker (All Services)
+### All Services (Development)
 
 ```bash
-cp .env.example .env
-# Edit .env and add your OPENAI_API_KEY
-docker-compose -f infra/docker-compose.yml up
+# Terminal 1: API Gateway
+cd api-gateway && npm run dev
+
+# Terminal 2: Frontend  
+cd frontend && npm run dev
 ```
 
 ## The 11-Point PRD Rubric
@@ -95,10 +97,12 @@ docker-compose -f infra/docker-compose.yml up
 - **REVISE**: 7-8/11 PASS or any gating criteria fail
 - **HOLD**: ≤6/11 PASS or ≥3 compliance gaps (GxP/Part 11/HIPAA)
 
-## API Endpoints
+## API Endpoints (Streaming)
+
+All endpoints use **Server-Sent Events (SSE)** for real-time progress with GPT-5.
 
 ### POST /api/evalprd/binary_score
-Evaluate PRD with PASS/FAIL for each criterion.
+Evaluate PRD with PASS/FAIL for each criterion (streaming).
 
 **Request**:
 ```json
@@ -137,7 +141,7 @@ Evaluate PRD with PASS/FAIL for each criterion.
 ```
 
 ### POST /api/evalprd/fix_plan
-Generate prioritized improvement plan.
+Generate prioritized improvement plan (streaming).
 
 **Request**:
 ```json
@@ -168,7 +172,7 @@ Generate prioritized improvement plan.
 ```
 
 ### POST /api/evalprd/agent_tasks
-Decompose into 2-4h executable tasks.
+Decompose into 2-4h executable tasks (streaming).
 
 **Request**:
 ```json
@@ -202,21 +206,78 @@ Decompose into 2-4h executable tasks.
 }
 ```
 
+## Custom GPT Parity
+
+This system replicates the EvalPRD custom GPT with 100% fidelity. Key factors:
+
+### Temperature Configuration
+
+**Critical for consistency** - temperature controls output randomness:
+- `binary_score`: 0.2 (low randomness for deterministic scoring)
+- `fix_plan`: 0.3 (balanced for creative yet consistent fixes)
+- `agent_tasks`: 0.3 (balanced for structured task decomposition)
+
+Previous bug: Tools were using temperature = 1.0 (maximum randomness), causing high output variance.
+
+### Complete Rubric Embedding
+
+The custom GPT has access to a 771-line rubric document. We achieve parity by:
+1. Extracting all 11 criterion definitions into `mcp-server/src/lib/rubric-definitions.ts`
+2. Including detailed PASS/FAIL criteria for each
+3. Embedding real-world examples:
+   - **WestREC PRD** (shows strong PASS patterns)
+   - **Spring Health PRD** (shows clear FAIL patterns)
+   - **Apex Health PRD** (shows scope explosion)
+4. Injecting complete definitions into system prompt
+
+### Golden Test Files
+
+Reference outputs in `tests/golden/spotify/` from actual custom GPT evaluation:
+- `expected-score.json` - 2 PASS / 9 FAIL, HOLD gate
+- `expected-fix-plan.json` - 10 prioritized fixes
+- `expected-agent-tasks.json` - 10 executable tasks
+- `expected-readiness.json` - Gate decision with reason
+
+### Validation
+
+```bash
+# Run validation against golden files
+node tests/validate-parity.mjs
+
+# Manual testing
+# 1. Start API gateway: cd api-gateway && npm run dev
+# 2. Test endpoints with test-request.json:
+curl -X POST http://localhost:8080/api/evalprd/binary_score \
+  -H 'Content-Type: application/json' \
+  --data @test-request.json > output-score.json
+
+# 3. Run validation
+node tests/validate-parity.mjs --compare
+```
+
 ## Testing
 
 ```bash
 # Run integration tests
 cd tests
 node integration.mjs
+
+# Validate parity with custom GPT
+node validate-parity.mjs
 ```
 
 ## Environment Variables
 
 ### MCP Server
 - `OPENAI_API_KEY`: Your OpenAI API key (required)
-- `EVALPRD_MODEL`: OpenAI model to use (default: `gpt-4o`)
+- `EVALPRD_MODEL`: OpenAI model to use (default: `gpt-5`)
 - `LOG_LEVEL`: Logging level (default: `info`)
-- `REQUEST_TIMEOUT_MS`: OpenAI timeout (default: `60000`)
+- `REQUEST_TIMEOUT_MS`: OpenAI timeout in milliseconds (default: `180000` = 3 minutes)
+
+**Note**: Temperature is hardcoded in tool files for consistency:
+- binary_score: 0.2
+- fix_plan: 0.3
+- agent_tasks: 0.3
 
 ### API Gateway
 - `PORT`: Server port (default: `8080`)

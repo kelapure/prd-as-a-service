@@ -7,16 +7,29 @@ env_variables:
   LOG_LEVEL: info
   # Set this to your domain when mapped (not used for same-origin requests via dispatch)
   ALLOWED_ORIGIN: https://evalgpt.com
-  EVALPRD_MODEL: gpt-4o
+  EVALPRD_MODEL: gpt-5
   # Ensure MCP server path resolves inside container
   MCP_SERVER_ARGS: /app/mcp-server/dist/index.js
-  # OPENAI_API_KEY should be set via 'gcloud app deploy --set-env-vars' or Secret Manager
+  # OPENAI_API_KEY - Note: This file should not be committed with the key
+  OPENAI_API_KEY: [REDACTED]
 
 resources:
   cpu: 1
   memory_gb: 1
   disk_size_gb: 10
 
-network:
-  forwarded_ports:
-    - 8080
+# Health check configuration
+liveness_check:
+  path: "/health"
+  check_interval_sec: 30
+  timeout_sec: 4
+  failure_threshold: 2
+  success_threshold: 2
+
+readiness_check:
+  path: "/health"
+  check_interval_sec: 5
+  timeout_sec: 4
+  failure_threshold: 2
+  success_threshold: 2
+  app_start_timeout_sec: 300
