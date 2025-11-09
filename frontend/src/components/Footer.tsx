@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { Linkedin } from "lucide-react";
 
 export function Footer() {
   return (
@@ -53,15 +54,21 @@ export function Footer() {
 
           {/* Attribution */}
           <div>
-            <p className="text-sm text-muted-foreground">
-              Built with 8090.ai Software Factory
-            </p>
+            <a
+              href="https://www.linkedin.com/in/rohitkelapure/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-2"
+            >
+              <Linkedin className="w-4 h-4" />
+              Created by Rohit Kelapure
+            </a>
           </div>
         </div>
 
         <div className="mt-8 pt-8 border-t border-border">
           <p className="text-xs text-muted-foreground text-center">
-            © {new Date().getFullYear()} PRD-as-a-Service. All rights reserved.
+            © {new Date().getFullYear()} PRD-as-a-Service by Rohit Kelapure. All rights reserved.
           </p>
         </div>
       </div>

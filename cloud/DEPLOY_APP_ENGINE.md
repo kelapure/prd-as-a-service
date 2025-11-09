@@ -50,17 +50,11 @@ env_variables:
 
 **Note:** In production, use Secret Manager instead of hardcoding keys.
 
-## 4) Build Frontend and MCP Server
+## 4) Build Frontend and API Gateway
 
 ```bash
 # Build frontend
 cd frontend
-npm install
-npm run build
-cd ..
-
-# Build MCP server
-cd mcp-server
 npm install
 npm run build
 cd ..
@@ -72,17 +66,17 @@ npm run build
 cd ..
 ```
 
-## 5) Deploy API Service (Flex Environment)
+## 5) Deploy API Service (Standard Environment)
 
 ```bash
-# Deploy API service with custom Docker container
-gcloud app deploy app.yaml --quiet
+# Deploy API service (Node.js 20 Standard Environment)
+gcloud app deploy cloud/app.yaml --quiet
 ```
 
 This deploys:
 - Service: `api`
-- Environment: Flex (custom runtime)
-- Includes: API Gateway + MCP Server
+- Environment: Standard (Node.js 20)
+- Includes: API Gateway with direct OpenAI integration
 
 ## 6) Deploy Frontend Service (Standard Environment)
 
@@ -98,7 +92,7 @@ This deploys:
 
 ## 7) Deploy Dispatch Rules
 
-Update `dispatch.yaml` to route requests:
+The `cloud/dispatch.yaml` file routes requests between services:
 
 ```yaml
 dispatch:
@@ -118,7 +112,7 @@ dispatch:
 Deploy dispatch rules:
 
 ```bash
-gcloud app deploy dispatch.yaml --quiet
+gcloud app deploy cloud/dispatch.yaml --quiet
 ```
 
 ## 8) Verify Domain Ownership
@@ -306,7 +300,7 @@ gcloud app logs tail -s api --level=error
 Common issues:
 - OpenAI API key invalid/expired
 - OpenAI quota exceeded
-- MCP server failed to start
+- API Gateway failed to start (check build logs)
 
 ## Architecture Summary
 
@@ -316,12 +310,11 @@ Internet
 Google Cloud Load Balancer (with SSL)
   ↓
 dispatch.yaml routes requests:
-  ├─ /api/* → api service (Flex)
-  │            ├─ API Gateway (Fastify)
-  │            └─ MCP Server (stdio)
-  │                └─ OpenAI API
+  ├─ /api/* → api service (Standard, Node.js 20)
+  │            └─ API Gateway (Fastify + OpenAI SDK)
+  │                └─ OpenAI API (gpt-5)
   │
-  └─ /* → default service (Standard)
+  └─ /* → default service (Standard, Node.js 20)
            └─ React SPA (Vite)
 ```
 
@@ -343,15 +336,18 @@ gcloud app deploy frontend/app.yaml --quiet
 
 **Update API only:**
 ```bash
-cd mcp-server && npm run build && cd ..
 cd api-gateway && npm run build && cd ..
-gcloud app deploy app.yaml --quiet
+gcloud app deploy cloud/app.yaml --quiet
 ```
 
-**Update both:**
+**Update both services:**
 ```bash
 cd frontend && npm run build && cd ..
-cd mcp-server && npm run build && cd ..
 cd api-gateway && npm run build && cd ..
-gcloud app deploy app.yaml frontend/app.yaml --quiet
+gcloud app deploy cloud/app.yaml frontend/app.yaml --quiet
+```
+
+**Update dispatch rules:**
+```bash
+gcloud app deploy cloud/dispatch.yaml --quiet
 ```

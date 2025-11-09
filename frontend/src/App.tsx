@@ -5,6 +5,7 @@ import { FixPlanExample } from "./components/FixPlanExample";
 import { AgentTasksExample } from "./components/AgentTasksExample";
 import { CTASection } from "./components/CTASection";
 import { UploadDialog } from "./components/UploadDialog";
+import { Footer } from "./components/Footer";
 import { useState } from "react";
 import { generateFixPlan, generateAgentTasks } from "./lib/api";
 import type { BinaryScoreOutput, FixPlanOutput, AgentTasksOutput } from "./types/api";
@@ -64,6 +65,8 @@ export default function App() {
       )}
       
       <CTASection onEvaluateClick={() => setUploadDialogOpen(true)} />
+      
+      <Footer />
       
       <UploadDialog 
         open={uploadDialogOpen} 

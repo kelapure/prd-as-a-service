@@ -39,9 +39,14 @@ export function Hero({ onEvaluateClick }: HeroProps) {
         </div>
 
         {/* Subtext */}
-        <p className="text-muted-foreground">
-          Trusted for Pharma/GxP projects
-        </p>
+        <div className="space-y-1">
+          <p className="text-muted-foreground">
+            Trusted for Pharma/GxP projects
+          </p>
+          <p className="text-sm text-muted-foreground/80">
+            Your PRDs stay private. We evaluate and delete—no storage, no logs, no traces.
+          </p>
+        </div>
       </div>
     </section>
   );

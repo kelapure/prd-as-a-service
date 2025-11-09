@@ -1,0 +1,27 @@
+# .gcloudignore for api-gateway service
+
+# Keep src/, tsconfig.json, package.json for building on App Engine
+# App Engine will run npm install and build automatically
+
+# Development files
+*.log
+*.swp
+*.swo
+*~
+.DS_Store
+.vscode/
+.idea/
+
+# Test files
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+
+# Documentation
+*.md
+
+# Git
+.git/
+.gitignore
+
