@@ -15,8 +15,7 @@ env_variables:
   LOG_LEVEL: info
   ALLOWED_ORIGIN: https://evalgpt.com
   EVALPRD_MODEL: gpt-5
-  # OPENAI_API_KEY - WARNING: Use Secret Manager in production, not hardcoded here
-  OPENAI_API_KEY: [REDACTED]
+  # OPENAI_API_KEY should be set via Secret Manager or environment variable
 
 handlers:
   # Let the Node server handle all routes
