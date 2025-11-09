@@ -22,7 +22,7 @@ export function Hero({ onEvaluateClick }: HeroProps) {
           <h4 className="text-muted-foreground">
             Evaluate your product requirements against 11 critical criteria
             <br />
-            Get binary PASS/FAIL scoring, prioritized fix plans, and AI agent-executable task graphs
+            Get binary PASS/FAIL scoring, prioritized fix plans, and AI agent-executable tasks
           </h4>
         </div>
 
