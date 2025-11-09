@@ -37,18 +37,25 @@ gcloud artifacts repositories add-iam-policy-binding us.gcr.io \
   --role=roles/artifactregistry.writer
 ```
 
-## 3) Update Environment Variables
+## 3) Configure Secrets with app.local.yaml
 
-Update the OpenAI API key in `app.yaml`:
+**IMPORTANT:** Never commit API keys to git. Use `app.local.yaml` (already in .gitignore).
+
+Create `api-gateway/app.local.yaml`:
 
 ```yaml
 env_variables:
-  OPENAI_API_KEY: sk-proj-YOUR-KEY-HERE
-  EVALPRD_MODEL: gpt-4o
-  ALLOWED_ORIGIN: https://evalgpt.com
+  OPENAI_API_KEY: sk-proj-YOUR-ACTUAL-KEY-HERE
 ```
 
-**Note:** In production, use Secret Manager instead of hardcoding keys.
+Create `cloud/app.local.yaml`:
+
+```yaml
+env_variables:
+  OPENAI_API_KEY: sk-proj-YOUR-ACTUAL-KEY-HERE
+```
+
+These files are git-ignored and will overlay the base `app.yaml` during deployment.
 
 ## 4) Build Frontend and API Gateway
 
@@ -69,8 +76,8 @@ cd ..
 ## 5) Deploy API Service (Standard Environment)
 
 ```bash
-# Deploy API service (Node.js 20 Standard Environment)
-gcloud app deploy cloud/app.yaml --quiet
+# Deploy API service with secrets overlay
+gcloud app deploy cloud/app.yaml cloud/app.local.yaml --quiet
 ```
 
 This deploys:
@@ -320,7 +327,7 @@ dispatch.yaml routes requests:
 
 ## Post-Deployment
 
-- Update API key directly in `app.yaml` (or migrate to Secret Manager)
+- API keys are managed via `app.local.yaml` (never committed to git)
 - Monitor costs in Cloud Console
 - Set up budget alerts
 - Configure log-based metrics for monitoring
@@ -337,14 +344,14 @@ gcloud app deploy frontend/app.yaml --quiet
 **Update API only:**
 ```bash
 cd api-gateway && npm run build && cd ..
-gcloud app deploy cloud/app.yaml --quiet
+gcloud app deploy cloud/app.yaml cloud/app.local.yaml --quiet
 ```
 
 **Update both services:**
 ```bash
 cd frontend && npm run build && cd ..
 cd api-gateway && npm run build && cd ..
-gcloud app deploy cloud/app.yaml frontend/app.yaml --quiet
+gcloud app deploy cloud/app.yaml cloud/app.local.yaml frontend/app.yaml --quiet
 ```
 
 **Update dispatch rules:**
