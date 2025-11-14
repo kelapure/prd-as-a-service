@@ -24,12 +24,12 @@ export function Features() {
       <div className="max-w-6xl mx-auto">
         <div className="grid md:grid-cols-3 gap-8">
           {features.map((feature, index) => (
-            <div 
-              key={index} 
-              className="bg-card rounded-[var(--radius-card)] p-8 space-y-4 border border-border shadow-[var(--elevation-sm)]"
+            <div
+              key={index}
+              className="bg-card rounded-[var(--radius-card)] p-8 space-y-4 border border-border shadow-[var(--elevation-sm)] hover:shadow-[var(--elevation-md)] transition-all duration-300 hover:scale-[1.02]"
             >
-              <div className={`w-12 h-12 rounded-full bg-muted flex items-center justify-center ${feature.color}`}>
-                <feature.icon className="w-6 h-6" />
+              <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center border border-border">
+                <feature.icon className="w-6 h-6 text-foreground" />
               </div>
               <h3 className="text-card-foreground">{feature.title}</h3>
               <p className="text-muted-foreground">

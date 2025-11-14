@@ -1,4 +1,4 @@
-import { ArrowRight, FileCheck } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Button } from "./ui/button";
 
 interface HeroProps {
@@ -7,15 +7,10 @@ interface HeroProps {
 
 export function Hero({ onEvaluateClick }: HeroProps) {
   return (
-    <section className="px-6 py-24 md:py-32 max-w-5xl mx-auto">
-      <div className="flex flex-col items-center text-center space-y-8">
-        {/* Icon */}
-        <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-          <FileCheck className="w-8 h-8 text-primary" />
-        </div>
-
+    <section className="px-6 py-24 md:py-32 max-w-6xl mx-auto grid-background">
+      <div className="space-y-8 text-center">
         {/* Headline */}
-        <div className="space-y-4 max-w-3xl">
+        <div className="space-y-4">
           <h1 className="text-foreground">
             Ship Faster with AI Agent Ready PRDs
           </h1>
@@ -27,7 +22,7 @@ export function Hero({ onEvaluateClick }: HeroProps) {
         </div>
 
         {/* CTA */}
-        <div className="flex flex-col sm:flex-row gap-4 pt-4">
+        <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Button
             size="lg"
             className="gap-3 px-12 py-6 text-lg"
@@ -38,13 +33,13 @@ export function Hero({ onEvaluateClick }: HeroProps) {
           </Button>
         </div>
 
-        {/* Subtext */}
+        {/* Trust Indicators */}
         <div className="space-y-1">
-          <p className="text-muted-foreground">
+          <p className="text-sm font-medium text-foreground">
             Trusted for Pharma/GxP projects
           </p>
           <p className="text-xs text-muted-foreground">
-            Your PRDs stay private. We evaluate and delete—no storage, no logs, no traces.
+            🔒 Your PRDs stay private. We evaluate and delete—no storage, no logs, no traces.
           </p>
         </div>
       </div>
