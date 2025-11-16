@@ -36,6 +36,14 @@ export function AgentTasksExample({ data, isLoading }: AgentTasksExampleProps) {
   const tasks = data?.tasks || [];
   const totalHours = tasks.reduce((sum, task) => sum + task.est_hours, 0);
 
+  // Debug logging
+  console.log('[AgentTasksExample] Rendered with:', {
+    isLoading,
+    hasData: !!data,
+    tasksCount: tasks.length,
+    data: data
+  });
+
   const handleExport = () => {
     if (!data) return;
     const markdown = exportAgentTasksAsMarkdown(data);

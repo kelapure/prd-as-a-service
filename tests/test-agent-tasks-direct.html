@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Agent Tasks Rendering</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    button {
+      background: #0055d4;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      margin-bottom: 20px;
+    }
+    button:hover {
+      background: #0044b3;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .task-card {
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+      background: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .task-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 12px;
+    }
+    .task-id {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      background: rgba(0, 85, 212, 0.1);
+      color: #0055d4;
+      border-radius: 50%;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .task-feature {
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+    .task-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #333;
+      margin: 8px 0;
+    }
+    .task-description {
+      color: #666;
+      line-height: 1.6;
+      margin-bottom: 12px;
+    }
+    .task-meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 12px 0;
+      padding: 12px 0;
+      border-top: 1px solid #e0e0e0;
+    }
+    .meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .meta-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      color: #999;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    .meta-value {
+      font-size: 14px;
+      color: #333;
+      font-weight: 500;
+    }
+    .task-section {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #e0e0e0;
+    }
+    .section-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      color: #999;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    .section-content {
+      font-size: 14px;
+      color: #333;
+      line-height: 1.6;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .badge-ready {
+      background: rgba(13, 148, 136, 0.1);
+      color: #0d9488;
+      border: 1px solid rgba(13, 148, 136, 0.2);
+    }
+    .badge-blocked {
+      background: rgba(251, 191, 36, 0.1);
+      color: #f59e0b;
+      border: 1px solid rgba(251, 191, 36, 0.2);
+    }
+    .list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .list-item {
+      display: flex;
+      align-items: start;
+      gap: 8px;
+      margin-bottom: 6px;
+      font-size: 14px;
+      color: #666;
+    }
+    .list-item-arrow {
+      color: #0055d4;
+      font-weight: bold;
+    }
+    .error {
+      background: #fee;
+      border: 1px solid #fcc;
+      color: #c00;
+      padding: 12px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+    }
+    .success {
+      background: #efe;
+      border: 1px solid #cfc;
+      color: #060;
+      padding: 12px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+    }
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+    .summary {
+      background: rgba(0, 85, 212, 0.05);
+      border: 1px solid rgba(0, 85, 212, 0.2);
+      border-radius: 6px;
+      padding: 16px;
+      text-align: center;
+      margin-top: 20px;
+    }
+    pre {
+      background: #f5f5f5;
+      padding: 12px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Agent Tasks Rendering Test</h1>
+    <p>This test will call the agent_tasks API endpoint and render the results to verify the frontend component logic.</p>
+    
+    <button id="testBtn" onclick="testAgentTasks()">Run Test</button>
+    
+    <div id="output"></div>
+  </div>
+
+  <script>
+    const API_BASE = 'http://localhost:8080';
+    
+    const testPRD = `# File Upload Feature
+
+## Problem
+Users cannot upload files to the platform. This creates friction in the onboarding process and limits document sharing capabilities.
+
+## Solution
+Build a secure file upload system with validation, progress tracking, and error handling.
+
+## Technical Requirements
+
+### F1: File Upload UI
+- Drag-and-drop interface with click fallback
+- File type validation (PDF, DOC, DOCX)
+- File size limit (10MB)
+- Progress bar with percentage
+- Error messages with retry option
+
+### F2: Backend Upload Service
+- POST /api/upload endpoint
+- Multipart form data handling
+- File validation (type, size, MIME type)
+- S3 storage with encryption
+- Audit logging
+
+### F3: Error Handling
+- Network error retry (3 attempts)
+- Timeout handling (30s)
+- User-friendly error messages
+- Rollback on failure
+
+## Success Metrics
+- Upload success rate > 99%
+- Upload time < 5s for 5MB file
+- Error rate < 1%
+`;
+
+    async function testAgentTasks() {
+      const btn = document.getElementById('testBtn');
+      const output = document.getElementById('output');
+      
+      btn.disabled = true;
+      output.innerHTML = '<div class="loading">Loading...</div>';
+      
+      try {
+        const response = await fetch(`${API_BASE}/api/evalprd/agent_tasks`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ prd_text: testPRD })
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        // Parse SSE stream
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let result = null;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = JSON.parse(line.slice(6));
+              
+              if (data.type === 'done') {
+                result = data.result;
+                break;
+              } else if (data.type === 'error') {
+                throw new Error(data.error);
+              }
+            }
+          }
+          
+          if (result) break;
+        }
+
+        if (!result) {
+          throw new Error('No result received from API');
+        }
+
+        console.log('Agent Tasks Result:', result);
+        renderAgentTasks(result);
+        
+      } catch (error) {
+        output.innerHTML = `<div class="error"><strong>Error:</strong> ${error.message}</div>`;
+        console.error('Test failed:', error);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function renderAgentTasks(data) {
+      const output = document.getElementById('output');
+      
+      if (!data || !data.tasks || data.tasks.length === 0) {
+        output.innerHTML = '<div class="error">No tasks found in response</div>';
+        return;
+      }
+
+      const tasks = data.tasks;
+      const totalHours = tasks.reduce((sum, task) => sum + (task.est_hours || 0), 0);
+
+      let html = `<div class="success"><strong>Success!</strong> Received ${tasks.length} tasks</div>`;
+      
+      // Render tasks
+      html += '<h2>Task Breakdown</h2>';
+      
+      tasks.forEach(task => {
+        const statusClass = task.status === 'blocked' ? 'badge-blocked' : 'badge-ready';
+        
+        html += `
+          <div class="task-card">
+            <div class="task-header">
+              <div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <span class="task-id">${task.id}</span>
+                  <div>
+                    <div class="task-feature">${task.feature}</div>
+                  </div>
+                </div>
+              </div>
+              <span class="badge ${statusClass}">${task.status}</span>
+            </div>
+            
+            <h3 class="task-title">${task.title}</h3>
+            <p class="task-description">${task.description}</p>
+            
+            <div class="task-meta">
+              <div class="meta-item">
+                <div class="meta-label">Duration</div>
+                <div class="meta-value">${task.duration} (${task.est_hours}h)</div>
+              </div>
+              ${task.owner_role ? `
+                <div class="meta-item">
+                  <div class="meta-label">Owner Role</div>
+                  <div class="meta-value">${task.owner_role}</div>
+                </div>
+              ` : ''}
+            </div>
+            
+            ${task.inputs && task.inputs.length > 0 ? `
+              <div class="task-section">
+                <div class="section-title">Inputs</div>
+                <ul class="list">
+                  ${task.inputs.map(input => `
+                    <li class="list-item">
+                      <span class="list-item-arrow">→</span>
+                      <span>${input}</span>
+                    </li>
+                  `).join('')}
+                </ul>
+              </div>
+            ` : ''}
+            
+            ${task.outputs && task.outputs.length > 0 ? `
+              <div class="task-section">
+                <div class="section-title">Outputs</div>
+                <ul class="list">
+                  ${task.outputs.map(output => `
+                    <li class="list-item">
+                      <span class="list-item-arrow">←</span>
+                      <span>${output}</span>
+                    </li>
+                  `).join('')}
+                </ul>
+              </div>
+            ` : ''}
+            
+            <div class="task-section">
+              <div class="section-title">Entry Condition</div>
+              <div class="section-content">${task.entry}</div>
+            </div>
+            
+            <div class="task-section">
+              <div class="section-title">Exit Condition</div>
+              <div class="section-content">${task.exit}</div>
+            </div>
+            
+            <div class="task-section">
+              <div class="section-title">Acceptance Test</div>
+              <div class="section-content">${task.test}</div>
+            </div>
+          </div>
+        `;
+      });
+      
+      // Summary
+      html += `
+        <div class="summary">
+          <strong>${tasks.length} tasks</strong> totaling <strong>${totalHours} hours</strong> of estimated effort
+        </div>
+      `;
+
+      // Debug output
+      html += `
+        <h3 style="margin-top: 40px;">Debug: Raw Response</h3>
+        <pre>${JSON.stringify(data, null, 2).substring(0, 2000)}...</pre>
+      `;
+      
+      output.innerHTML = html;
+    }
+  </script>
+</body>
+</html>
+

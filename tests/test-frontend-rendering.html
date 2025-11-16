@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Frontend AgentTasksExample Rendering</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .status {
+      padding: 12px;
+      margin: 12px 0;
+      border-radius: 6px;
+      font-weight: bold;
+    }
+    .error { background: #fee; border: 1px solid #fcc; color: #c00; }
+    .success { background: #efe; border: 1px solid #cfc; color: #060; }
+    .loading { background: #eef; border: 1px solid #ccf; color: #006; }
+    button {
+      background: #0055d4;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 12px 0;
+    }
+    button:hover { background: #0044b3; }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+    #frontend-iframe {
+      width: 100%;
+      height: 800px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Frontend Agent Tasks Rendering Test</h1>
+  <p>This test will call the API, then open the frontend to test the actual rendering component.</p>
+  
+  <button id="testBtn" onclick="runTest()">1. Test API First</button>
+  <button id="openFrontendBtn" onclick="openFrontend()" disabled>2. Open Frontend</button>
+  
+  <div id="status"></div>
+  
+  <div id="frontend-container" style="display:none;">
+    <h2>Frontend Preview</h2>
+    <p>The frontend should be open in a new tab. Check the AgentTasksExample section.</p>
+  </div>
+
+  <script>
+    let agentTasksData = null;
+
+    async function runTest() {
+      const btn = document.getElementById('testBtn');
+      const status = document.getElementById('status');
+      
+      btn.disabled = true;
+      status.innerHTML = '<div class="status loading">Testing API...</div>';
+      
+      try {
+        const response = await fetch('http://localhost:8080/api/evalprd/agent_tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prd_text: `# File Upload System
+
+## Problem
+Users need to upload documents for processing.
+
+## Solution
+Build a secure file upload system with validation.
+
+## Technical Requirements
+- File type validation (PDF, DOC)
+- Size limit: 10MB
+- S3 storage
+- Progress tracking
+- Error handling
+
+## Success Metrics
+- Upload success rate > 99%
+- P95 latency < 3s`
+          })
+        });
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = JSON.parse(line.slice(6));
+              
+              if (data.type === 'done') {
+                agentTasksData = data.result;
+                status.innerHTML = `
+                  <div class="status success">
+                    ✅ API Test Passed!<br>
+                    Received ${data.result.tasks?.length || 0} tasks<br>
+                    <br>
+                    <strong>Sample Task:</strong><br>
+                    ID: ${data.result.tasks[0]?.id}<br>
+                    Title: ${data.result.tasks[0]?.title}<br>
+                    Feature: ${data.result.tasks[0]?.feature}<br>
+                    Status: ${data.result.tasks[0]?.status}<br>
+                    <br>
+                    Now open the frontend to test rendering!
+                  </div>
+                `;
+                document.getElementById('openFrontendBtn').disabled = false;
+                localStorage.setItem('test_agent_tasks_data', JSON.stringify(data.result));
+                return;
+              } else if (data.type === 'error') {
+                throw new Error(data.error);
+              }
+            }
+          }
+        }
+
+      } catch (error) {
+        status.innerHTML = `<div class="status error">❌ Error: ${error.message}</div>`;
+        console.error('Test failed:', error);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function openFrontend() {
+      // Open the frontend in a new window
+      window.open('http://localhost:3000', '_blank');
+      
+      document.getElementById('status').innerHTML += `
+        <div class="status success">
+          ✅ Frontend opened in new tab<br>
+          <br>
+          <strong>Instructions:</strong><br>
+          1. Click "Evaluate Your PRD" button<br>
+          2. Upload any PDF file or enter PRD text<br>
+          3. Scroll down to "AI Agent-Executable Task Graph" section<br>
+          4. Verify that tasks are rendering correctly<br>
+          <br>
+          <strong>What to check:</strong><br>
+          - Are task cards visible?<br>
+          - Do they show task ID, feature, title?<br>
+          - Are inputs/outputs displayed?<br>
+          - Are entry/exit/test conditions visible?<br>
+          - Is the summary showing task count and hours?
+        </div>
+      `;
+    }
+  </script>
+</body>
+</html>
+
