@@ -21,6 +21,7 @@ export function UploadDialog({ open, onOpenChange, onComplete }: UploadDialogPro
   const [dragActive, setDragActive] = useState(false);
   const [progressMessage, setProgressMessage] = useState<string>("");
   const [progressPercent, setProgressPercent] = useState<number>(0);
+  const [streamPreview, setStreamPreview] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
 
   const handleDrag = (e: React.DragEvent) => {
@@ -72,11 +73,16 @@ export function UploadDialog({ open, onOpenChange, onComplete }: UploadDialogPro
       // Step 3: Evaluate PRD (binary score only) with streaming
       setProgressMessage("Evaluating PRD against 11 criteria...");
       setProgressPercent(30);
-      const binaryScore = await evaluatePRD(prdText, (delta, accumulated) => {
+      setStreamPreview(""); // Reset preview
+      let accumulatedText = "";
+      const binaryScore = await evaluatePRD(prdText, (delta, accumulatedLength) => {
         // Update progress based on accumulated characters
         // Estimate: typical response is ~3000 chars
-        const progress = 30 + Math.min((accumulated / 3000) * 70, 70);
+        const progress = 30 + Math.min((accumulatedLength / 3000) * 70, 70);
         setProgressPercent(progress);
+        // Accumulate the text locally and show last 200 chars
+        accumulatedText += delta;
+        setStreamPreview(accumulatedText.slice(-200));
       });
 
       // Success! Close dialog and pass results + prdText for background processing
@@ -89,6 +95,7 @@ export function UploadDialog({ open, onOpenChange, onComplete }: UploadDialogPro
       setFile(null);
       setProgressMessage("");
       setProgressPercent(0);
+      setStreamPreview("");
 
     } catch (err) {
       setUploading(false);
@@ -96,6 +103,7 @@ export function UploadDialog({ open, onOpenChange, onComplete }: UploadDialogPro
       setError(errorMessage);
       setProgressMessage("");
       setProgressPercent(0);
+      setStreamPreview("");
     }
   };
 
@@ -185,6 +193,13 @@ export function UploadDialog({ open, onOpenChange, onComplete }: UploadDialogPro
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
+              {streamPreview && (
+                <div className="rounded-md bg-muted/50 p-2 max-h-20 overflow-auto">
+                  <code className="text-xs text-muted-foreground break-all">
+                    {streamPreview}
+                  </code>
+                </div>
+              )}
               <p className="text-xs text-muted-foreground text-center">
                 This may take about 1 minute. Additional analysis will continue in the background.
               </p>

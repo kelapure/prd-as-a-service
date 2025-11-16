@@ -10,6 +10,11 @@ dotenv.config();
 
 const logger = pino({ level: process.env.LOG_LEVEL || "info" });
 
+if (!process.env.ANTHROPIC_API_KEY) {
+  logger.fatal("ANTHROPIC_API_KEY environment variable is not set");
+  process.exit(1);
+}
+
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
   maxRetries: Number(process.env.ANTHROPIC_MAX_RETRIES) || 1,
@@ -18,6 +23,8 @@ const anthropic = new Anthropic({
     "anthropic-beta": "structured-outputs-2025-11-13"
   }
 });
+
+logger.info("Anthropic client initialized successfully");
 
 export interface StructuredCallOptions {
   model: string;

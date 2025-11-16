@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from "react";
+import mermaid from "mermaid";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { CheckSquare, Play, Flag, AlertTriangle, Clock, Loader2, Download } from "lucide-react";
@@ -35,6 +37,10 @@ interface AgentTasksExampleProps {
 export function AgentTasksExample({ data, isLoading }: AgentTasksExampleProps) {
   const tasks = data?.tasks || [];
   const totalHours = tasks.reduce((sum, task) => sum + task.est_hours, 0);
+  const mermaidContainerRef = useRef<HTMLDivElement | null>(null);
+  const mermaidInitializedRef = useRef(false);
+  const renderIdRef = useRef(0);
+  const [graphError, setGraphError] = useState<string | null>(null);
 
   // Debug logging
   console.log('[AgentTasksExample] Rendered with:', {
@@ -43,6 +49,51 @@ export function AgentTasksExample({ data, isLoading }: AgentTasksExampleProps) {
     tasksCount: tasks.length,
     data: data
   });
+
+  useEffect(() => {
+    if (!data?.mermaid || !mermaidContainerRef.current) {
+      if (mermaidContainerRef.current) {
+        mermaidContainerRef.current.innerHTML = "";
+      }
+      return;
+    }
+
+    if (!mermaidInitializedRef.current) {
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: "loose",
+        theme: "neutral",
+        flowchart: { curve: "basis" }
+      });
+      mermaidInitializedRef.current = true;
+    }
+
+    const renderId = `agent-tasks-graph-${renderIdRef.current++}`;
+    let isActive = true;
+    setGraphError(null);
+
+    mermaid
+      .render(renderId, data.mermaid)
+      .then(({ svg }) => {
+        if (!isActive || !mermaidContainerRef.current) {
+          return;
+        }
+        mermaidContainerRef.current.innerHTML = svg;
+      })
+      .catch((error) => {
+        if (!isActive) {
+          return;
+        }
+        setGraphError(error instanceof Error ? error.message : "Unable to render graph");
+        if (mermaidContainerRef.current) {
+          mermaidContainerRef.current.innerHTML = "";
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [data?.mermaid]);
 
   const handleExport = () => {
     if (!data) return;
@@ -61,6 +112,38 @@ export function AgentTasksExample({ data, isLoading }: AgentTasksExampleProps) {
               Decomposed into 2-4 hour units with explicit inputs, outputs, and acceptance tests—ready for AI agents like Cursor, Devin, or Copilot
             </p>
           </div>
+
+          {/* Graph View */}
+          {data?.mermaid && (
+            <div className="bg-card rounded-[var(--radius-card)] border border-border shadow-[var(--elevation-sm)] overflow-hidden">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Flag className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-foreground">Agent Task Dependency Graph</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Visual DAG emitted by EvalPRD ({tasks.length} tasks, {data.edges?.length ?? 0} links)
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="p-6">
+                {graphError ? (
+                  <div className="rounded-lg border border-destructive bg-destructive/10 p-4 text-destructive text-sm">
+                    Unable to render graph: {graphError}
+                  </div>
+                ) : (
+                  <div
+                    ref={mermaidContainerRef}
+                    className="overflow-auto w-full"
+                    aria-label="Agent task dependency graph"
+                  />
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Tasks Grid */}
           <div className="grid md:grid-cols-2 gap-6">

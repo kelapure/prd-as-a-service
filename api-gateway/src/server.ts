@@ -54,6 +54,11 @@ fastify.post("/api/evalprd/binary_score", async (request, reply) => {
     "Access-Control-Allow-Credentials": "true"
   });
 
+  // Send heartbeat every 15s to keep connection alive (App Engine 60s timeout)
+  const heartbeatInterval = setInterval(() => {
+    reply.raw.write(`: heartbeat\n\n`);
+  }, 15000);
+
   try {
     const result = await evaluateBinaryScore(
       { prd_text },
@@ -62,9 +67,11 @@ fastify.post("/api/evalprd/binary_score", async (request, reply) => {
       }
     );
 
+    clearInterval(heartbeatInterval);
     reply.raw.write(`data: ${JSON.stringify({ type: "done", result })}\n\n`);
     reply.raw.end();
   } catch (error: any) {
+    clearInterval(heartbeatInterval);
     logger.error({ error: error.message }, "binary_score streaming failed");
     reply.raw.write(`data: ${JSON.stringify({ type: "error", error: error.message })}\n\n`);
     reply.raw.end();
