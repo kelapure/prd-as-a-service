@@ -83,7 +83,7 @@ export const BinaryScoreOutput = {
           name: { type: "string" },
           pass: { type: "boolean" },
           status: { type: "string", enum: ["pass", "fail"] },
-          rationale: { type: "string", maxLength: 200 },
+          rationale: { type: "string", maxLength: 400 },
           evidence: {
             type: "array",
             items: {
@@ -202,7 +202,7 @@ export const FixPlanOutput = {
           blocking: { type: "boolean" },
           effort: { type: "string", enum: ["S","M","L"] },
           impact: { type: "string", enum: ["Low","Med","High"] },
-          description: { type: "string", maxLength: 500 },
+          description: { type: "string", maxLength: 1000 },
           steps: { type: "array", items: { type: "string" } },
           acceptance_tests: { type: "array", items: { type: "string" } },
           linked_criteria: {
@@ -233,7 +233,7 @@ export const AgentTasksInput = {
 
 export const AgentTasksOutput = {
   type: "object",
-  required: ["tasks","edges","mermaid"],
+  required: ["tasks","edges"],
   properties: {
     tasks: {
       type: "array",
@@ -244,13 +244,13 @@ export const AgentTasksOutput = {
           id: { type: "string" },
           feature: { type: "string" },
           title: { type: "string" },
-          description: { type: "string", maxLength: 500 },
+          description: { type: "string", maxLength: 1000 },
           duration: { type: "string", pattern: "^[0-9]+(h|hr|hours?)$" },
           est_hours: { type: "number" },
           owner_role: { type: "string" },
-          entry: { type: "string", maxLength: 200 },
-          exit: { type: "string", maxLength: 200 },
-          test: { type: "string", maxLength: 300 },
+          entry: { type: "string", maxLength: 800 },
+          exit: { type: "string", maxLength: 800 },
+          test: { type: "string", maxLength: 1000 },
           entry_conditions: { type: "array", items: { type: "string" } },
           exit_conditions: { type: "array", items: { type: "string" } },
           tests: { type: "array", items: { type: "string" } },

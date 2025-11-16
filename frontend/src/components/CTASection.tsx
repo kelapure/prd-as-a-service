@@ -8,15 +8,6 @@ export function CTASection({ onEvaluateClick }: CTASectionProps) {
   return (
     <section className="px-6 py-24 bg-background">
       <div className="text-center space-y-6 max-w-2xl mx-auto">
-        <h2 className="text-foreground">
-          Stop shipping vague PRDs
-        </h2>
-        <h4 className="text-muted-foreground">
-          Get objective PASS/FAIL evaluation
-          <br />
-          Concrete fix plans and agent-ready task decomposition
-        </h4>
-
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Button
             variant="outline"

@@ -7,7 +7,7 @@ This guide documents the actual deployment process for EvalPRD to Google Cloud A
 - Google Cloud project: `dompe-dev-439304`
 - Domain registered: `evalgpt.com`
 - `gcloud` CLI installed and authenticated
-- OpenAI API key with sufficient quota
+- Anthropic API key with sufficient quota
 
 ## 1) Configure gcloud and App Engine
 
@@ -45,14 +45,14 @@ Create `api-gateway/app.local.yaml`:
 
 ```yaml
 env_variables:
-  OPENAI_API_KEY: sk-proj-YOUR-ACTUAL-KEY-HERE
+  ANTHROPIC_API_KEY: sk-ant-YOUR-ACTUAL-KEY-HERE
 ```
 
 Create `cloud/app.local.yaml`:
 
 ```yaml
 env_variables:
-  OPENAI_API_KEY: sk-proj-YOUR-ACTUAL-KEY-HERE
+  ANTHROPIC_API_KEY: sk-ant-YOUR-ACTUAL-KEY-HERE
 ```
 
 These files are git-ignored and will overlay the base `app.yaml` during deployment.
@@ -305,8 +305,8 @@ gcloud app logs tail -s api --level=error
 ```
 
 Common issues:
-- OpenAI API key invalid/expired
-- OpenAI quota exceeded
+- Anthropic API key invalid/expired
+- Anthropic quota exceeded
 - API Gateway failed to start (check build logs)
 
 ## Architecture Summary
@@ -318,8 +318,8 @@ Google Cloud Load Balancer (with SSL)
   ↓
 dispatch.yaml routes requests:
   ├─ /api/* → api service (Standard, Node.js 20)
-  │            └─ API Gateway (Fastify + OpenAI SDK)
-  │                └─ OpenAI API (gpt-5)
+  │            └─ API Gateway (Fastify + Anthropic SDK)
+  │                └─ Anthropic API (claude-sonnet-4-5-20250929)
   │
   └─ /* → default service (Standard, Node.js 20)
            └─ React SPA (Vite)

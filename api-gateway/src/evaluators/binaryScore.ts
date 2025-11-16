@@ -1,7 +1,7 @@
 // Binary Score Evaluator - PASS/FAIL evaluation with readiness gate
 
 import { BinaryScoreInput, BinaryScoreOutput } from "../lib/schemas.js";
-import { callStructuredStream } from "../lib/openai.js";
+import { callStructuredStream } from "../lib/claude.js";
 import { validateOutput } from "../lib/validation.js";
 import { buildUserBlock } from "../lib/util.js";
 import { EXACT_SYSTEM_PROMPT, APPEND_BINARY } from "../lib/prompts.js";
@@ -16,7 +16,7 @@ export async function evaluateBinaryScore(
   const user = buildUserBlock(args);
 
   const json = await callStructuredStream({
-    model: process.env.EVALPRD_MODEL || "gpt-5",
+    model: process.env.EVALPRD_MODEL || "claude-sonnet-4-5-20250929",
     system,
     user,
     outputSchema: BinaryScoreOutput,

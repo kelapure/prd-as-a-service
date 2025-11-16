@@ -1,5 +1,4 @@
 import { Hero } from "./components/Hero";
-import { Features } from "./components/Features";
 import { ExampleOutput } from "./components/ExampleOutput";
 import { FixPlanExample } from "./components/FixPlanExample";
 import { AgentTasksExample } from "./components/AgentTasksExample";
@@ -44,7 +43,11 @@ export default function App() {
         .finally(() => setIsLoadingFixPlan(false)),
 
       generateAgentTasks(results.prdText)
-        .then((data) => setAgentTasksData(data))
+        .then((data) => {
+          console.log('Agent Tasks Data Received:', data);
+          console.log('Number of tasks:', data.tasks?.length);
+          setAgentTasksData(data);
+        })
         .catch((error) => console.error('Agent tasks generation failed:', error))
         .finally(() => setIsLoadingAgentTasks(false))
     ]);
@@ -53,7 +56,6 @@ export default function App() {
   return (
     <div className="min-h-screen bg-background">
       <Hero onEvaluateClick={() => setUploadDialogOpen(true)} />
-      <Features />
       
       {showResults && (
         <div id="results">

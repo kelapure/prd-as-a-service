@@ -221,11 +221,10 @@ You are in Output Mode 2: Fix Plan.
 export const APPEND_AGENT_TASKS = (minH: number, maxH: number, emitMermaid: boolean) => `
 You are in Output Mode 3: Agent Handoff Pack.
 - Produce ONLY the task pack as JSON that matches AgentTasksOutput.
-- Each task must have: id, feature (e.g., "F2.1 Alert Ingestion"), title, description (max 500 chars), duration (string like "2h" or "4h"), est_hours (number), entry (single string max 200 chars), exit (single string max 200 chars), test (single string max 300 chars), status ("ready" if no deps, "blocked" if waiting).
+- Each task must have: id, feature (e.g., "F2.1 Alert Ingestion"), title, description (max 1000 chars), duration (string like "2h" or "4h"), est_hours (number), entry (single string max 800 chars), exit (single string max 800 chars), test (single string max 1000 chars), status ("ready" if no deps, "blocked" if waiting).
 - Optionally include: entry_conditions, exit_conditions, tests (as arrays for programmatic use), inputs, outputs, owner_role.
 - Decompose into tasks of ${minH}-${maxH} hours each.
 - Provide edges array forming a valid DAG (all task IDs in from/to must exist in tasks array).
 - Set status to "ready" if entry conditions met, "blocked" if dependencies not satisfied.
-- ${emitMermaid ? "Also include a minimal Mermaid 'flowchart TD' string in 'mermaid' field." : "Do not include mermaid field."}
 - Return JSON only. No prose.
 `.trim();

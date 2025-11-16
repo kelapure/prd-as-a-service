@@ -1,6 +1,7 @@
-// OpenAI Responses API wrapper with structured outputs
+// Anthropic Claude API wrapper with structured outputs
+// https://www.claude.com/blog/structured-outputs-on-the-claude-developer-platform
 
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import pino from "pino";
 import dotenv from "dotenv";
 
@@ -9,10 +10,13 @@ dotenv.config();
 
 const logger = pino({ level: process.env.LOG_LEVEL || "info" });
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  maxRetries: Number(process.env.OPENAI_MAX_RETRIES) || 1,
-  timeout: Number(process.env.REQUEST_TIMEOUT_MS) || 180000
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  maxRetries: Number(process.env.ANTHROPIC_MAX_RETRIES) || 1,
+  timeout: Number(process.env.REQUEST_TIMEOUT_MS) || 180000,
+  defaultHeaders: {
+    "anthropic-beta": "structured-outputs-2025-11-13"
+  }
 });
 
 export interface StructuredCallOptions {
@@ -43,25 +47,23 @@ export async function callStructured(options: StructuredCallOptions): Promise<an
     model,
     temperature,
     userMessageLength: user.length
-  }, "Starting OpenAI structured call");
+  }, "Starting Claude structured call");
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await anthropic.messages.create({
       model,
+      max_tokens: 16000,
       temperature,
+      system,
       messages: [
-        { role: "system", content: system },
         { role: "user", content: user }
       ],
-      response_format: {
+      // Claude structured outputs (beta feature - requires anthropic-beta header)
+      output_format: {
         type: "json_schema",
-        json_schema: {
-          name: "evalprd_output",
-          strict: true,
-          schema: outputSchema
-        }
+        schema: outputSchema
       }
-    });
+    } as any);
 
     const latency = Date.now() - startTime;
     const usage = response.usage;
@@ -69,21 +71,21 @@ export async function callStructured(options: StructuredCallOptions): Promise<an
     logger.info({
       requestId,
       latency,
-      promptTokens: usage?.prompt_tokens,
-      completionTokens: usage?.completion_tokens,
-      totalTokens: usage?.total_tokens
-    }, "OpenAI structured call completed");
+      inputTokens: usage?.input_tokens,
+      outputTokens: usage?.output_tokens
+    }, "Claude structured call completed");
 
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error("No content in OpenAI response");
+    // Extract text content from Claude response
+    const content = response.content[0];
+    if (content.type !== "text") {
+      throw new Error("Unexpected content type from Claude");
     }
 
     try {
-      return JSON.parse(content);
+      return JSON.parse(content.text);
     } catch (parseError) {
-      logger.error({ requestId, content, parseError }, "Failed to parse JSON response");
-      throw new Error(`Invalid JSON from OpenAI: ${parseError}`);
+      logger.error({ requestId, content: content.text, parseError }, "Failed to parse JSON response");
+      throw new Error(`Invalid JSON from Claude: ${parseError}`);
     }
   } catch (error: any) {
     const latency = Date.now() - startTime;
@@ -93,17 +95,17 @@ export async function callStructured(options: StructuredCallOptions): Promise<an
       error: error.message,
       errorType: error.constructor.name,
       statusCode: error.status
-    }, "OpenAI structured call failed");
+    }, "Claude structured call failed");
 
     // Re-throw with more context
     if (error.status === 429) {
-      throw new Error("OpenAI rate limit exceeded");
+      throw new Error("Claude rate limit exceeded");
     } else if (error.status >= 500) {
-      throw new Error(`OpenAI server error: ${error.status}`);
+      throw new Error(`Claude server error: ${error.status}`);
     } else if (error.status === 401 || error.status === 403) {
-      throw new Error("OpenAI authentication failed");
+      throw new Error("Claude authentication failed");
     } else {
-      throw new Error(`OpenAI call failed: ${error.message}`);
+      throw new Error(`Claude call failed: ${error.message}`);
     }
   }
 }
@@ -119,43 +121,42 @@ export async function callStructuredStream(options: StreamingCallOptions): Promi
     model,
     temperature,
     userMessageLength: user.length
-  }, "Starting OpenAI streaming structured call");
+  }, "Starting Claude streaming structured call");
 
   let accumulated = "";
 
   try {
-    const stream = await openai.chat.completions.create({
+    const stream = anthropic.messages.stream({
       model,
+      max_tokens: 16000,
       temperature,
+      system,
       messages: [
-        { role: "system", content: system },
         { role: "user", content: user }
       ],
-      response_format: {
+      // Claude structured outputs with streaming (beta feature - requires anthropic-beta header)
+      output_format: {
         type: "json_schema",
-        json_schema: {
-          name: "evalprd_output",
-          strict: true,
-          schema: outputSchema
-        }
-      },
-      stream: true
-    });
+        schema: outputSchema
+      }
+    } as any);
 
     let usage: any = null;
 
-    for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta?.content || "";
-      if (delta) {
-        accumulated += delta;
-        if (onProgress) {
-          onProgress(delta, accumulated);
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta') {
+        const delta = event.delta.type === 'text_delta' ? event.delta.text : "";
+        if (delta) {
+          accumulated += delta;
+          if (onProgress) {
+            onProgress(delta, accumulated);
+          }
         }
-      }
-      
-      // Capture usage stats from final chunk
-      if (chunk.usage) {
-        usage = chunk.usage;
+      } else if (event.type === 'message_delta') {
+        // Capture usage stats
+        if (event.usage) {
+          usage = event.usage;
+        }
       }
     }
 
@@ -164,10 +165,9 @@ export async function callStructuredStream(options: StreamingCallOptions): Promi
     logger.info({
       requestId,
       latency,
-      promptTokens: usage?.prompt_tokens,
-      completionTokens: usage?.completion_tokens,
-      totalTokens: usage?.total_tokens
-    }, "OpenAI streaming structured call completed");
+      inputTokens: usage?.input_tokens,
+      outputTokens: usage?.output_tokens
+    }, "Claude streaming structured call completed");
 
     if (!accumulated) {
       throw new Error("No content in streaming response");
@@ -177,7 +177,7 @@ export async function callStructuredStream(options: StreamingCallOptions): Promi
       return JSON.parse(accumulated);
     } catch (parseError) {
       logger.error({ requestId, accumulated, parseError }, "Failed to parse JSON response");
-      throw new Error(`Invalid JSON from OpenAI: ${parseError}`);
+      throw new Error(`Invalid JSON from Claude: ${parseError}`);
     }
   } catch (error: any) {
     const latency = Date.now() - startTime;
@@ -187,17 +187,18 @@ export async function callStructuredStream(options: StreamingCallOptions): Promi
       error: error.message,
       errorType: error.constructor.name,
       statusCode: error.status
-    }, "OpenAI streaming call failed");
+    }, "Claude streaming call failed");
 
     // Re-throw with more context
     if (error.status === 429) {
-      throw new Error("OpenAI rate limit exceeded");
+      throw new Error("Claude rate limit exceeded");
     } else if (error.status >= 500) {
-      throw new Error(`OpenAI server error: ${error.status}`);
+      throw new Error(`Claude server error: ${error.status}`);
     } else if (error.status === 401 || error.status === 403) {
-      throw new Error("OpenAI authentication failed");
+      throw new Error("Claude authentication failed");
     } else {
-      throw new Error(`OpenAI call failed: ${error.message}`);
+      throw new Error(`Claude call failed: ${error.message}`);
     }
   }
 }
+
