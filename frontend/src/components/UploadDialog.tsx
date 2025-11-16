@@ -9,10 +9,7 @@ import type { BinaryScoreOutput } from "../types/api";
 interface UploadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onComplete: (results: {
-    binaryScore: BinaryScoreOutput;
-    prdText: string;
-  }) => void;
+  onComplete: (prdText: string) => void;
 }
 
 export function UploadDialog({ open, onOpenChange, onComplete }: UploadDialogProps) {
@@ -70,24 +67,14 @@ export function UploadDialog({ open, onOpenChange, onComplete }: UploadDialogPro
         throw new Error(validation.error);
       }
 
-      // Step 3: Evaluate PRD (binary score only) with streaming
-      setProgressMessage("Evaluating PRD against 11 criteria...");
-      setProgressPercent(30);
-      setStreamPreview(""); // Reset preview
-      const binaryScore = await evaluatePRD(prdText, (delta, accumulated) => {
-        // Update progress based on accumulated characters
-        // Estimate: typical response is ~3000 chars
-        const progress = 30 + Math.min((accumulated.length / 3000) * 70, 70);
-        setProgressPercent(progress);
-        // Show last 200 chars of accumulated JSON
-        setStreamPreview(accumulated.slice(-200));
-      });
-
-      // Success! Close dialog and pass results + prdText for background processing
+      // Step 3: Start evaluation and close dialog immediately
+      setProgressMessage("Starting evaluation...");
       setProgressPercent(100);
+      
+      // Close dialog immediately and trigger parallel evaluations
       setUploading(false);
       onOpenChange(false);
-      onComplete({ binaryScore, prdText });
+      onComplete(prdText);
 
       // Reset
       setFile(null);
@@ -199,7 +186,7 @@ export function UploadDialog({ open, onOpenChange, onComplete }: UploadDialogPro
                 </div>
               )}
               <p className="text-xs text-muted-foreground text-center">
-                This may take about 1 minute. Additional analysis will continue in the background.
+                Binary evaluation takes ~60 seconds. Fix plan and agent tasks will continue processing in the background (3-4 minutes total).
               </p>
             </div>
           )}

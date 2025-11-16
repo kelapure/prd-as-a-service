@@ -1,6 +1,6 @@
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { CheckCircle2, XCircle, ChevronDown, ChevronUp, Download } from "lucide-react";
+import { CheckCircle2, XCircle, ChevronDown, ChevronUp, Download, Loader2 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { useState } from "react";
 import { exportBinaryScoreAsMarkdown, downloadMarkdownFile } from "../lib/exportMarkdown";
@@ -8,6 +8,7 @@ import type { BinaryScoreOutput } from "../types/api";
 
 interface ExampleOutputProps {
   data: BinaryScoreOutput | null;
+  isLoading?: boolean;
 }
 
 // Individual criterion component with collapsible rationale/evidence
@@ -84,13 +85,13 @@ function CriterionItem({ criterion }: { criterion: BinaryScoreOutput['criteria']
   );
 }
 
-export function ExampleOutput({ data }: ExampleOutputProps) {
+export function ExampleOutput({ data, isLoading }: ExampleOutputProps) {
   // Use real data if available, otherwise show placeholder
   const criteria = data?.criteria || [];
   const passCount = data?.pass_count || 0;
   const totalCount = criteria.length || 11;
   const readinessGate = data?.readiness_gate?.state || "HOLD";
-  const readinessReason = data?.readiness_gate?.reason || "Waiting for evaluation...";
+  const readinessReason = data?.readiness_gate?.reason || "Evaluating PRD...";
   const prdTitle = data?.prd_title || "Your PRD";
 
   const handleExport = () => {
@@ -137,7 +138,15 @@ export function ExampleOutput({ data }: ExampleOutputProps) {
 
           {/* Criteria List */}
           <div className="p-8">
-            {criteria.length > 0 ? (
+            {isLoading ? (
+              <div className="text-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
+                <p className="text-foreground font-medium">Evaluating PRD against 11 criteria...</p>
+                <p className="text-muted-foreground text-sm mt-2">
+                  Analyzing business problem, features, technical requirements (~60 seconds)
+                </p>
+              </div>
+            ) : criteria.length > 0 ? (
               <div className="space-y-2">
                 {criteria.map((criterion) => (
                   <CriterionItem key={criterion.id} criterion={criterion} />

@@ -5,7 +5,7 @@ import { AgentTasksExample } from "./components/AgentTasksExample";
 import { CTASection } from "./components/CTASection";
 import { UploadDialog } from "./components/UploadDialog";
 import { useState } from "react";
-import { generateFixPlan, generateAgentTasks } from "./lib/api";
+import { evaluatePRD, generateFixPlan, generateAgentTasks } from "./lib/api";
 import type { BinaryScoreOutput, FixPlanOutput, AgentTasksOutput } from "./types/api";
 
 export default function App() {
@@ -14,35 +14,35 @@ export default function App() {
   const [binaryScoreData, setBinaryScoreData] = useState<BinaryScoreOutput | null>(null);
   const [fixPlanData, setFixPlanData] = useState<FixPlanOutput | null>(null);
   const [agentTasksData, setAgentTasksData] = useState<AgentTasksOutput | null>(null);
+  const [isLoadingBinaryScore, setIsLoadingBinaryScore] = useState(false);
   const [isLoadingFixPlan, setIsLoadingFixPlan] = useState(false);
   const [isLoadingAgentTasks, setIsLoadingAgentTasks] = useState(false);
 
-  const handleUploadComplete = async (results: {
-    binaryScore: BinaryScoreOutput;
-    prdText: string;
-  }) => {
-    // Store binary score immediately
-    setBinaryScoreData(results.binaryScore);
-
-    // Show results section
+  const handleUploadComplete = async (prdText: string) => {
+    // Show results section immediately with all three loading
     setShowResults(true);
+    setIsLoadingBinaryScore(true);
+    setIsLoadingFixPlan(true);
+    setIsLoadingAgentTasks(true);
 
     // Scroll to results
     setTimeout(() => {
       document.getElementById('results')?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
 
-    // Run fix_plan and agent_tasks in parallel in the background
-    setIsLoadingFixPlan(true);
-    setIsLoadingAgentTasks(true);
-
+    // Run all three evaluations in parallel
     await Promise.allSettled([
-      generateFixPlan(results.prdText)
+      evaluatePRD(prdText)
+        .then((data) => setBinaryScoreData(data))
+        .catch((error) => console.error('Binary score generation failed:', error))
+        .finally(() => setIsLoadingBinaryScore(false)),
+
+      generateFixPlan(prdText)
         .then((data) => setFixPlanData(data))
         .catch((error) => console.error('Fix plan generation failed:', error))
         .finally(() => setIsLoadingFixPlan(false)),
 
-      generateAgentTasks(results.prdText)
+      generateAgentTasks(prdText)
         .then((data) => {
           console.log('Agent Tasks Data Received:', data);
           console.log('Number of tasks:', data.tasks?.length);
@@ -59,7 +59,7 @@ export default function App() {
       
       {showResults && (
         <div id="results">
-          <ExampleOutput data={binaryScoreData} />
+          <ExampleOutput data={binaryScoreData} isLoading={isLoadingBinaryScore} />
           <FixPlanExample data={fixPlanData} isLoading={isLoadingFixPlan} />
           <AgentTasksExample data={agentTasksData} isLoading={isLoadingAgentTasks} />
         </div>
