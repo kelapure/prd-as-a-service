@@ -199,7 +199,9 @@ export const APPEND_BINARY = (evidenceCount: number) => `
 You are in Output Mode 1: Scorecard.
 - Produce ONLY the Scorecard as JSON that matches BinaryScoreOutput.
 - Each criterion must have BOTH pass (boolean) and status ("pass" or "fail" string lowercase).
+- Provide comprehensive rationale (no character limits - be thorough and detailed).
 - Include <= ${evidenceCount} quotes per criterion with locator when available.
+- Include detailed evidence quotes (full context preferred over truncation).
 - Compute gating_failures for {C3,C5,C10,C11}.
 - Compute readiness_gate {state: "GO"|"REVISE"|"HOLD" uppercase, must_pass_met, total_pass, reason}.
 - If peer_reviews are provided, compute agreement stats; else set present=false.
@@ -221,7 +223,7 @@ You are in Output Mode 2: Fix Plan.
 export const APPEND_AGENT_TASKS = (minH: number, maxH: number, emitMermaid: boolean) => `
 You are in Output Mode 3: Agent Handoff Pack.
 - Produce ONLY the task pack as JSON that matches AgentTasksOutput.
-- Each task must have: id, feature (e.g., "F2.1 Alert Ingestion"), title, description (max 2000 chars - be comprehensive and detailed), duration (string like "2h" or "4h"), est_hours (number), entry (single string max 1500 chars), exit (single string max 1500 chars), test (single string max 2000 chars - include multiple test scenarios), status ("ready" if no deps, "blocked" if waiting).
+- Each task must have: id, feature (e.g., "F2.1 Alert Ingestion"), title, description (be comprehensive and detailed), duration (string like "2h" or "4h"), est_hours (number), entry (detailed prerequisites), exit (clear completion criteria), test (comprehensive test scenarios), status ("ready" if no deps, "blocked" if waiting).
 - Optionally include: entry_conditions, exit_conditions, tests (as arrays for programmatic use), inputs, outputs, owner_role.
 - Decompose into tasks of ${minH}-${maxH} hours each.
 - Provide edges array forming a valid DAG (all task IDs in from/to must exist in tasks array).

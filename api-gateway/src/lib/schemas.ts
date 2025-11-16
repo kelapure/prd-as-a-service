@@ -83,14 +83,14 @@ export const BinaryScoreOutput = {
           name: { type: "string" },
           pass: { type: "boolean" },
           status: { type: "string", enum: ["pass", "fail"] },
-          rationale: { type: "string", maxLength: 400 },
+          rationale: { type: "string" },
           evidence: {
             type: "array",
             items: {
               type: "object",
               required: ["quote", "locator"],
               properties: {
-                quote: { type: "string", maxLength: 300 },
+                quote: { type: "string" },
                 locator: {
                   type: "object",
                   required: ["section", "page"],
@@ -123,7 +123,7 @@ export const BinaryScoreOutput = {
                 type: "string",
                 enum: ["AuditTrail","RBAC","ALCOA+","Part11","Validation","PHI/HIPAA","Veeva/Vault","LIMS/EMR","Other"]
               },
-              note: { type: "string", maxLength: 240 },
+              note: { type: "string" },
               linked_criteria: {
                 type: "array",
                 items: { type: "string", pattern: "^C(5|10)$" }
@@ -198,11 +198,11 @@ export const FixPlanOutput = {
           id: { type: "string" },
           title: { type: "string" },
           priority: { type: "string", pattern: "^P[0-2]$" },
-          owner: { type: "string", maxLength: 100 },
+          owner: { type: "string" },
           blocking: { type: "boolean" },
           effort: { type: "string", enum: ["S","M","L"] },
           impact: { type: "string", enum: ["Low","Med","High"] },
-          description: { type: "string", maxLength: 1000 },
+          description: { type: "string" },
           steps: { type: "array", items: { type: "string" } },
           acceptance_tests: { type: "array", items: { type: "string" } },
           linked_criteria: {
@@ -244,13 +244,13 @@ export const AgentTasksOutput = {
           id: { type: "string" },
           feature: { type: "string" },
           title: { type: "string" },
-          description: { type: "string", maxLength: 2000 },
+          description: { type: "string" },
           duration: { type: "string", pattern: "^[0-9]+(h|hr|hours?)$" },
           est_hours: { type: "number" },
           owner_role: { type: "string" },
-          entry: { type: "string", maxLength: 1500 },
-          exit: { type: "string", maxLength: 1500 },
-          test: { type: "string", maxLength: 2000 },
+          entry: { type: "string" },
+          exit: { type: "string" },
+          test: { type: "string" },
           entry_conditions: { type: "array", items: { type: "string" } },
           exit_conditions: { type: "array", items: { type: "string" } },
           tests: { type: "array", items: { type: "string" } },
