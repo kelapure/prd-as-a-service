@@ -20,12 +20,12 @@ interface APIError {
 /**
  * Call the binary_score endpoint with streaming support
  * @param prdText - The full PRD text content
- * @param onProgress - Callback for progress updates (delta, accumulatedLength)
+ * @param onProgress - Callback for progress updates (delta, accumulated full text)
  * @returns Binary score evaluation with pass/fail for each criterion
  */
 export async function evaluatePRD(
   prdText: string,
-  onProgress?: (delta: string, accumulatedLength: number) => void
+  onProgress?: (delta: string, accumulated: string) => void
 ): Promise<BinaryScoreOutput> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
@@ -110,12 +110,12 @@ export async function evaluatePRD(
 /**
  * Call the fix_plan endpoint with streaming support
  * @param prdText - The full PRD text content
- * @param onProgress - Callback for progress updates (delta, accumulatedLength)
+ * @param onProgress - Callback for progress updates (delta, accumulated full text)
  * @returns Fix plan with P0/P1/P2 prioritized items
  */
 export async function generateFixPlan(
   prdText: string,
-  onProgress?: (delta: string, accumulatedLength: number) => void
+  onProgress?: (delta: string, accumulated: string) => void
 ): Promise<FixPlanOutput> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
@@ -200,12 +200,12 @@ export async function generateFixPlan(
 /**
  * Call the agent_tasks endpoint with streaming support
  * @param prdText - The full PRD text content
- * @param onProgress - Callback for progress updates (delta, accumulatedLength)
+ * @param onProgress - Callback for progress updates (delta, accumulated full text)
  * @returns Agent tasks with dependencies and DAG structure
  */
 export async function generateAgentTasks(
   prdText: string,
-  onProgress?: (delta: string, accumulatedLength: number) => void
+  onProgress?: (delta: string, accumulated: string) => void
 ): Promise<AgentTasksOutput> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {

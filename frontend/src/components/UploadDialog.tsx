@@ -74,15 +74,13 @@ export function UploadDialog({ open, onOpenChange, onComplete }: UploadDialogPro
       setProgressMessage("Evaluating PRD against 11 criteria...");
       setProgressPercent(30);
       setStreamPreview(""); // Reset preview
-      let accumulatedText = "";
-      const binaryScore = await evaluatePRD(prdText, (delta, accumulatedLength) => {
+      const binaryScore = await evaluatePRD(prdText, (delta, accumulated) => {
         // Update progress based on accumulated characters
         // Estimate: typical response is ~3000 chars
-        const progress = 30 + Math.min((accumulatedLength / 3000) * 70, 70);
+        const progress = 30 + Math.min((accumulated.length / 3000) * 70, 70);
         setProgressPercent(progress);
-        // Accumulate the text locally and show last 200 chars
-        accumulatedText += delta;
-        setStreamPreview(accumulatedText.slice(-200));
+        // Show last 200 chars of accumulated JSON
+        setStreamPreview(accumulated.slice(-200));
       });
 
       // Success! Close dialog and pass results + prdText for background processing

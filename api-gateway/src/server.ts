@@ -63,7 +63,7 @@ fastify.post("/api/evalprd/binary_score", async (request, reply) => {
     const result = await evaluateBinaryScore(
       { prd_text },
       (delta, accumulated) => {
-        reply.raw.write(`data: ${JSON.stringify({ type: "delta", delta, accumulated: accumulated.length })}\n\n`);
+        reply.raw.write(`data: ${JSON.stringify({ type: "delta", delta, accumulated })}\n\n`);
       }
     );
 
@@ -102,7 +102,7 @@ fastify.post("/api/evalprd/fix_plan", async (request, reply) => {
     const result = await evaluateFixPlan(
       { prd_text },
       (delta, accumulated) => {
-        reply.raw.write(`data: ${JSON.stringify({ type: "delta", delta, accumulated: accumulated.length })}\n\n`);
+        reply.raw.write(`data: ${JSON.stringify({ type: "delta", delta, accumulated })}\n\n`);
       }
     );
 
@@ -141,7 +141,7 @@ fastify.post("/api/evalprd/agent_tasks", async (request, reply) => {
     const result = await evaluateAgentTasks(
       { prd_text },
       (delta, accumulated) => {
-        reply.raw.write(`data: ${JSON.stringify({ type: "delta", delta, accumulated: accumulated.length })}\n\n`);
+        reply.raw.write(`data: ${JSON.stringify({ type: "delta", delta, accumulated })}\n\n`);
       }
     );
 
