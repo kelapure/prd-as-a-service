@@ -86,6 +86,11 @@ fastify.post("/api/evalprd/fix_plan", async (request, reply) => {
     "Access-Control-Allow-Credentials": "true"
   });
 
+  // Send heartbeat every 15s to keep connection alive (App Engine 60s timeout)
+  const heartbeatInterval = setInterval(() => {
+    reply.raw.write(`: heartbeat\n\n`);
+  }, 15000);
+
   try {
     const result = await evaluateFixPlan(
       { prd_text },
@@ -94,9 +99,11 @@ fastify.post("/api/evalprd/fix_plan", async (request, reply) => {
       }
     );
 
+    clearInterval(heartbeatInterval);
     reply.raw.write(`data: ${JSON.stringify({ type: "done", result })}\n\n`);
     reply.raw.end();
   } catch (error: any) {
+    clearInterval(heartbeatInterval);
     logger.error({ error: error.message }, "fix_plan streaming failed");
     reply.raw.write(`data: ${JSON.stringify({ type: "error", error: error.message })}\n\n`);
     reply.raw.end();
@@ -118,6 +125,11 @@ fastify.post("/api/evalprd/agent_tasks", async (request, reply) => {
     "Access-Control-Allow-Credentials": "true"
   });
 
+  // Send heartbeat every 15s to keep connection alive (App Engine 60s timeout)
+  const heartbeatInterval = setInterval(() => {
+    reply.raw.write(`: heartbeat\n\n`);
+  }, 15000);
+
   try {
     const result = await evaluateAgentTasks(
       { prd_text },
@@ -126,9 +138,11 @@ fastify.post("/api/evalprd/agent_tasks", async (request, reply) => {
       }
     );
 
+    clearInterval(heartbeatInterval);
     reply.raw.write(`data: ${JSON.stringify({ type: "done", result })}\n\n`);
     reply.raw.end();
   } catch (error: any) {
+    clearInterval(heartbeatInterval);
     logger.error({ error: error.message }, "agent_tasks streaming failed");
     reply.raw.write(`data: ${JSON.stringify({ type: "error", error: error.message })}\n\n`);
     reply.raw.end();
