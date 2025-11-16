@@ -1,0 +1,169 @@
+# Project-Specific Rules
+
+## React Best Practices & Red Flags
+
+### Avoid Common React Anti-Patterns
+
+1. **Don't Store Derived State**
+   - If a value can be computed from props or other state, compute it during render instead of storing it in state
+   - Example ❌: `const [fullName, setFullName] = useState(firstName + lastName)`
+   - Example ✅: `const fullName = firstName + lastName`
+
+2. **Don't Use useEffect for State Synchronization**
+   - Avoid syncing state in useEffect when the parent should control it
+   - Example ❌: `useEffect(() => { setLocalValue(propValue) }, [propValue])`
+   - Example ✅: Use controlled components or derive from props
+
+3. **Don't Accumulate Strings in State with Callbacks**
+   - When streaming data arrives via callbacks, accumulate locally instead of setState on every delta
+   - Example ❌: 
+     ```tsx
+     const [text, setText] = useState("");
+     onProgress((delta) => setText(prev => prev + delta)); // Re-renders on every delta
+     ```
+   - Example ✅:
+     ```tsx
+     let accumulated = "";
+     onProgress((delta) => {
+       accumulated += delta;
+       setText(accumulated.slice(-200)); // Throttled updates
+     });
+     ```
+
+4. **Type Callback Parameters Correctly**
+   - Ensure callback signatures match between producer and consumer
+   - Example ❌: `onProgress?: (delta: string, accumulated: number)` used as `.slice()` (number has no slice)
+   - Example ✅: `onProgress?: (delta: string, accumulated: string)` matches usage
+
+5. **Clean Up Side Effects**
+   - Always return cleanup functions from useEffect when setting timers/subscriptions
+   - Example ❌: `useEffect(() => { setInterval(...) }, [])` // Memory leak
+   - Example ✅: `useEffect(() => { const id = setInterval(...); return () => clearInterval(id); }, [])`
+
+6. **Don't Overuse useEffect**
+   - Most data transformations should happen during render, not in useEffect
+   - Only use useEffect for synchronizing with external systems (APIs, DOM, timers)
+
+7. **Avoid Props Drilling Beyond 2-3 Levels**
+   - Use context, composition, or state management for deeply nested data
+   - Current codebase: Props passed down App → UploadDialog → ExampleOutput (acceptable depth)
+
+8. **Don't Initialize State from Props Without Good Reason**
+   - Prefer controlled components over copying props to state
+   - Exception: When you need an "initial value" that diverges (use `key` prop to reset)
+
+9. **Prefer Refs for Values That Don't Trigger Re-renders**
+   - Use `useRef` for mutable values that shouldn't cause re-renders (DOM refs, previous values, counters)
+   - Example: `renderIdRef.current++` in AgentTasksExample is correct usage
+
+10. **Don't Call Hooks Conditionally**
+    - Always call hooks at the top level, never inside conditions/loops
+    - React relies on call order to match state between renders
+
+### Jacob Paris React Red Flags
+
+11. **Avoid Generic Event Handler Names**
+    - ❌ `handleClick`, `handleSubmit`, `handleChange` (too generic, hard to trace)
+    - ✅ `handleUpload`, `handleDialogClose`, `handlePrdSubmit` (specific to action)
+    - Why: Generic names make debugging harder; specific names reveal intent
+
+12. **Question preventDefault Usage**
+    - Most `e.preventDefault()` calls indicate fighting against the platform
+    - Example ❌: Preventing default form submission just to manually fetch
+    - Example ✅: Use proper form elements with `onSubmit` and let browser handle basics
+    - Exception: Legitimate cases like drag-and-drop (see `UploadDialog.tsx`)
+
+13. **Avoid useMemo for Values**
+    - `useMemo` is for expensive computations, not for avoiding re-renders
+    - Example ❌: `const value = useMemo(() => prop1 + prop2, [prop1, prop2])`
+    - Example ✅: `const value = prop1 + prop2` (React is fast enough)
+    - Only use when profiling shows real performance issues
+
+14. **Don't Fetch Inside useEffect**
+    - Data fetching in useEffect leads to race conditions and stale closures
+    - Example ❌: `useEffect(() => { fetch(...).then(setData) }, [id])`
+    - Example ✅: Use React Query, SWR, or fetch in event handlers
+    - Current codebase: Fetches happen in `handleUpload` (correct pattern)
+
+15. **Avoid `<div onClick/>`**
+    - Non-semantic clickable divs break accessibility
+    - Example ❌: `<div onClick={...}>Click me</div>`
+    - Example ✅: `<button onClick={...}>Click me</button>`
+    - Buttons get keyboard support, focus management, screen reader hints automatically
+
+16. **Don't Create a "hooks" Directory**
+    - Hooks should live near the components that use them
+    - Shared hooks become coupling points and resist refactoring
+    - Example ❌: `src/hooks/useCustomHook.ts` (generic utility)
+    - Example ✅: `src/components/MyComponent/useMyFeature.ts` (colocated)
+    - Exception: Truly reusable hooks like `useLocalStorage` can be in `lib/`
+
+17. **Avoid Component-Level CSS Files**
+    - Per-component CSS files fragment styling and cause duplication
+    - Example ❌: `Button.css`, `Header.css` (one file per component)
+    - Example ✅: Tailwind utility classes or CSS-in-JS (current approach)
+    - Current codebase: Uses Tailwind v4 + CSS variables (good pattern)
+
+18. **Question Icon Libraries**
+    - Icon libraries add bundle size; consider SVG sprites or inline SVGs
+    - Current: `lucide-react` is lightweight and tree-shakeable (acceptable)
+    - Red flag: Installing multiple icon libs (FontAwesome + Material Icons + ...)
+    - Best: Use one lightweight library consistently
+
+## Streaming & SSE Specific
+
+19. **Close Streams Properly**
+    - Always clear timeouts and intervals when promises resolve/reject
+    - Check for `{type:"done"}` and `{type:"error"}` events before rejecting with "Stream ended without completion"
+
+20. **Send Heartbeats for Long-Running Requests**
+    - For SSE streams >60s, send heartbeat comments every 15s to prevent infrastructure timeouts
+    - Implemented: All three endpoints now emit `: heartbeat\n\n` every 15s
+
+21. **Validate Environment Variables at Startup**
+    - Exit early with clear error messages if critical env vars (API keys) are missing
+    - Implemented: `claude.ts` now validates `ANTHROPIC_API_KEY` on init
+
+## TypeScript Contract Discipline
+
+22. **Keep Types Consistent Across Layers**
+    - Server SSE payload: `{type:"delta", delta:string, accumulated:string}`
+    - API client signature: `onProgress?: (delta:string, accumulated:string) => void`
+    - Component usage: `accumulated.slice(-200)` must match string type
+
+23. **Use Discriminated Unions for SSE Events**
+    - Current: `{type:"delta"|"done"|"error", ...}` is good
+    - Ensure exhaustive checks: if `type === "delta"` / `"done"` / `"error"` cover all cases
+
+## Performance
+
+24. **Lazy-Load Heavy Dependencies**
+    - Mermaid bundle is 442KB; consider dynamic import if not used on landing page
+    - Current: Acceptable for results page where graph is always needed
+
+25. **Throttle Rapid State Updates**
+    - Don't call `setState` on every SSE delta (hundreds of updates/sec)
+    - Example: Only update preview every 200 chars or throttle with `requestAnimationFrame`
+
+## Deployment & Infrastructure
+
+26. **Match Timeouts Across Layers**
+    - Frontend timeout: 300s (5 min)
+    - App Engine SSE timeout: Prevented with 15s heartbeats
+    - Anthropic SDK timeout: 180s (configured in `claude.ts`)
+
+27. **Test with Production-Scale Data**
+    - 23KB PRD takes 3+ minutes for fix_plan/agent_tasks
+    - Ensure timeouts account for worst-case LLM latency
+
+28. **Log Request IDs for Debugging**
+    - Backend logs `requestId` for every Claude call
+    - Frontend logs `[functionName] Starting request, PRD length: X`
+    - Correlate errors via timestamp when request ID isn't available
+
+---
+
+## References
+- React docs: Avoiding common mistakes with useEffect
+- Cursor docs: https://docs.cursor.com/context/rules
+
