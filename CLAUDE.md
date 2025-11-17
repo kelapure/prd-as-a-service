@@ -11,7 +11,12 @@ EvalPRD as a Service - A PRD evaluation platform that analyzes Product Requireme
 This is a full-stack application with two main components:
 
 1. **Frontend** (React + Vite + TypeScript) - Landing page and evaluation UI
-2. **API Gateway** (Fastify + OpenAI) - HTTP endpoints for evaluation powered by GPT-4o
+2. **API Gateway** (Fastify + Anthropic Claude) - HTTP endpoints for evaluation powered by Claude Sonnet 4.5
+
+**Architecture Evolution**:
+- **Previous**: MCP server subprocess pattern (complex, required stdio communication)
+- **Current**: Direct Anthropic SDK integration with streaming + structured outputs
+- **Benefits**: Eliminated process management overhead, improved reliability, real-time streaming
 
 ## Repository Structure
 
@@ -26,7 +31,7 @@ This is a full-stack application with two main components:
 │   ├── src/
 │   │   ├── server.ts      # Fastify server with /api/evalprd/* endpoints
 │   │   ├── evaluators/    # binary_score, fix_plan, agent_tasks
-│   │   └── lib/           # schemas, prompts, openai, validation, rubric, util
+│   │   └── lib/           # schemas, prompts, claude, validation, rubric, util
 │   ├── package.json
 │   └── tsconfig.json
 ├── data/                  # Test fixtures and sample PRDs
@@ -40,18 +45,21 @@ This is a full-stack application with two main components:
 ```bash
 cd api-gateway
 npm install
-cp .env.example .env      # Fill in OPENAI_API_KEY
+cp .env.example .env      # Fill in ANTHROPIC_API_KEY
 npm run dev               # Development mode (port 8080)
 npm run build             # Production build
 npm run type-check        # TypeScript check
+npm start                 # Production server (node dist/server.js)
 ```
 
 ### Frontend
 ```bash
 cd frontend
 npm install
-npm run dev               # Vite dev server (port 3000)
-npm run build             # Production build
+npm run dev               # Vite dev server (port 3000, auto-open)
+npm run build             # Production build to build/
+npm start                 # Serve production build (serve -s build -l $PORT)
+npm run generate-spotify-results  # Generate example data from golden tests
 ```
 
 ### All Services (Development)
@@ -115,36 +123,40 @@ All schemas in `api-gateway/src/lib/schemas.ts` are aligned with frontend compon
 - Optional arrays: `entry_conditions`, `exit_conditions`, `tests` for programmatic use
 - `status`: "ready" | "blocked" | "in_progress" | "completed"
 
-### OpenAI Integration
+### Anthropic Claude Integration
 
-- Uses OpenAI Chat Completions API with **streaming + strict JSON Schema** (GPT-5 feature)
-- Model: `gpt-5` (configurable via `EVALPRD_MODEL` env var)
+- Uses Anthropic Messages API with **streaming + structured outputs** (beta: structured-outputs-2025-11-13)
+- Model: `claude-sonnet-4-5-20250929` (configurable via `EVALPRD_MODEL` env var)
 - Temperature: 0.2 for binary_score, 0.3 for fix_plan/agent_tasks
+- Max tokens: 16000
+- Timeout: 180000ms (3 minutes)
 - Validation: Ajv validates all outputs against schemas
-- Error handling: Retry once on transient errors (429, 5xx)
+- Error handling: Max 1 retry on transient errors
 - Logging: Pino JSON logs with request IDs, latency, token usage (never logs PRD content)
 - **Streaming**: Real-time delta events every 50-200ms, final validated JSON on completion
 
 ## API Gateway
 
 - **Fastify** server with CORS and rate limiting
-- Direct OpenAI API calls (no subprocess, no MCP)
+- Direct Anthropic SDK integration (@anthropic-ai/sdk)
 - Three **streaming** endpoints (Server-Sent Events):
   - `POST /api/evalprd/binary_score` - Returns SSE stream with delta + done events
   - `POST /api/evalprd/fix_plan` - Returns SSE stream with delta + done events
   - `POST /api/evalprd/agent_tasks` - Returns SSE stream with delta + done events
 - `GET /health` for healthchecks
-- Rate limit: 60 req/min (configurable)
-- Origin allowlist: Configured via `ALLOWED_ORIGIN` env var
+- Rate limit: 60 req/min (configurable via `RATE_LIMIT_MAX`)
+- Origin allowlist: Configured via `ALLOWED_ORIGIN` env var (default: http://localhost:3000)
+- Port: 8080 (default, configurable via `PORT`)
+- Heartbeat: 15s SSE keepalive to prevent App Engine 60s timeout
 
-### Streaming Architecture (GPT-5)
+### Streaming Architecture (Claude Sonnet 4.5)
 
-GPT-5's unique capability to combine streaming with structured outputs enables:
+Claude Sonnet 4.5's beta feature (structured-outputs-2025-11-13) combines streaming with structured outputs:
 
 - **Client → API Gateway**: POST request with prd_text
-- **API Gateway → OpenAI**: Streaming request with strict JSON Schema
-- **OpenAI → API Gateway**: Delta chunks every 50-200ms
-- **API Gateway → Client**: SSE events forwarding deltas
+- **API Gateway → Anthropic**: Streaming request with JSON Schema
+- **Anthropic → API Gateway**: Delta chunks every 50-200ms
+- **API Gateway → Client**: SSE events forwarding deltas + heartbeat every 15s
 - **Final**: Complete validated JSON matching schema exactly
 
 **Benefits**:
@@ -180,7 +192,9 @@ GPT-5's unique capability to combine streaming with structured outputs enables:
 ### State Management
 - `App.tsx` manages upload dialog and results visibility
 - Upload completion triggers scroll to `#results` section
-- Example components currently use hardcoded data (to be replaced with API calls)
+- API client (`lib/api.ts`) handles SSE streaming with timeout (300000ms / 5 minutes)
+- PDF parsing via `lib/fileReader.ts` using pdfjs-dist
+- Export functions (`lib/exportMarkdown.ts`) generate Markdown/JSON downloads
 
 ## Testing
 
@@ -191,19 +205,22 @@ GPT-5's unique capability to combine streaming with structured outputs enables:
 - `tests/contracts/` - Golden test outputs for CI
 
 ### Integration Tests
-- End-to-end tests in `tests/integration.mjs`
-- Validate all three tools return valid JSON matching schemas
-- Check readiness gate logic, gating failures, task constraints
-- Verify error handling (401, 403, 502)
+- Manual test scripts: `tests/test-*.js` and `tests/test-*.html`
+- `tests/test-full-flow-automated.js` - End-to-end automated testing
+- `tests/test-production-rendering.js` - Production UI rendering tests
+- `tests/MANUAL_TEST_INSTRUCTIONS.md` - Detailed testing guide
+- Validate all three endpoints return valid JSON matching schemas
+- Verify readiness gate logic, gating failures, task constraints
 
 ## Security & Operations
 
 - **Environment Variables**: Never commit `.env` files, use `.env.example` as template
-- **Secrets**: OPENAI_API_KEY must be set for mcp-server
-- **Logging**: Never log PRD content (use hash for debugging)
-- **CORS**: Enforce origin allowlist
-- **Rate Limiting**: 60 req/min default
-- **Timeouts**: 60s default for OpenAI calls
+- **Secrets**: ANTHROPIC_API_KEY must be set (use `app.local.yaml` for App Engine, git-ignored)
+- **Logging**: Never log PRD content (use hash for debugging), Pino JSON logs for structured output
+- **CORS**: Enforce origin allowlist via `ALLOWED_ORIGIN` env var
+- **Rate Limiting**: 60 req/min default (configurable via `RATE_LIMIT_MAX`)
+- **Timeouts**: Backend 180s (3min), Frontend 300s (5min) - alignment recommended
+- **App Engine**: 15s SSE heartbeat required to prevent 60s connection timeout
 
 ## Common Development Tasks
 
@@ -229,13 +246,25 @@ GPT-5's unique capability to combine streaming with structured outputs enables:
 ## Deployment
 
 **Google App Engine** (Current platform):
-- `api-gateway/`: App Engine Standard service (app.yaml)
-- `frontend/`: App Engine Standard service (app.yaml)
-- Routing: `dispatch.yaml` routes requests between services
-- Deploy: `gcloud app deploy`
-- Secrets: Google Cloud Secret Manager for OPENAI_API_KEY
+- Two services architecture:
+  - `api` service (api-gateway/) - API endpoints at /api/*
+  - `default` service (frontend/) - Static SPA at /*
+- Routing: `cloud/dispatch.yaml` routes evalgpt.com traffic between services
+- Deployment configs: `cloud/app.yaml` with `cloud/app.local.yaml` secrets overlay (git-ignored)
+- Deploy: `gcloud app deploy cloud/app.yaml cloud/app.local.yaml --quiet`
+- Secrets: Set ANTHROPIC_API_KEY in `app.local.yaml` (never commit)
+- Domain: evalgpt.com (configured via dispatch.yaml)
 - Monitoring: Google Cloud Logging + Pino structured logs
-- Autoscaling: App Engine automatic scaling
+- Autoscaling: App Engine automatic scaling (0-10 instances, target CPU 65%)
+
+**Deployment Steps**:
+1. Build both services locally first
+2. Deploy API service with secrets overlay
+3. Deploy frontend service
+4. Deploy dispatch rules
+5. Verify via `gcloud app browse` and health checks
+
+See `cloud/DEPLOY_APP_ENGINE.md` for detailed instructions.
 
 ## Important Notes
 
@@ -244,7 +273,8 @@ GPT-5's unique capability to combine streaming with structured outputs enables:
 - Priority strings must be "P0", "P1", "P2" (not numbers)
 - Task durations must be strings like "2h", "4h" (not just numbers)
 - Always validate outputs with Ajv before returning from evaluators
-- Model: gpt-5 (released August 7, 2025)
+- Model: claude-sonnet-4-5-20250929 (Claude Sonnet 4.5)
+- Critical: Temperature = 0.2 for binary_score, 0.3 for fix_plan/agent_tasks (consistency)
 
 ## Custom GPT Parity
 
@@ -253,11 +283,11 @@ This system achieves 100% parity with the EvalPRD custom GPT through:
 ### 1. Complete Rubric Embedding
 
 The custom GPT has access to the full rubric document (`Copy of PRD LLM-as-judge Eval (PUBLIC).md`). We replicate this by:
-- Extracting all 11 criterion definitions into `mcp-server/src/lib/rubric-definitions.ts`
+- Extracting all 11 criterion definitions into `api-gateway/src/lib/rubric-definitions.ts`
 - Including detailed PASS criteria and FAIL indicators for each criterion
 - Embedding real-world examples (WestREC PASS, Spring Health FAIL, Apex Health scope explosion)
 - Adding failure mode taxonomy
-- Injecting all of this into the system prompt via template literals
+- Injecting all of this into the system prompt via template literals in `api-gateway/src/lib/prompts.ts`
 
 ### 2. Temperature Configuration
 
