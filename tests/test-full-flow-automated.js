@@ -1,7 +1,11 @@
 // Automated end-to-end test for complete upload and rendering flow
 // Run with: node tests/test-full-flow-automated.js
 
-const testPRD = `# Patient Portal Feature
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+
+const defaultTestPRD = `# Patient Portal Feature
 
 ## Executive Summary
 Build a patient-facing web portal for appointment scheduling, medical records access, and secure messaging with healthcare providers.
@@ -43,6 +47,45 @@ Self-service patient portal with:
 - Medical records delivered in <5 minutes
 - 90% message response within 24h
 - Patient satisfaction > 4.5/5`;
+
+function loadPrdText() {
+  const prdPath = process.env.PRD_PATH || process.argv[2];
+  if (!prdPath) {
+    console.log('📝 Using embedded sample PRD content\n');
+    return defaultTestPRD;
+  }
+
+  const resolvedPath = path.isAbsolute(prdPath) ? prdPath : path.join(process.cwd(), prdPath);
+  console.log(`📝 Loading PRD from ${resolvedPath}`);
+
+  if (!fs.existsSync(resolvedPath)) {
+    console.error(`❌ PRD file not found: ${resolvedPath}`);
+    process.exit(1);
+  }
+
+  if (resolvedPath.toLowerCase().endsWith('.pdf')) {
+    try {
+      const buffer = execFileSync('pdftotext', [resolvedPath, '-']);
+      const text = buffer.toString('utf-8').trim();
+      console.log(`✅ Extracted ${text.length} characters from PDF\n`);
+      return text;
+    } catch (error) {
+      console.error(`❌ Failed to extract text from PDF: ${error.message}`);
+      process.exit(1);
+    }
+  }
+
+  try {
+    const text = fs.readFileSync(resolvedPath, 'utf-8');
+    console.log(`✅ Loaded ${text.length} characters from text file\n`);
+    return text;
+  } catch (error) {
+    console.error(`❌ Failed to read PRD file: ${error.message}`);
+    process.exit(1);
+  }
+}
+
+const testPRD = loadPrdText();
 
 async function testCompleteFlow() {
   console.log('🧪 Testing Complete Upload Flow\n');

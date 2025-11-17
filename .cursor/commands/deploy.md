@@ -1,0 +1,1 @@
+Deploy the full app to google cloud 

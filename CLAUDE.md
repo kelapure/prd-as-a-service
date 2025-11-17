@@ -128,8 +128,8 @@ All schemas in `api-gateway/src/lib/schemas.ts` are aligned with frontend compon
 - Uses Anthropic Messages API with **streaming + structured outputs** (beta: structured-outputs-2025-11-13)
 - Model: `claude-sonnet-4-5-20250929` (configurable via `EVALPRD_MODEL` env var)
 - Temperature: 0.2 for binary_score, 0.3 for fix_plan/agent_tasks
-- Max tokens: 16000
-- Timeout: 180000ms (3 minutes)
+- Max tokens: 60000 (below Claude Sonnet 4.5's 64k limit, provides buffer for complex PRDs)
+- Timeout: 180000ms (3 minutes) for backend API calls
 - Validation: Ajv validates all outputs against schemas
 - Error handling: Max 1 retry on transient errors
 - Logging: Pino JSON logs with request IDs, latency, token usage (never logs PRD content)
@@ -192,7 +192,7 @@ Claude Sonnet 4.5's beta feature (structured-outputs-2025-11-13) combines stream
 ### State Management
 - `App.tsx` manages upload dialog and results visibility
 - Upload completion triggers scroll to `#results` section
-- API client (`lib/api.ts`) handles SSE streaming with timeout (300000ms / 5 minutes)
+- API client (`lib/api.ts`) handles SSE streaming with timeout (600000ms / 10 minutes)
 - PDF parsing via `lib/fileReader.ts` using pdfjs-dist
 - Export functions (`lib/exportMarkdown.ts`) generate Markdown/JSON downloads
 
@@ -219,8 +219,9 @@ Claude Sonnet 4.5's beta feature (structured-outputs-2025-11-13) combines stream
 - **Logging**: Never log PRD content (use hash for debugging), Pino JSON logs for structured output
 - **CORS**: Enforce origin allowlist via `ALLOWED_ORIGIN` env var
 - **Rate Limiting**: 60 req/min default (configurable via `RATE_LIMIT_MAX`)
-- **Timeouts**: Backend 180s (3min), Frontend 300s (5min) - alignment recommended
+- **Timeouts**: Backend 180s (3min) for Claude API calls, Frontend 600s (10min) for complete evaluation flow
 - **App Engine**: 15s SSE heartbeat required to prevent 60s connection timeout
+- **Token Limits**: Claude Sonnet 4.5 max_tokens set to 60,000 (below 64k hard limit for safety buffer)
 
 ## Common Development Tasks
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Upload, FileText, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
@@ -20,6 +20,7 @@ export function UploadDialog({ open, onOpenChange, onComplete }: UploadDialogPro
   const [progressPercent, setProgressPercent] = useState<number>(0);
   const [streamPreview, setStreamPreview] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -28,6 +29,17 @@ export function UploadDialog({ open, onOpenChange, onComplete }: UploadDialogPro
       setDragActive(true);
     } else if (e.type === "dragleave") {
       setDragActive(false);
+    }
+  };
+
+  const handleZoneClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleZoneKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      handleZoneClick();
     }
   };
 
@@ -111,8 +123,12 @@ export function UploadDialog({ open, onOpenChange, onComplete }: UploadDialogPro
             onDragLeave={handleDrag}
             onDragOver={handleDrag}
             onDrop={handleDrop}
+            onClick={handleZoneClick}
+            onKeyDown={handleZoneKeyDown}
+            role="button"
+            tabIndex={0}
             className={`
-              border-2 border-dashed rounded-[var(--radius-card)] p-12 text-center transition-colors
+              relative border-2 border-dashed rounded-[var(--radius-card)] p-12 text-center transition-colors
               ${dragActive ? 'border-primary bg-primary/5' : 'border-border bg-muted/30'}
               ${file ? 'border-chart-2 bg-chart-2/5' : ''}
             `}
@@ -130,12 +146,6 @@ export function UploadDialog({ open, onOpenChange, onComplete }: UploadDialogPro
                     or click to browse
                   </p>
                 </div>
-                <input
-                  type="file"
-                  onChange={handleChange}
-                  accept=".pdf,.doc,.docx,.txt,.md"
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                />
               </div>
             ) : (
               <div className="space-y-4">
@@ -156,13 +166,25 @@ export function UploadDialog({ open, onOpenChange, onComplete }: UploadDialogPro
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setFile(null)}
-                  className="mx-auto"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setFile(null);
+                  }}
+                  className="mx-auto relative z-20"
                 >
                   Remove
                 </Button>
               </div>
             )}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleChange}
+              accept=".pdf,.doc,.docx,.txt,.md"
+              aria-label="Upload PRD file"
+              className="sr-only"
+            />
           </div>
 
           {/* Progress Display */}

@@ -10,12 +10,14 @@ automatic_scaling:
   min_pending_latency: automatic
   max_pending_latency: automatic
 
+entrypoint: npm start
+
 env_variables:
   NODE_ENV: production
   LOG_LEVEL: info
   ALLOWED_ORIGIN: https://evalgpt.com
   EVALPRD_MODEL: claude-sonnet-4-5-20250929
-  # ANTHROPIC_API_KEY: Set via app.local.yaml during deployment (never commit keys to git)
+  ANTHROPIC_API_KEY: ANTHROPIC_API_KEY_REMOVED
 
 handlers:
   # Let the Node server handle all routes

@@ -75,15 +75,18 @@ cd ..
 
 ## 5) Deploy API Service (Standard Environment)
 
+> ⚠️ Deploy from the `api-gateway/` directory. Deploying the stub configs under `cloud/` does **not** ship the Node project, and App Engine will fail at runtime with `npm ERR! enoent Could not read package.json`.
+
 ```bash
-# Deploy API service with secrets overlay
-gcloud app deploy cloud/app.yaml cloud/app.local.yaml --quiet
+# Deploy API service (run from repo root or any path)
+gcloud app deploy api-gateway/app.yaml --quiet
 ```
 
 This deploys:
 - Service: `api`
 - Environment: Standard (Node.js 20)
-- Includes: API Gateway with direct OpenAI integration
+- Includes: API Gateway with direct Anthropic integration
+- Uses the `api-gateway/app.yaml` in this repo (keep `api-gateway/app.local.yaml` git-ignored locally if you need to override env vars, but don't pass both files to a single `gcloud app deploy` command—App Engine requires one service definition per deploy)
 
 ## 6) Deploy Frontend Service (Standard Environment)
 

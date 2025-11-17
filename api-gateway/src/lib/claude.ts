@@ -90,18 +90,35 @@ export async function callStructured(options: StructuredCallOptions): Promise<an
 
     try {
       return JSON.parse(content.text);
-    } catch (parseError) {
-      logger.error({ requestId, content: content.text, parseError }, "Failed to parse JSON response");
-      throw new Error(`Invalid JSON from Claude: ${parseError}`);
+    } catch (parseError: any) {
+      const contentPreview = content.text.length > 10000 
+        ? content.text.substring(0, 10000) + `... (truncated, total length: ${content.text.length})`
+        : content.text;
+      logger.error({
+        requestId,
+        contentPreview,
+        parseError: {
+          message: parseError?.message,
+          stack: parseError?.stack,
+          name: parseError?.name
+        }
+      }, "Failed to parse JSON response");
+      throw new Error(`Invalid JSON from Claude: ${parseError?.message || parseError}`);
     }
   } catch (error: any) {
     const latency = Date.now() - startTime;
     logger.error({
       requestId,
       latency,
-      error: error.message,
-      errorType: error.constructor.name,
-      statusCode: error.status
+      error: {
+        message: error?.message,
+        stack: error?.stack,
+        name: error?.name,
+        code: error?.code,
+        statusCode: error?.status,
+        status: error?.status
+      },
+      errorType: error?.constructor?.name
     }, "Claude structured call failed");
 
     // Re-throw with more context
@@ -131,6 +148,8 @@ export async function callStructuredStream(options: StreamingCallOptions): Promi
   }, "Starting Claude streaming structured call");
 
   let accumulated = "";
+  let lastDeltaTime = Date.now();
+  let progressInterval: NodeJS.Timeout | null = null;
 
   try {
     const stream = anthropic.messages.stream({
@@ -150,11 +169,22 @@ export async function callStructuredStream(options: StreamingCallOptions): Promi
 
     let usage: any = null;
 
+    // Send periodic progress updates if no delta events for >60s
+    // This ensures browser sees activity and doesn't timeout
+    progressInterval = setInterval(() => {
+      const timeSinceLastDelta = Date.now() - lastDeltaTime;
+      if (timeSinceLastDelta > 60000 && accumulated && onProgress) {
+        // Send empty delta but with accumulated to keep connection alive
+        onProgress("", accumulated);
+      }
+    }, 60000); // Check every 60 seconds
+
     for await (const event of stream) {
       if (event.type === 'content_block_delta') {
         const delta = event.delta.type === 'text_delta' ? event.delta.text : "";
         if (delta) {
           accumulated += delta;
+          lastDeltaTime = Date.now();
           if (onProgress) {
             onProgress(delta, accumulated);
           }
@@ -165,6 +195,12 @@ export async function callStructuredStream(options: StreamingCallOptions): Promi
           usage = event.usage;
         }
       }
+    }
+
+    // Clear progress interval when stream completes
+    if (progressInterval) {
+      clearInterval(progressInterval);
+      progressInterval = null;
     }
 
     const latency = Date.now() - startTime;
@@ -180,20 +216,46 @@ export async function callStructuredStream(options: StreamingCallOptions): Promi
       throw new Error("No content in streaming response");
     }
 
+    // Log accumulated JSON before parsing (truncated if >10KB)
+    const accumulatedPreview = accumulated.length > 10000
+      ? accumulated.substring(0, 10000) + `... (truncated, total length: ${accumulated.length})`
+      : accumulated;
+
     try {
       return JSON.parse(accumulated);
-    } catch (parseError) {
-      logger.error({ requestId, accumulated, parseError }, "Failed to parse JSON response");
-      throw new Error(`Invalid JSON from Claude: ${parseError}`);
+    } catch (parseError: any) {
+      logger.error({
+        requestId,
+        accumulatedPreview,
+        parseError: {
+          message: parseError?.message,
+          stack: parseError?.stack,
+          name: parseError?.name
+        }
+      }, "Failed to parse JSON response");
+      throw new Error(`Invalid JSON from Claude: ${parseError?.message || parseError}`);
     }
   } catch (error: any) {
+    // Clear progress interval on error
+    if (progressInterval) {
+      clearInterval(progressInterval);
+      progressInterval = null;
+    }
+
     const latency = Date.now() - startTime;
     logger.error({
       requestId,
       latency,
-      error: error.message,
-      errorType: error.constructor.name,
-      statusCode: error.status
+      error: {
+        message: error?.message,
+        stack: error?.stack,
+        name: error?.name,
+        code: error?.code,
+        statusCode: error?.status,
+        status: error?.status
+      },
+      errorType: error?.constructor?.name,
+      accumulatedLength: accumulated?.length || 0
     }, "Claude streaming call failed");
 
     // Re-throw with more context

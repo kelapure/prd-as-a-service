@@ -45,18 +45,20 @@ export async function evaluatePRD(
       .then(async (response) => {
         console.log('[evaluatePRD] Response status:', response.status);
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
         if (!response.body) {
-          throw new Error("No response body for streaming");
+          // Read error response body if available
+          const errorText = await response.text().catch(() => "");
+          clearTimeout(timeoutId);
+          reject(new Error(`HTTP ${response.status}${errorText ? `: ${errorText}` : ""}`));
+          return;
         }
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
         let eventCount = 0;
+        let hasError = false;
+        let errorMessage = "";
 
         while (true) {
           const { done, value } = await reader.read();
@@ -84,15 +86,33 @@ export async function evaluatePRD(
                   return;
                 } else if (data.type === "error") {
                   console.error('[evaluatePRD] Error event:', data.error);
-                  clearTimeout(timeoutId);
-                  reject(new Error(data.error));
-                  return;
+                  hasError = true;
+                  errorMessage = data.error;
+                  // Continue reading to ensure stream is fully consumed
+                } else if (data.type === "heartbeat") {
+                  // Ignore heartbeat events, but they keep connection alive
+                  console.log('[evaluatePRD] Heartbeat received');
                 }
               } catch (e) {
                 console.error('[evaluatePRD] Failed to parse SSE line:', line, e);
               }
             }
           }
+        }
+
+        // Check for errors after stream completes
+        if (hasError) {
+          console.error('[evaluatePRD] Stream ended with error:', errorMessage);
+          clearTimeout(timeoutId);
+          reject(new Error(errorMessage || "Stream ended with error"));
+          return;
+        }
+
+        // If we get here and response wasn't ok, throw error
+        if (!response.ok) {
+          clearTimeout(timeoutId);
+          reject(new Error(`HTTP ${response.status}`));
+          return;
         }
 
         console.error('[evaluatePRD] Stream ended without done event, buffer:', buffer);
@@ -135,18 +155,20 @@ export async function generateFixPlan(
       .then(async (response) => {
         console.log('[generateFixPlan] Response status:', response.status);
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
         if (!response.body) {
-          throw new Error("No response body for streaming");
+          // Read error response body if available
+          const errorText = await response.text().catch(() => "");
+          clearTimeout(timeoutId);
+          reject(new Error(`HTTP ${response.status}${errorText ? `: ${errorText}` : ""}`));
+          return;
         }
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
         let eventCount = 0;
+        let hasError = false;
+        let errorMessage = "";
 
         while (true) {
           const { done, value } = await reader.read();
@@ -174,15 +196,33 @@ export async function generateFixPlan(
                   return;
                 } else if (data.type === "error") {
                   console.error('[generateFixPlan] Error event:', data.error);
-                  clearTimeout(timeoutId);
-                  reject(new Error(data.error));
-                  return;
+                  hasError = true;
+                  errorMessage = data.error;
+                  // Continue reading to ensure stream is fully consumed
+                } else if (data.type === "heartbeat") {
+                  // Ignore heartbeat events, but they keep connection alive
+                  console.log('[generateFixPlan] Heartbeat received');
                 }
               } catch (e) {
                 console.error('[generateFixPlan] Failed to parse SSE line:', line, e);
               }
             }
           }
+        }
+
+        // Check for errors after stream completes
+        if (hasError) {
+          console.error('[generateFixPlan] Stream ended with error:', errorMessage);
+          clearTimeout(timeoutId);
+          reject(new Error(errorMessage || "Stream ended with error"));
+          return;
+        }
+
+        // If we get here and response wasn't ok, throw error
+        if (!response.ok) {
+          clearTimeout(timeoutId);
+          reject(new Error(`HTTP ${response.status}`));
+          return;
         }
 
         console.error('[generateFixPlan] Stream ended without done event, buffer:', buffer);
@@ -225,18 +265,20 @@ export async function generateAgentTasks(
       .then(async (response) => {
         console.log('[generateAgentTasks] Response status:', response.status);
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
         if (!response.body) {
-          throw new Error("No response body for streaming");
+          // Read error response body if available
+          const errorText = await response.text().catch(() => "");
+          clearTimeout(timeoutId);
+          reject(new Error(`HTTP ${response.status}${errorText ? `: ${errorText}` : ""}`));
+          return;
         }
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
         let eventCount = 0;
+        let hasError = false;
+        let errorMessage = "";
 
         while (true) {
           const { done, value } = await reader.read();
@@ -264,15 +306,33 @@ export async function generateAgentTasks(
                   return;
                 } else if (data.type === "error") {
                   console.error('[generateAgentTasks] Error event:', data.error);
-                  clearTimeout(timeoutId);
-                  reject(new Error(data.error));
-                  return;
+                  hasError = true;
+                  errorMessage = data.error;
+                  // Continue reading to ensure stream is fully consumed
+                } else if (data.type === "heartbeat") {
+                  // Ignore heartbeat events, but they keep connection alive
+                  console.log('[generateAgentTasks] Heartbeat received');
                 }
               } catch (e) {
                 console.error('[generateAgentTasks] Failed to parse SSE line:', line, e);
               }
             }
           }
+        }
+
+        // Check for errors after stream completes
+        if (hasError) {
+          console.error('[generateAgentTasks] Stream ended with error:', errorMessage);
+          clearTimeout(timeoutId);
+          reject(new Error(errorMessage || "Stream ended with error"));
+          return;
+        }
+
+        // If we get here and response wasn't ok, throw error
+        if (!response.ok) {
+          clearTimeout(timeoutId);
+          reject(new Error(`HTTP ${response.status}`));
+          return;
         }
 
         console.error('[generateAgentTasks] Stream ended without done event, buffer:', buffer);
