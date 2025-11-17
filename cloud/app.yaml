@@ -17,7 +17,7 @@ env_variables:
   LOG_LEVEL: info
   ALLOWED_ORIGIN: https://evalgpt.com
   EVALPRD_MODEL: claude-sonnet-4-5-20250929
-  ANTHROPIC_API_KEY: ANTHROPIC_API_KEY_REMOVED
+  # ANTHROPIC_API_KEY: Set this in app.local.yaml (git-ignored)
 
 handlers:
   # Let the Node server handle all routes
