@@ -227,8 +227,17 @@ fastify.post("/api/evalprd/binary_score", async (request, reply) => {
     reply.raw.once("close", onClose);
     reply.raw.once("error", onError);
 
-    // Send heartbeat every 10s as data events to keep connection alive (browser timeout ~2-5 min)
-    // Using data events instead of comments so browser sees activity and resets timeout
+    // Send immediate "start" event to establish connection
+    try {
+      reply.raw.write(`data: {"type":"start"}\n\n`);
+      logger.info({ requestId, endpoint }, "Sent initial start event");
+    } catch (startError: any) {
+      logger.error({ requestId, endpoint, error: startError?.message }, "Failed to send start event");
+      return reply.status(500).send({ error: "Failed to initialize stream", requestId });
+    }
+
+    // Send heartbeat every 5s as data events to keep connection alive
+    // Reduced from 10s to ensure App Engine doesn't timeout long-running requests
     heartbeatInterval = setInterval(() => {
       try {
         if (!reply.raw.destroyed && !clientDisconnected) {
@@ -246,7 +255,7 @@ fastify.post("/api/evalprd/binary_score", async (request, reply) => {
           heartbeatInterval = null;
         }
       }
-    }, 10000);
+    }, 5000);
 
     // Evaluate PRD
     const result = await evaluateBinaryScore(
@@ -484,8 +493,17 @@ fastify.post("/api/evalprd/fix_plan", async (request, reply) => {
     reply.raw.once("close", onClose);
     reply.raw.once("error", onError);
 
-    // Send heartbeat every 10s as data events to keep connection alive (browser timeout ~2-5 min)
-    // Using data events instead of comments so browser sees activity and resets timeout
+    // Send immediate "start" event to establish connection
+    try {
+      reply.raw.write(`data: {"type":"start"}\n\n`);
+      logger.info({ requestId, endpoint }, "Sent initial start event");
+    } catch (startError: any) {
+      logger.error({ requestId, endpoint, error: startError?.message }, "Failed to send start event");
+      return reply.status(500).send({ error: "Failed to initialize stream", requestId });
+    }
+
+    // Send heartbeat every 5s as data events to keep connection alive
+    // Reduced from 10s to ensure App Engine doesn't timeout long-running requests
     heartbeatInterval = setInterval(() => {
       try {
         if (!reply.raw.destroyed && !clientDisconnected) {
@@ -503,7 +521,7 @@ fastify.post("/api/evalprd/fix_plan", async (request, reply) => {
           heartbeatInterval = null;
         }
       }
-    }, 10000);
+    }, 5000);
 
     // Evaluate PRD
     const result = await evaluateFixPlan(
@@ -741,8 +759,17 @@ fastify.post("/api/evalprd/agent_tasks", async (request, reply) => {
     reply.raw.once("close", onClose);
     reply.raw.once("error", onError);
 
-    // Send heartbeat every 10s as data events to keep connection alive (browser timeout ~2-5 min)
-    // Using data events instead of comments so browser sees activity and resets timeout
+    // Send immediate "start" event to establish connection
+    try {
+      reply.raw.write(`data: {"type":"start"}\n\n`);
+      logger.info({ requestId, endpoint }, "Sent initial start event");
+    } catch (startError: any) {
+      logger.error({ requestId, endpoint, error: startError?.message }, "Failed to send start event");
+      return reply.status(500).send({ error: "Failed to initialize stream", requestId });
+    }
+
+    // Send heartbeat every 5s as data events to keep connection alive
+    // Reduced from 10s to ensure App Engine doesn't timeout long-running requests
     heartbeatInterval = setInterval(() => {
       try {
         if (!reply.raw.destroyed && !clientDisconnected) {
@@ -760,7 +787,7 @@ fastify.post("/api/evalprd/agent_tasks", async (request, reply) => {
           heartbeatInterval = null;
         }
       }
-    }, 10000);
+    }, 5000);
 
     // Evaluate PRD
     const result = await evaluateAgentTasks(

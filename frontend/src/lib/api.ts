@@ -92,6 +92,9 @@ export async function evaluatePRD(
                 } else if (data.type === "heartbeat") {
                   // Ignore heartbeat events, but they keep connection alive
                   console.log('[evaluatePRD] Heartbeat received');
+                } else if (data.type === "start") {
+                  // Initial event confirming stream is established
+                  console.log('[evaluatePRD] Stream started, waiting for evaluation...');
                 }
               } catch (e) {
                 console.error('[evaluatePRD] Failed to parse SSE line:', line, e);
