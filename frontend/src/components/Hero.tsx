@@ -1,10 +1,13 @@
-import { ArrowRight, PlayCircle, CheckCircle2, XCircle } from "lucide-react";
+import { ArrowRight, PlayCircle } from "lucide-react";
 import { Button } from "./ui/button";
 import { VideoModal } from "./VideoModal";
 import { DialogTrigger } from "./ui/dialog";
-import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
-import { Badge } from "./ui/badge";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { HeroBinaryScoreCard } from "./HeroBinaryScoreCard";
+import { HeroFixPlanCard } from "./HeroFixPlanCard";
+import { HeroAgentTasksCard } from "./HeroAgentTasksCard";
+import { loadSpotifyData } from "../lib/spotifyData";
+import type { BinaryScoreOutput, FixPlanOutput, AgentTasksOutput } from "../types/api";
 
 interface HeroProps {
   onEvaluateClick: () => void;
@@ -12,6 +15,24 @@ interface HeroProps {
 
 export function Hero({ onEvaluateClick }: HeroProps) {
   const [videoOpen, setVideoOpen] = useState(false);
+  const [spotifyBinaryScore, setSpotifyBinaryScore] = useState<BinaryScoreOutput | null>(null);
+  const [spotifyFixPlan, setSpotifyFixPlan] = useState<FixPlanOutput | null>(null);
+  const [spotifyAgentTasks, setSpotifyAgentTasks] = useState<AgentTasksOutput | null>(null);
+  const [isLoadingSpotify, setIsLoadingSpotify] = useState(true);
+
+  useEffect(() => {
+    loadSpotifyData()
+      .then((data) => {
+        setSpotifyBinaryScore(data.binaryScore);
+        setSpotifyFixPlan(data.fixPlan);
+        setSpotifyAgentTasks(data.agentTasks);
+        setIsLoadingSpotify(false);
+      })
+      .catch((error) => {
+        console.error('Failed to load Spotify data:', error);
+        setIsLoadingSpotify(false);
+      });
+  }, []);
 
   return (
     <section className="px-6 py-16 md:py-32 max-w-6xl mx-auto grid-background">
@@ -19,7 +40,7 @@ export function Hero({ onEvaluateClick }: HeroProps) {
         {/* Hero Content with Image */}
         <div className="grid md:grid-cols-2 gap-8 md:gap-16 items-center">
           {/* Left: Text + CTA */}
-          <div className="space-y-8 md:space-y-10 text-center md:text-left">
+          <div className="space-y-6 md:space-y-8 text-center md:text-left">
             {/* Headline */}
             <div className="space-y-4 md:space-y-6">
               <h1 className="text-foreground leading-tight">
@@ -33,7 +54,7 @@ export function Hero({ onEvaluateClick }: HeroProps) {
             </div>
 
             {/* CTA */}
-            <div className="flex flex-col sm:flex-row gap-4 md:gap-6 justify-center md:justify-start">
+            <div className="flex flex-col sm:flex-row gap-4 md:gap-6 justify-center md:justify-start pt-2">
               <Button
                 size="lg"
                 className="gap-3 px-12 py-6 text-lg"
@@ -59,81 +80,21 @@ export function Hero({ onEvaluateClick }: HeroProps) {
           </div>
 
           {/* Right: Hero Image */}
-          <div className="order-first md:order-last">
+          <div className="order-first md:order-last flex justify-center md:justify-end items-start">
             <img
               src="/hero-image.jpeg"
               alt="AI-powered PRD evaluation workflow"
-              className="rounded-[var(--radius-card)] shadow-lg border border-border/50 w-full"
+              className="rounded-[var(--radius-card)] shadow-lg border border-border/50 w-full max-w-xl md:max-w-2xl"
             />
           </div>
         </div>
 
-        {/* Example Evaluation Preview Card */}
-        <Card className="shadow-lg bg-primary/5 border-2 hover:shadow-xl transition-shadow duration-300">
-          <CardHeader className="pb-4 md:pb-6 border-b border-border/50">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div>
-                <CardTitle className="text-lg">Example: Spotify Rewards System PRD</CardTitle>
-                <p className="text-muted-foreground text-sm mt-2">
-                  <span className="font-semibold text-foreground">2/11 PASS</span> • Readiness Gate: <Badge variant="destructive" className="ml-1">HOLD</Badge>
-                </p>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4 md:space-y-6 pt-6 md:pt-8 pb-4 md:pb-8">
-            {/* C1 PASS */}
-            <div className="flex items-start gap-3">
-              <CheckCircle2 className="w-5 h-5 text-chart-2 flex-shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-semibold">C1: Business Problem Clarity</p>
-                  <Badge variant="secondary" className="bg-chart-2/15 text-chart-2 border-chart-2/30 font-semibold">PASS</Badge>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  "Users aged 18–24 are dissatisfied… poor song recommendations and excessive ads… low conversion to premium"
-                </p>
-              </div>
-            </div>
-
-            {/* C3 FAIL */}
-            <div className="flex items-start gap-3">
-              <XCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-semibold">C3: Solution–Problem Alignment</p>
-                  <Badge variant="outline" className="bg-destructive/5 border-destructive/30 text-destructive font-semibold">FAIL</Badge>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Rewards and hyper-local/chatbot partly address discovery but do not reduce ad load—the #1 pain
-                </p>
-              </div>
-            </div>
-
-            {/* C10 FAIL */}
-            <div className="flex items-start gap-3">
-              <XCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-semibold">C10: Implementability & Eng Readiness</p>
-                  <Badge variant="outline" className="bg-destructive/5 border-destructive/30 text-destructive font-semibold">FAIL</Badge>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Engineers can't build without API contracts, data schemas, consent flows, or ad-stack changes
-                </p>
-              </div>
-            </div>
-
-            {/* View Full Evaluation Link */}
-            <div className="pt-2 border-t border-border/30 mt-4">
-              <button
-                onClick={onEvaluateClick}
-                className="text-sm font-semibold text-primary hover:text-primary/80 transition-colors flex items-center gap-1"
-              >
-                Try your own PRD <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Three Column Evaluation Cards */}
+        <div className="grid md:grid-cols-3 gap-6 md:gap-8 mt-32 md:mt-56 lg:mt-72">
+          <HeroBinaryScoreCard data={spotifyBinaryScore} isLoading={isLoadingSpotify} />
+          <HeroFixPlanCard data={spotifyFixPlan} isLoading={isLoadingSpotify} />
+          <HeroAgentTasksCard data={spotifyAgentTasks} isLoading={isLoadingSpotify} />
+        </div>
 
         {/* Trust Indicators */}
         <div className="space-y-2 md:space-y-3 text-center">

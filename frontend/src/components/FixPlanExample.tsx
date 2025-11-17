@@ -132,7 +132,7 @@ export function FixPlanExample({ data, isLoading }: FixPlanExampleProps) {
   };
 
   return (
-    <section className="px-6 py-20 bg-background">
+    <section id="fix-plan" className="px-6 py-20 bg-background">
       <div className="max-w-5xl mx-auto">
         <div className="space-y-8">
           {/* Section Header */}

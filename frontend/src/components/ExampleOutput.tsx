@@ -101,7 +101,7 @@ export function ExampleOutput({ data, isLoading }: ExampleOutputProps) {
   };
 
   return (
-    <section id="example" className="px-6 py-20 max-w-5xl mx-auto">
+    <section id="binary-score" className="px-6 py-20 max-w-5xl mx-auto">
       <div className="space-y-8">
         {/* Section Header */}
         <div className="text-center space-y-3">

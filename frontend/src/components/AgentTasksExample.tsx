@@ -102,7 +102,7 @@ export function AgentTasksExample({ data, isLoading }: AgentTasksExampleProps) {
   };
 
   return (
-    <section className="px-6 py-20 bg-muted/30">
+    <section id="agent-tasks" className="px-6 py-20 bg-muted/30">
       <div className="max-w-6xl mx-auto">
         <div className="space-y-8">
           {/* Section Header */}

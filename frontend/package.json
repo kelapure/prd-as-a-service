@@ -60,6 +60,7 @@
             "dev": "vite",
             "build": "vite build",
             "postinstall": "vite build",
-            "start": "serve -s build -l $PORT"
+            "start": "serve -s build -l $PORT",
+            "generate-spotify-results": "node scripts/generate-spotify-results.mjs"
       }
 }
