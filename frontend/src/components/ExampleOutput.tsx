@@ -101,10 +101,10 @@ export function ExampleOutput({ data, isLoading }: ExampleOutputProps) {
   };
 
   return (
-    <section id="binary-score" className="px-6 py-20 max-w-5xl mx-auto">
+    <section id="binary-score" className="px-6 py-20 max-w-6xl mx-auto">
       <div className="space-y-8">
         {/* Section Header */}
-        <div className="text-center space-y-3">
+        <div className="text-center space-y-4">
           <h2 className="text-foreground">Binary Evaluation—No Gray Areas</h2>
           <p className="text-muted-foreground">
             Each criterion receives objective PASS or FAIL with quoted evidence
@@ -114,7 +114,7 @@ export function ExampleOutput({ data, isLoading }: ExampleOutputProps) {
         {/* Scorecard Card */}
         <div className="bg-card rounded-[var(--radius-card)] border border-border shadow-[var(--elevation-sm)] overflow-hidden">
           {/* Header */}
-          <div className="px-8 py-6 border-b border-border bg-muted/30">
+          <div className="px-6 py-6 border-b border-border bg-muted/30">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-card-foreground">PRD Readiness Gate</h3>
@@ -137,7 +137,7 @@ export function ExampleOutput({ data, isLoading }: ExampleOutputProps) {
           </div>
 
           {/* Criteria List */}
-          <div className="p-8">
+          <div className="p-6">
             {isLoading ? (
               <div className="text-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
@@ -160,7 +160,7 @@ export function ExampleOutput({ data, isLoading }: ExampleOutputProps) {
           </div>
 
           {/* Footer */}
-          <div className="px-8 py-6 bg-muted/30 border-t border-border">
+          <div className="px-6 py-6 bg-muted/30 border-t border-border">
             <div className="flex items-center justify-between gap-4">
               <p className="text-muted-foreground">
                 <strong className="text-foreground">

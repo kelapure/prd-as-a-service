@@ -35,8 +35,8 @@ export function Hero({ onEvaluateClick }: HeroProps) {
   }, []);
 
   return (
-    <section className="px-6 py-16 md:py-32 max-w-6xl mx-auto grid-background">
-      <div className="space-y-16 md:space-y-24">
+    <section className="px-6 py-20 max-w-6xl mx-auto grid-background">
+      <div className="space-y-8 md:space-y-12">
         {/* Hero Content with Image */}
         <div className="grid md:grid-cols-2 gap-8 md:gap-16 items-center">
           {/* Left: Text + CTA */}
@@ -90,14 +90,14 @@ export function Hero({ onEvaluateClick }: HeroProps) {
         </div>
 
         {/* Three Column Evaluation Cards */}
-        <div className="grid md:grid-cols-3 gap-6 md:gap-8 mt-32 md:mt-56 lg:mt-72">
+        <div className="grid md:grid-cols-3 gap-6 md:gap-8 mt-16 md:mt-24 lg:mt-32">
           <HeroBinaryScoreCard data={spotifyBinaryScore} isLoading={isLoadingSpotify} />
           <HeroFixPlanCard data={spotifyFixPlan} isLoading={isLoadingSpotify} />
           <HeroAgentTasksCard data={spotifyAgentTasks} isLoading={isLoadingSpotify} />
         </div>
 
         {/* Trust Indicators */}
-        <div className="space-y-2 md:space-y-3 text-center">
+        <div className="space-y-2 md:space-y-3 text-center mt-8">
           <p className="text-sm font-medium text-foreground">
             Trusted for Pharma/GxP projects
           </p>

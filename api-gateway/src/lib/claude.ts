@@ -59,7 +59,7 @@ export async function callStructured(options: StructuredCallOptions): Promise<an
   try {
     const response = await anthropic.messages.create({
       model,
-      max_tokens: 16000,
+      max_tokens: 60000,
       temperature,
       system,
       messages: [
@@ -135,7 +135,7 @@ export async function callStructuredStream(options: StreamingCallOptions): Promi
   try {
     const stream = anthropic.messages.stream({
       model,
-      max_tokens: 16000,
+      max_tokens: 60000,
       temperature,
       system,
       messages: [

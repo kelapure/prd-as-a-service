@@ -102,11 +102,11 @@ export function AgentTasksExample({ data, isLoading }: AgentTasksExampleProps) {
   };
 
   return (
-    <section id="agent-tasks" className="px-6 py-20 bg-muted/30">
+    <section id="agent-tasks" className="px-6 py-20 bg-background">
       <div className="max-w-6xl mx-auto">
         <div className="space-y-8">
           {/* Section Header */}
-          <div className="text-center space-y-3">
+          <div className="text-center space-y-4">
             <h2 className="text-foreground">AI Agent-Executable Task Graph</h2>
             <p className="text-muted-foreground">
               Decomposed into 2-4 hour units with explicit inputs, outputs, and acceptance tests—ready for AI agents like Cursor, Devin, or Copilot
@@ -146,16 +146,16 @@ export function AgentTasksExample({ data, isLoading }: AgentTasksExampleProps) {
           )}
 
           {/* Tasks Grid */}
-          <div className="grid md:grid-cols-2 gap-6">
-            {isLoading ? (
-              <div className="col-span-2 bg-card rounded-[var(--radius-card)] border border-border p-12 text-center">
-                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
-                <p className="text-foreground font-medium">Generating task graph...</p>
-                <p className="text-muted-foreground text-sm mt-2">
-                  Decomposing PRD into AI-executable tasks with dependencies (2-3 minutes)
-                </p>
-              </div>
-            ) : tasks.length > 0 ? (
+          {isLoading ? (
+            <div className="bg-card rounded-[var(--radius-card)] border border-border p-12 text-center">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
+              <p className="text-foreground font-medium">Generating task graph...</p>
+              <p className="text-muted-foreground text-sm mt-2">
+                Decomposing PRD into AI-executable tasks with dependencies (2-3 minutes)
+              </p>
+            </div>
+          ) : tasks.length > 0 ? (
+            <div className="grid md:grid-cols-2 gap-6">{
               tasks.map((task) => {
                 const statusInfo = statusConfig[task.status] || statusConfig.ready;
                 const StatusIcon = statusInfo.icon;
@@ -283,15 +283,15 @@ export function AgentTasksExample({ data, isLoading }: AgentTasksExampleProps) {
                     </div>
                   </div>
                 );
-              })
-            ) : (
-              <div className="col-span-2 bg-card rounded-[var(--radius-card)] border border-border p-12 text-center">
-                <p className="text-muted-foreground">
-                  Upload a PRD to see AI agent-executable task breakdown
-                </p>
-              </div>
-            )}
-          </div>
+              })}
+            </div>
+          ) : (
+            <div className="bg-card rounded-[var(--radius-card)] border border-border p-12 text-center">
+              <p className="text-muted-foreground">
+                Upload a PRD to see AI agent-executable task breakdown
+              </p>
+            </div>
+          )}
 
           {/* Summary */}
           {tasks.length > 0 && (

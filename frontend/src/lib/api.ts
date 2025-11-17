@@ -11,7 +11,7 @@ const API_BASE_URL =
   typeof window !== "undefined" && window.location.hostname === "localhost"
     ? "http://localhost:8080"
     : "";
-const API_TIMEOUT = 300000; // 5 minutes for complex PRD evaluations
+const API_TIMEOUT = 600000; // 10 minutes for complex PRD evaluations
 
 interface APIError {
   error: string;
@@ -29,8 +29,8 @@ export async function evaluatePRD(
 ): Promise<BinaryScoreOutput> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
-      console.error('[evaluatePRD] Request timed out after 3 minutes');
-      reject(new Error("Request timed out after 3 minutes"));
+      console.error('[evaluatePRD] Request timed out after 10 minutes');
+      reject(new Error("Request timed out after 10 minutes"));
     }, API_TIMEOUT);
 
     console.log('[evaluatePRD] Starting request, PRD length:', prdText.length);
@@ -119,8 +119,8 @@ export async function generateFixPlan(
 ): Promise<FixPlanOutput> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
-      console.error('[generateFixPlan] Request timed out after 3 minutes');
-      reject(new Error("Request timed out after 3 minutes"));
+      console.error('[generateFixPlan] Request timed out after 10 minutes');
+      reject(new Error("Request timed out after 10 minutes"));
     }, API_TIMEOUT);
 
     console.log('[generateFixPlan] Starting request, PRD length:', prdText.length);
@@ -209,8 +209,8 @@ export async function generateAgentTasks(
 ): Promise<AgentTasksOutput> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
-      console.error('[generateAgentTasks] Request timed out after 3 minutes');
-      reject(new Error("Request timed out after 3 minutes"));
+      console.error('[generateAgentTasks] Request timed out after 10 minutes');
+      reject(new Error("Request timed out after 10 minutes"));
     }, API_TIMEOUT);
 
     console.log('[generateAgentTasks] Starting request, PRD length:', prdText.length);

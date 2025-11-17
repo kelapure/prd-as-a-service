@@ -133,10 +133,10 @@ export function FixPlanExample({ data, isLoading }: FixPlanExampleProps) {
 
   return (
     <section id="fix-plan" className="px-6 py-20 bg-background">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         <div className="space-y-8">
           {/* Section Header */}
-          <div className="text-center space-y-3">
+          <div className="text-center space-y-4">
             <h2 className="text-foreground">Fix Plan</h2>
             <p className="text-muted-foreground">
               Concrete action items organized by priority with effort estimates
