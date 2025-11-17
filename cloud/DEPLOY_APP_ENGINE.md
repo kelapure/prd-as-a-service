@@ -41,21 +41,32 @@ gcloud artifacts repositories add-iam-policy-binding us.gcr.io \
 
 **IMPORTANT:** Never commit API keys to git. Use `app.local.yaml` (already in .gitignore).
 
-Create `api-gateway/app.local.yaml`:
+The `api-gateway/app.local.yaml` file should already exist (git-ignored). Update it with your Anthropic API key:
 
 ```yaml
+service: api
+runtime: nodejs20
+env: standard
+
+automatic_scaling:
+  target_cpu_utilization: 0.65
+  min_instances: 0
+  max_instances: 10
+
 env_variables:
+  NODE_ENV: production
+  LOG_LEVEL: info
+  ALLOWED_ORIGIN: https://evalgpt.com
+  EVALPRD_MODEL: claude-sonnet-4-5-20250929
   ANTHROPIC_API_KEY: sk-ant-YOUR-ACTUAL-KEY-HERE
+
+handlers:
+  - url: /.*
+    script: auto
+    secure: always
 ```
 
-Create `cloud/app.local.yaml`:
-
-```yaml
-env_variables:
-  ANTHROPIC_API_KEY: sk-ant-YOUR-ACTUAL-KEY-HERE
-```
-
-These files are git-ignored and will overlay the base `app.yaml` during deployment.
+This is a **complete** App Engine configuration file (not just an overlay). It includes all settings from `app.yaml` plus the secret API key.
 
 ## 4) Build Frontend and API Gateway
 
@@ -75,18 +86,23 @@ cd ..
 
 ## 5) Deploy API Service (Standard Environment)
 
-> ⚠️ Deploy from the `api-gateway/` directory. Deploying the stub configs under `cloud/` does **not** ship the Node project, and App Engine will fail at runtime with `npm ERR! enoent Could not read package.json`.
+> ⚠️ **IMPORTANT**: Deploy `api-gateway/app.local.yaml` (complete config with secrets), NOT `api-gateway/app.yaml` (public template without secrets).
 
 ```bash
-# Deploy API service (run from repo root or any path)
-gcloud app deploy api-gateway/app.yaml --quiet
+# Deploy API service with secrets (run from repo root)
+gcloud app deploy api-gateway/app.local.yaml --quiet
 ```
+
+**Why app.local.yaml?**
+- `api-gateway/app.yaml` - Public template (committed to git, no secrets)
+- `api-gateway/app.local.yaml` - Complete deployment config (git-ignored, includes ANTHROPIC_API_KEY)
+- App Engine uses the source directory where the yaml file is located (api-gateway/)
 
 This deploys:
 - Service: `api`
 - Environment: Standard (Node.js 20)
 - Includes: API Gateway with direct Anthropic integration
-- Uses the `api-gateway/app.yaml` in this repo (keep `api-gateway/app.local.yaml` git-ignored locally if you need to override env vars, but don't pass both files to a single `gcloud app deploy` command—App Engine requires one service definition per deploy)
+- Source: `api-gateway/` directory with all Node.js code
 
 ## 6) Deploy Frontend Service (Standard Environment)
 
@@ -347,14 +363,18 @@ gcloud app deploy frontend/app.yaml --quiet
 **Update API only:**
 ```bash
 cd api-gateway && npm run build && cd ..
-gcloud app deploy cloud/app.yaml cloud/app.local.yaml --quiet
+gcloud app deploy api-gateway/app.local.yaml --quiet
 ```
 
 **Update both services:**
 ```bash
+# Build both
 cd frontend && npm run build && cd ..
 cd api-gateway && npm run build && cd ..
-gcloud app deploy cloud/app.yaml cloud/app.local.yaml frontend/app.yaml --quiet
+
+# Deploy both (must be separate commands - each service needs its own deploy)
+gcloud app deploy api-gateway/app.local.yaml --quiet
+gcloud app deploy frontend/app.yaml --quiet
 ```
 
 **Update dispatch rules:**
