@@ -2,60 +2,61 @@
 
 A PRD evaluation platform that analyzes Product Requirements Documents against 11 critical criteria, providing binary PASS/FAIL scoring, prioritized fix plans, and AI agent-executable task graphs.
 
+**Production:** https://evalgpt.com
+**Current Release:** v1.0.0 (2025-11-17)
+
 ## Features
 
 - **Binary Scoring**: No fuzzy 1-10 scales. Each criterion is PASS or FAIL with quoted evidence from the document.
 - **Prioritized Fix Plan**: Automatically identify highest-leverage improvements. Know exactly what to fix first.
 - **Agent-Ready Tasks**: Get executable task units with dependencies mapped—ready to feed directly to AI agents or sprint planning.
+- **Real-Time Streaming**: Server-Sent Events (SSE) with socket flushing optimized for Google App Engine.
 
 ## Architecture
 
 ```
-┌─────────────┐         ┌──────────────┐         ┌─────────────┐
-│   Frontend  │────────▶│ API Gateway  │────────▶│ MCP Server  │
-│  (React)    │  HTTP   │  (Fastify)   │  stdio  │  (OpenAI)   │
-└─────────────┘         └──────────────┘         └─────────────┘
+┌─────────────┐         ┌──────────────────────────┐         ┌─────────────────────┐
+│   Frontend  │────────▶│     API Gateway          │────────▶│  Claude Sonnet 4.5  │
+│  (React)    │  HTTP   │  (Fastify + Anthropic)   │   API   │   (Anthropic SDK)   │
+└─────────────┘         └──────────────────────────┘         └─────────────────────┘
 ```
 
 ### Components
 
-1. **Frontend** (`frontend/`): React + Vite + Tailwind landing page with file upload and results display
-2. **API Gateway** (`api-gateway/`): Fastify server that bridges HTTP requests to MCP tools
-3. **MCP Server** (`mcp-server/`): Model Context Protocol server with 3 evaluation tools powered by OpenAI
+1. **Frontend** (`frontend/`): React + Vite + Tailwind landing page with file upload and real-time streaming results display
+2. **API Gateway** (`api-gateway/`): Fastify server with direct Anthropic Claude SDK integration for streaming evaluations
+
+**Architecture Evolution:**
+- **Previous**: MCP Server subprocess pattern with OpenAI (complex, required stdio communication)
+- **Current (v1.0.0)**: Direct Anthropic SDK integration with streaming + structured outputs
+- **Benefits**: Eliminated process management overhead, improved reliability, real-time streaming with socket flushing
 
 ## Quick Start
 
 ### Prerequisites
 
 - Node.js 20.x or higher
-- OpenAI API key
+- Anthropic API key
 
 ### Local Development
 
 1. **Clone and install**:
 ```bash
-git clone <repo-url>
+git clone https://github.com/kelapure/prd-as-a-service.git
 cd prd-as-a-service
 ```
 
-2. **Setup MCP Server**:
+2. **Setup API Gateway**:
 ```bash
-cd mcp-server
+cd api-gateway
 npm install
 cp .env.example .env
-# Edit .env and add your OPENAI_API_KEY
+# Edit .env and add your ANTHROPIC_API_KEY
 npm run build
-```
-
-3. **Setup API Gateway**:
-```bash
-cd ../api-gateway
-npm install
-cp .env.example .env
 npm run dev
 ```
 
-4. **Setup Frontend**:
+3. **Setup Frontend**:
 ```bash
 cd ../frontend
 npm install
@@ -70,9 +71,29 @@ The frontend will be available at http://localhost:3000 and will connect to the 
 # Terminal 1: API Gateway
 cd api-gateway && npm run dev
 
-# Terminal 2: Frontend  
+# Terminal 2: Frontend
 cd frontend && npm run dev
 ```
+
+## Production Deployment
+
+**Live at:** https://evalgpt.com
+**Platform:** Google App Engine (Standard Environment)
+**Current Version:** 20251117t173407
+
+### Architecture on App Engine
+
+Two-service setup with dispatch rules:
+- **api service**: API Gateway (Node.js 20, handles /api/*)
+- **default service**: Frontend SPA (Node.js 20, handles /*)
+
+**Key Features:**
+- Automatic SSL/TLS (managed by Google)
+- Autoscaling (0-10 instances based on CPU)
+- Socket flushing for real-time SSE streaming through load balancer
+- 15s heartbeat intervals to prevent App Engine 60s timeout
+
+For detailed deployment instructions, see `cloud/DEPLOY_APP_ENGINE.md`.
 
 ## The 11-Point PRD Rubric
 
@@ -99,7 +120,13 @@ cd frontend && npm run dev
 
 ## API Endpoints (Streaming)
 
-All endpoints use **Server-Sent Events (SSE)** for real-time progress with GPT-5.
+All endpoints use **Server-Sent Events (SSE)** for real-time progress with **Claude Sonnet 4.5**.
+
+**Streaming Architecture:**
+- Socket flushing (cork/uncork) to bypass App Engine load balancer buffering
+- Delta-only SSE payloads (97% size reduction vs. sending accumulated text)
+- 15s heartbeat intervals to keep connection alive
+- Detailed logging every 100 events for monitoring
 
 ### POST /api/evalprd/binary_score
 Evaluate PRD with PASS/FAIL for each criterion (streaming).
@@ -115,7 +142,7 @@ Evaluate PRD with PASS/FAIL for each criterion (streaming).
 }
 ```
 
-**Response**:
+**Response** (streamed via SSE, final JSON):
 ```json
 {
   "rubric_version": "v1.0",
@@ -151,7 +178,7 @@ Generate prioritized improvement plan (streaming).
 }
 ```
 
-**Response**:
+**Response** (streamed via SSE, final JSON):
 ```json
 {
   "items": [
@@ -184,7 +211,7 @@ Decompose into 2-4h executable tasks (streaming).
 }
 ```
 
-**Response**:
+**Response** (streamed via SSE, final JSON):
 ```json
 {
   "tasks": [
@@ -217,18 +244,18 @@ This system replicates the EvalPRD custom GPT with 100% fidelity. Key factors:
 - `fix_plan`: 0.3 (balanced for creative yet consistent fixes)
 - `agent_tasks`: 0.3 (balanced for structured task decomposition)
 
-Previous bug: Tools were using temperature = 1.0 (maximum randomness), causing high output variance.
+These are configured in `api-gateway/src/lib/claude.ts` for each evaluator.
 
 ### Complete Rubric Embedding
 
 The custom GPT has access to a 771-line rubric document. We achieve parity by:
-1. Extracting all 11 criterion definitions into `mcp-server/src/lib/rubric-definitions.ts`
+1. Extracting all 11 criterion definitions into `api-gateway/src/lib/rubric-definitions.ts`
 2. Including detailed PASS/FAIL criteria for each
 3. Embedding real-world examples:
    - **WestREC PRD** (shows strong PASS patterns)
    - **Spring Health PRD** (shows clear FAIL patterns)
    - **Apex Health PRD** (shows scope explosion)
-4. Injecting complete definitions into system prompt
+4. Injecting complete definitions into system prompt via `api-gateway/src/lib/prompts.ts`
 
 ### Golden Test Files
 
@@ -264,34 +291,55 @@ node integration.mjs
 
 # Validate parity with custom GPT
 node validate-parity.mjs
+
+# Test production endpoints
+curl -X POST "https://evalgpt.com/api/evalprd/binary_score" \
+  -H "Content-Type: application/json" \
+  -d '{"prd_text":"# Sample PRD\n\n## Problem\n..."}'
 ```
 
 ## Environment Variables
 
-### MCP Server
-- `OPENAI_API_KEY`: Your OpenAI API key (required)
-- `EVALPRD_MODEL`: OpenAI model to use (default: `gpt-5`)
-- `LOG_LEVEL`: Logging level (default: `info`)
-- `REQUEST_TIMEOUT_MS`: OpenAI timeout in milliseconds (default: `180000` = 3 minutes)
-
-**Note**: Temperature is hardcoded in tool files for consistency:
-- binary_score: 0.2
-- fix_plan: 0.3
-- agent_tasks: 0.3
-
 ### API Gateway
+
+**Required:**
+- `ANTHROPIC_API_KEY`: Your Anthropic API key (required)
+
+**Optional:**
 - `PORT`: Server port (default: `8080`)
 - `ALLOWED_ORIGIN`: CORS origin (default: `http://localhost:3000`)
 - `RATE_LIMIT_MAX`: Max requests per window (default: `60`)
 - `RATE_LIMIT_WINDOW_MS`: Rate limit window (default: `60000`)
+- `EVALPRD_MODEL`: Claude model to use (default: `claude-sonnet-4-5-20250929`)
+- `LOG_LEVEL`: Logging level (default: `info`)
+- `REQUEST_TIMEOUT_MS`: Anthropic API timeout in milliseconds (default: `180000` = 3 minutes)
+
+**Note**: Temperature is configured per-endpoint in `api-gateway/src/lib/claude.ts`:
+- binary_score: 0.2
+- fix_plan: 0.3
+- agent_tasks: 0.3
+
+**App Engine Production:**
+- Set `ANTHROPIC_API_KEY` in `api-gateway/app.local.yaml` (git-ignored)
+- Deploy with: `gcloud app deploy api-gateway/app.local.yaml`
 
 ## Security
 
 - Never log PRD content (only hashes for debugging)
 - Enforce CORS origin allowlist
 - Rate limiting: 60 req/min default
-- All communications use TLS in production
+- All communications use TLS in production (managed by App Engine)
 - Treat PRDs as confidential/regulated data
+- API keys stored in git-ignored files only
+
+## Release History
+
+### v1.0.0 (2025-11-17)
+- Complete socket flushing implementation for all streaming endpoints
+- Fixed HTTP 500 errors and client timeouts on fix_plan endpoint
+- 97% SSE payload reduction by removing accumulated field from delta events
+- Enhanced logging and monitoring for all streaming endpoints
+- Production-verified on Google App Engine (version 20251117t173407)
 
 ## License
 
@@ -299,4 +347,4 @@ MIT
 
 ## Support
 
-For issues or questions, please open an issue on GitHub.
+For issues or questions, please open an issue on GitHub at https://github.com/kelapure/prd-as-a-service/issues.
