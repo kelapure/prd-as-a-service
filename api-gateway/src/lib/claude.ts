@@ -168,6 +168,9 @@ export async function callStructuredStream(options: StreamingCallOptions): Promi
     } as any);
 
     let usage: any = null;
+    let eventCount = 0;
+
+    logger.info({ requestId }, "About to start reading from Anthropic stream");
 
     // Send periodic progress updates if no delta events for >60s
     // This ensures browser sees activity and doesn't timeout
@@ -180,6 +183,16 @@ export async function callStructuredStream(options: StreamingCallOptions): Promi
     }, 60000); // Check every 60 seconds
 
     for await (const event of stream) {
+      eventCount++;
+      if (eventCount <= 5 || eventCount % 100 === 0) {
+        logger.info({ requestId, eventCount, eventType: event.type }, "Received stream event");
+      }
+
+      // Log all non-delta event types to debug issues
+      if (event.type !== 'content_block_delta') {
+        logger.info({ requestId, eventType: event.type, event: JSON.stringify(event).substring(0, 500) }, "Non-delta stream event");
+      }
+
       if (event.type === 'content_block_delta') {
         const delta = event.delta.type === 'text_delta' ? event.delta.text : "";
         if (delta) {
@@ -197,6 +210,8 @@ export async function callStructuredStream(options: StreamingCallOptions): Promi
       }
     }
 
+    logger.info({ requestId, eventCount, accumulatedLength: accumulated.length }, "Stream iteration completed");
+
     // Clear progress interval when stream completes
     if (progressInterval) {
       clearInterval(progressInterval);
@@ -209,7 +224,9 @@ export async function callStructuredStream(options: StreamingCallOptions): Promi
       requestId,
       latency,
       inputTokens: usage?.input_tokens,
-      outputTokens: usage?.output_tokens
+      outputTokens: usage?.output_tokens,
+      eventCount,
+      accumulatedLength: accumulated.length
     }, "Claude streaming structured call completed");
 
     if (!accumulated) {

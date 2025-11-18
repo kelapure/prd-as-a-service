@@ -282,6 +282,7 @@ export async function generateAgentTasks(
         let eventCount = 0;
         let hasError = false;
         let errorMessage = "";
+        let accumulated = ""; // Track accumulated text locally
 
         while (true) {
           const { done, value } = await reader.read();
@@ -301,7 +302,9 @@ export async function generateAgentTasks(
                 const data = JSON.parse(line.slice(6));
 
                 if (data.type === "delta") {
-                  onProgress?.(data.delta, data.accumulated);
+                  // Accumulate deltas locally to avoid massive SSE payloads from backend
+                  accumulated += data.delta;
+                  onProgress?.(data.delta, accumulated);
                 } else if (data.type === "done") {
                   console.log('[generateAgentTasks] Done event received');
                   clearTimeout(timeoutId);

@@ -193,8 +193,13 @@ fastify.post("/api/evalprd/binary_score", async (request, reply) => {
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
         "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
-        "Access-Control-Allow-Credentials": "true"
+        "Access-Control-Allow-Credentials": "true",
+        "X-Accel-Buffering": "no"  // Disable nginx buffering (App Engine)
       });
+      // Force headers to be sent immediately to bypass load balancer buffering
+      if (typeof reply.raw.flushHeaders === 'function') {
+        reply.raw.flushHeaders();
+      }
     } catch (headerError: any) {
       logger.error({
         requestId,
@@ -258,18 +263,63 @@ fastify.post("/api/evalprd/binary_score", async (request, reply) => {
     }, 5000);
 
     // Evaluate PRD
+    logger.info({ requestId, endpoint }, "About to call evaluateBinaryScore");
+    let progressCallCount = 0;
+    let sseWriteSuccessCount = 0;
+    let sseWriteSkipCount = 0;
     const result = await evaluateBinaryScore(
       { prd_text },
       (delta, accumulated) => {
+        progressCallCount++;
+        if (progressCallCount <= 5 || progressCallCount % 100 === 0) {
+          logger.info({
+            requestId,
+            endpoint,
+            progressCallCount,
+            deltaLength: delta.length,
+            accumulatedLength: accumulated.length,
+            streamDestroyed: reply.raw.destroyed,
+            clientDisconnected
+          }, "onProgress called");
+        }
         try {
           if (!reply.raw.destroyed && !clientDisconnected) {
-            reply.raw.write(`data: ${JSON.stringify({ type: "delta", delta, accumulated })}\n\n`);
+            // CRITICAL FIX: Only send delta, not accumulated, to avoid massive payloads
+            // Frontend can accumulate deltas locally if needed
+            const sseEvent = `data: ${JSON.stringify({ type: "delta", delta })}\n\n`;
+            if (progressCallCount <= 5 || progressCallCount % 100 === 0) {
+              logger.info({ requestId, endpoint, progressCallCount, sseEventSize: sseEvent.length, accumulatedLength: accumulated.length }, "About to write SSE delta");
+            }
+            reply.raw.write(sseEvent);
+            // Force socket flush to bypass App Engine buffering
+            const socket = (reply.raw as any).socket || (reply.raw as any).connection;
+            if (socket && typeof socket.uncork === 'function') {
+              socket.cork();
+              socket.uncork();
+            }
+            sseWriteSuccessCount++;
+            if (progressCallCount <= 5 || progressCallCount % 100 === 0) {
+              logger.info({ requestId, endpoint, progressCallCount, sseWriteSuccessCount }, "SSE delta written and flushed successfully");
+            }
+          } else {
+            sseWriteSkipCount++;
+            if (sseWriteSkipCount === 1 || sseWriteSkipCount % 100 === 0) {
+              logger.warn({
+                requestId,
+                endpoint,
+                progressCallCount,
+                sseWriteSkipCount,
+                destroyed: reply.raw.destroyed,
+                disconnected: clientDisconnected
+              }, "Skipped SSE write - stream destroyed or client disconnected");
+            }
           }
         } catch (writeError: any) {
-          logger.warn({ requestId, endpoint, error: writeError?.message }, "Delta write failed");
+          logger.error({ requestId, endpoint, progressCallCount, error: writeError?.message, stack: writeError?.stack }, "Delta write failed with exception");
         }
       }
     );
+    logger.info({ requestId, endpoint, progressCallCount, sseWriteSuccessCount, sseWriteSkipCount }, "evaluateBinaryScore completed");
 
     // Check if client disconnected during evaluation
     if (clientDisconnected || reply.raw.destroyed) {
@@ -459,8 +509,13 @@ fastify.post("/api/evalprd/fix_plan", async (request, reply) => {
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
         "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
-        "Access-Control-Allow-Credentials": "true"
+        "Access-Control-Allow-Credentials": "true",
+        "X-Accel-Buffering": "no"  // Disable nginx buffering (App Engine)
       });
+      // Force headers to be sent immediately to bypass load balancer buffering
+      if (typeof reply.raw.flushHeaders === 'function') {
+        reply.raw.flushHeaders();
+      }
     } catch (headerError: any) {
       logger.error({
         requestId,
@@ -524,18 +579,63 @@ fastify.post("/api/evalprd/fix_plan", async (request, reply) => {
     }, 5000);
 
     // Evaluate PRD
+    logger.info({ requestId, endpoint }, "About to call evaluateFixPlan");
+    let progressCallCount = 0;
+    let sseWriteSuccessCount = 0;
+    let sseWriteSkipCount = 0;
     const result = await evaluateFixPlan(
       { prd_text },
       (delta, accumulated) => {
+        progressCallCount++;
+        if (progressCallCount <= 5 || progressCallCount % 100 === 0) {
+          logger.info({
+            requestId,
+            endpoint,
+            progressCallCount,
+            deltaLength: delta.length,
+            accumulatedLength: accumulated.length,
+            streamDestroyed: reply.raw.destroyed,
+            clientDisconnected
+          }, "onProgress called");
+        }
         try {
           if (!reply.raw.destroyed && !clientDisconnected) {
-            reply.raw.write(`data: ${JSON.stringify({ type: "delta", delta, accumulated })}\n\n`);
+            // CRITICAL FIX: Only send delta, not accumulated, to avoid massive payloads
+            // Frontend can accumulate deltas locally if needed
+            const sseEvent = `data: ${JSON.stringify({ type: "delta", delta })}\n\n`;
+            if (progressCallCount <= 5 || progressCallCount % 100 === 0) {
+              logger.info({ requestId, endpoint, progressCallCount, sseEventSize: sseEvent.length, accumulatedLength: accumulated.length }, "About to write SSE delta");
+            }
+            reply.raw.write(sseEvent);
+            // Force socket flush to bypass App Engine buffering
+            const socket = (reply.raw as any).socket || (reply.raw as any).connection;
+            if (socket && typeof socket.uncork === 'function') {
+              socket.cork();
+              socket.uncork();
+            }
+            sseWriteSuccessCount++;
+            if (progressCallCount <= 5 || progressCallCount % 100 === 0) {
+              logger.info({ requestId, endpoint, progressCallCount, sseWriteSuccessCount }, "SSE delta written and flushed successfully");
+            }
+          } else {
+            sseWriteSkipCount++;
+            if (sseWriteSkipCount === 1 || sseWriteSkipCount % 100 === 0) {
+              logger.warn({
+                requestId,
+                endpoint,
+                progressCallCount,
+                sseWriteSkipCount,
+                destroyed: reply.raw.destroyed,
+                disconnected: clientDisconnected
+              }, "Skipped SSE write - stream destroyed or client disconnected");
+            }
           }
         } catch (writeError: any) {
-          logger.warn({ requestId, endpoint, error: writeError?.message }, "Delta write failed");
+          logger.error({ requestId, endpoint, progressCallCount, error: writeError?.message, stack: writeError?.stack }, "Delta write failed with exception");
         }
       }
     );
+    logger.info({ requestId, endpoint, progressCallCount, sseWriteSuccessCount, sseWriteSkipCount }, "evaluateFixPlan completed");
 
     // Check if client disconnected during evaluation
     if (clientDisconnected || reply.raw.destroyed) {
@@ -725,8 +825,13 @@ fastify.post("/api/evalprd/agent_tasks", async (request, reply) => {
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
         "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
-        "Access-Control-Allow-Credentials": "true"
+        "Access-Control-Allow-Credentials": "true",
+        "X-Accel-Buffering": "no"  // Disable nginx buffering (App Engine)
       });
+      // Force headers to be sent immediately to bypass load balancer buffering
+      if (typeof reply.raw.flushHeaders === 'function') {
+        reply.raw.flushHeaders();
+      }
     } catch (headerError: any) {
       logger.error({
         requestId,
@@ -790,18 +895,63 @@ fastify.post("/api/evalprd/agent_tasks", async (request, reply) => {
     }, 5000);
 
     // Evaluate PRD
+    logger.info({ requestId, endpoint }, "About to call evaluateAgentTasks");
+    let progressCallCount = 0;
+    let sseWriteSuccessCount = 0;
+    let sseWriteSkipCount = 0;
     const result = await evaluateAgentTasks(
       { prd_text },
       (delta, accumulated) => {
+        progressCallCount++;
+        if (progressCallCount <= 5 || progressCallCount % 100 === 0) {
+          logger.info({
+            requestId,
+            endpoint,
+            progressCallCount,
+            deltaLength: delta.length,
+            accumulatedLength: accumulated.length,
+            streamDestroyed: reply.raw.destroyed,
+            clientDisconnected
+          }, "onProgress called");
+        }
         try {
           if (!reply.raw.destroyed && !clientDisconnected) {
-            reply.raw.write(`data: ${JSON.stringify({ type: "delta", delta, accumulated })}\n\n`);
+            // CRITICAL FIX: Only send delta, not accumulated, to avoid massive payloads (60KB+ for agent_tasks)
+            // Frontend can accumulate deltas locally if needed
+            const sseEvent = `data: ${JSON.stringify({ type: "delta", delta })}\n\n`;
+            if (progressCallCount <= 5 || progressCallCount % 100 === 0) {
+              logger.info({ requestId, endpoint, progressCallCount, sseEventSize: sseEvent.length, accumulatedLength: accumulated.length }, "About to write SSE delta");
+            }
+            reply.raw.write(sseEvent);
+            // Force socket flush to bypass App Engine buffering
+            const socket = (reply.raw as any).socket || (reply.raw as any).connection;
+            if (socket && typeof socket.uncork === 'function') {
+              socket.cork();
+              socket.uncork();
+            }
+            sseWriteSuccessCount++;
+            if (progressCallCount <= 5 || progressCallCount % 100 === 0) {
+              logger.info({ requestId, endpoint, progressCallCount, sseWriteSuccessCount }, "SSE delta written and flushed successfully");
+            }
+          } else {
+            sseWriteSkipCount++;
+            if (sseWriteSkipCount === 1 || sseWriteSkipCount % 100 === 0) {
+              logger.warn({
+                requestId,
+                endpoint,
+                progressCallCount,
+                sseWriteSkipCount,
+                destroyed: reply.raw.destroyed,
+                disconnected: clientDisconnected
+              }, "Skipped SSE write - stream destroyed or client disconnected");
+            }
           }
         } catch (writeError: any) {
-          logger.warn({ requestId, endpoint, error: writeError?.message }, "Delta write failed");
+          logger.error({ requestId, endpoint, progressCallCount, error: writeError?.message, stack: writeError?.stack }, "Delta write failed with exception");
         }
       }
     );
+    logger.info({ requestId, endpoint, progressCallCount, sseWriteSuccessCount, sseWriteSkipCount }, "evaluateAgentTasks completed");
 
     // Check if client disconnected during evaluation
     if (clientDisconnected || reply.raw.destroyed) {
