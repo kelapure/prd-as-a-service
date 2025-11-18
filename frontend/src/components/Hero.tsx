@@ -1,13 +1,11 @@
+import React, { useState } from "react";
 import { ArrowRight, PlayCircle } from "lucide-react";
 import { Button } from "./ui/button";
 import { VideoModal } from "./VideoModal";
 import { DialogTrigger } from "./ui/dialog";
-import { useState, useEffect } from "react";
 import { HeroBinaryScoreCard } from "./HeroBinaryScoreCard";
 import { HeroFixPlanCard } from "./HeroFixPlanCard";
 import { HeroAgentTasksCard } from "./HeroAgentTasksCard";
-import { loadSpotifyData } from "../lib/spotifyData";
-import type { BinaryScoreOutput, FixPlanOutput, AgentTasksOutput } from "../types/api";
 
 interface HeroProps {
   onEvaluateClick: () => void;
@@ -15,24 +13,6 @@ interface HeroProps {
 
 export function Hero({ onEvaluateClick }: HeroProps) {
   const [videoOpen, setVideoOpen] = useState(false);
-  const [spotifyBinaryScore, setSpotifyBinaryScore] = useState<BinaryScoreOutput | null>(null);
-  const [spotifyFixPlan, setSpotifyFixPlan] = useState<FixPlanOutput | null>(null);
-  const [spotifyAgentTasks, setSpotifyAgentTasks] = useState<AgentTasksOutput | null>(null);
-  const [isLoadingSpotify, setIsLoadingSpotify] = useState(true);
-
-  useEffect(() => {
-    loadSpotifyData()
-      .then((data) => {
-        setSpotifyBinaryScore(data.binaryScore);
-        setSpotifyFixPlan(data.fixPlan);
-        setSpotifyAgentTasks(data.agentTasks);
-        setIsLoadingSpotify(false);
-      })
-      .catch((error) => {
-        console.error('Failed to load Spotify data:', error);
-        setIsLoadingSpotify(false);
-      });
-  }, []);
 
   return (
     <section className="px-6 py-20 max-w-6xl mx-auto grid-background">
@@ -91,9 +71,9 @@ export function Hero({ onEvaluateClick }: HeroProps) {
 
         {/* Three Column Evaluation Cards */}
         <div className="grid md:grid-cols-3 gap-6 md:gap-8 mt-16 md:mt-24 lg:mt-32">
-          <HeroBinaryScoreCard data={spotifyBinaryScore} isLoading={isLoadingSpotify} />
-          <HeroFixPlanCard data={spotifyFixPlan} isLoading={isLoadingSpotify} />
-          <HeroAgentTasksCard data={spotifyAgentTasks} isLoading={isLoadingSpotify} />
+          <HeroBinaryScoreCard data={null} isLoading={true} />
+          <HeroFixPlanCard data={null} isLoading={true} />
+          <HeroAgentTasksCard data={null} isLoading={true} />
         </div>
 
         {/* Trust Indicators */}

@@ -2,6 +2,7 @@ import { Play, AlertTriangle, ArrowRight } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
 import type { AgentTasksOutput } from "../types/api";
+import taskGraphImg from "../assets/task-graph.png";
 
 interface HeroAgentTasksCardProps {
   data: AgentTasksOutput | null;
@@ -34,21 +35,14 @@ const statusConfig: Record<string, { label: string; className: string; icon: any
 export function HeroAgentTasksCard({ data, isLoading }: HeroAgentTasksCardProps) {
   if (isLoading || !data) {
     return (
-      <Card className="h-full flex flex-col shadow-[var(--elevation-sm)] hover:shadow-[var(--elevation-md)] transition-shadow duration-300 bg-card border border-border rounded-[var(--radius-card)]">
-        <CardHeader className="pb-4 border-b border-border/50">
-          <div className="h-6 bg-muted animate-pulse rounded w-3/4" />
-        </CardHeader>
-        <CardContent className="flex-1 pt-6 pb-4 space-y-4">
-          <div className="h-8 bg-muted animate-pulse rounded" />
-          <div className="space-y-3">
-            <div className="h-4 bg-muted animate-pulse rounded" />
-            <div className="h-4 bg-muted animate-pulse rounded w-5/6" />
-            <div className="h-4 bg-muted animate-pulse rounded w-4/6" />
-          </div>
-          <div className="pt-2 border-t border-border/30 mt-4">
-            <div className="h-4 bg-muted animate-pulse rounded w-32" />
-          </div>
-        </CardContent>
+      <Card className="h-full flex flex-col shadow-[var(--elevation-sm)] hover:shadow-[var(--elevation-md)] transition-shadow duration-300 bg-card border border-border rounded-[var(--radius-card)] overflow-hidden">
+        <div className="w-full h-full flex items-center justify-center p-0">
+          <img 
+            src={taskGraphImg} 
+            alt="Agent Tasks Example" 
+            className="w-full h-full object-contain"
+          />
+        </div>
       </Card>
     );
   }

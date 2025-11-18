@@ -2,6 +2,7 @@ import { AlertCircle, ArrowRight } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
 import type { FixPlanOutput } from "../types/api";
+import fixPlanImg from "../assets/fix-plan.png";
 
 interface HeroFixPlanCardProps {
   data: FixPlanOutput | null;
@@ -17,21 +18,14 @@ const priorityColors: Record<string, string> = {
 export function HeroFixPlanCard({ data, isLoading }: HeroFixPlanCardProps) {
   if (isLoading || !data) {
     return (
-      <Card className="h-full flex flex-col shadow-[var(--elevation-sm)] hover:shadow-[var(--elevation-md)] transition-shadow duration-300 bg-card border border-border rounded-[var(--radius-card)]">
-        <CardHeader className="pb-4 border-b border-border/50">
-          <div className="h-6 bg-muted animate-pulse rounded w-3/4" />
-        </CardHeader>
-        <CardContent className="flex-1 pt-6 pb-4 space-y-4">
-          <div className="h-8 bg-muted animate-pulse rounded" />
-          <div className="space-y-3">
-            <div className="h-4 bg-muted animate-pulse rounded" />
-            <div className="h-4 bg-muted animate-pulse rounded w-5/6" />
-            <div className="h-4 bg-muted animate-pulse rounded w-4/6" />
-          </div>
-          <div className="pt-2 border-t border-border/30 mt-4">
-            <div className="h-4 bg-muted animate-pulse rounded w-32" />
-          </div>
-        </CardContent>
+      <Card className="h-full flex flex-col shadow-[var(--elevation-sm)] hover:shadow-[var(--elevation-md)] transition-shadow duration-300 bg-card border border-border rounded-[var(--radius-card)] overflow-hidden">
+        <div className="w-full h-full flex items-center justify-center p-0">
+          <img 
+            src={fixPlanImg} 
+            alt="Fix Plan Example" 
+            className="w-full h-full object-contain"
+          />
+        </div>
       </Card>
     );
   }
