@@ -16,17 +16,16 @@ const priorityColors: Record<string, string> = {
 };
 
 export function HeroFixPlanCard({ data, isLoading }: HeroFixPlanCardProps) {
+  // Always show placeholder image in hero section
   if (isLoading || !data) {
     return (
-      <Card className="h-full flex flex-col shadow-[var(--elevation-sm)] hover:shadow-[var(--elevation-md)] transition-shadow duration-300 bg-card border border-border rounded-[var(--radius-card)] overflow-hidden">
-        <div className="w-full h-full flex items-center justify-center p-0">
-          <img 
-            src={fixPlanImg} 
-            alt="Fix Plan Example" 
-            className="w-full h-full object-contain"
-          />
-        </div>
-      </Card>
+      <div className="h-full w-full overflow-hidden rounded-[var(--radius-card)] shadow-[var(--elevation-sm)]">
+        <img 
+          src={fixPlanImg} 
+          alt="Fix Plan Example" 
+          className="w-full h-full object-cover"
+        />
+      </div>
     );
   }
 

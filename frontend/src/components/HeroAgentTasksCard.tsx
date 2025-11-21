@@ -33,17 +33,16 @@ const statusConfig: Record<string, { label: string; className: string; icon: any
 };
 
 export function HeroAgentTasksCard({ data, isLoading }: HeroAgentTasksCardProps) {
+  // Always show placeholder image in hero section
   if (isLoading || !data) {
     return (
-      <Card className="h-full flex flex-col shadow-[var(--elevation-sm)] hover:shadow-[var(--elevation-md)] transition-shadow duration-300 bg-card border border-border rounded-[var(--radius-card)] overflow-hidden">
-        <div className="w-full h-full flex items-center justify-center p-0">
-          <img 
-            src={taskGraphImg} 
-            alt="Agent Tasks Example" 
-            className="w-full h-full object-contain"
-          />
-        </div>
-      </Card>
+      <div className="h-full w-full overflow-hidden rounded-[var(--radius-card)] shadow-[var(--elevation-sm)]">
+        <img 
+          src={taskGraphImg} 
+          alt="Agent Tasks Example" 
+          className="w-full h-full object-cover"
+        />
+      </div>
     );
   }
 

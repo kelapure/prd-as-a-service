@@ -6,7 +6,7 @@ interface CTASectionProps {
 
 export function CTASection({ onEvaluateClick }: CTASectionProps) {
   return (
-    <section className="px-6 pt-6 pb-20 bg-background">
+    <section className="px-6 pt-6 pb-32 bg-background">
       <div className="text-center space-y-6 max-w-2xl mx-auto">
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Button

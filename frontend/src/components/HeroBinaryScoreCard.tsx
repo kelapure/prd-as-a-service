@@ -10,17 +10,21 @@ interface HeroBinaryScoreCardProps {
 }
 
 export function HeroBinaryScoreCard({ data, isLoading }: HeroBinaryScoreCardProps) {
+  // DEBUG: Always show image in hero
+  console.log('HeroBinaryScoreCard - data:', data, 'isLoading:', isLoading);
+  
   if (isLoading || !data) {
     return (
-      <Card className="h-full flex flex-col shadow-[var(--elevation-sm)] hover:shadow-[var(--elevation-md)] transition-shadow duration-300 bg-card border border-border rounded-[var(--radius-card)] overflow-hidden">
-        <div className="w-full h-full flex items-center justify-center p-0">
-          <img 
-            src={binaryScoreImg} 
-            alt="Binary Score Example" 
-            className="w-full h-full object-contain"
-          />
+      <div style={{border: '10px solid lime', background: 'yellow'}} className="h-full w-full overflow-hidden rounded-[var(--radius-card)] shadow-[var(--elevation-sm)]">
+        <div style={{padding: '20px', color: 'red', fontSize: '40px', fontWeight: 'bold'}}>
+          IMAGE SHOULD BE HERE
         </div>
-      </Card>
+        <img 
+          src={binaryScoreImg} 
+          alt="Binary Score Example" 
+          className="w-full h-full object-cover"
+        />
+      </div>
     );
   }
 

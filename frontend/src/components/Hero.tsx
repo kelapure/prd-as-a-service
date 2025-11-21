@@ -3,9 +3,7 @@ import { ArrowRight, PlayCircle } from "lucide-react";
 import { Button } from "./ui/button";
 import { VideoModal } from "./VideoModal";
 import { DialogTrigger } from "./ui/dialog";
-import { HeroBinaryScoreCard } from "./HeroBinaryScoreCard";
-import { HeroFixPlanCard } from "./HeroFixPlanCard";
-import { HeroAgentTasksCard } from "./HeroAgentTasksCard";
+import { HeroBinaryImage, HeroFixPlanImage, HeroAgentTasksImage } from "./HeroImageCards";
 
 interface HeroProps {
   onEvaluateClick: () => void;
@@ -20,9 +18,9 @@ export function Hero({ onEvaluateClick }: HeroProps) {
         {/* Hero Content with Image */}
         <div className="grid md:grid-cols-2 gap-8 md:gap-16 items-center">
           {/* Left: Text + CTA */}
-          <div className="space-y-6 md:space-y-8 text-center md:text-left">
+          <div className="space-y-6 md:space-y-8 text-left">
             {/* Headline */}
-            <div className="space-y-4 md:space-y-6">
+            <div className="space-y-2 md:space-y-3">
               <h1 className="text-foreground leading-tight">
                 Ship Faster with <span className="text-primary">AI Agent Ready</span> PRDs
               </h1>
@@ -35,15 +33,6 @@ export function Hero({ onEvaluateClick }: HeroProps) {
 
             {/* CTA */}
             <div className="flex flex-col sm:flex-row gap-4 md:gap-6 justify-center md:justify-start pt-2">
-              <Button
-                size="lg"
-                className="gap-3 px-12 py-6 text-lg"
-                onClick={onEvaluateClick}
-              >
-                Evaluate Your PRD
-                <ArrowRight className="w-5 h-5" />
-              </Button>
-
               <VideoModal open={videoOpen} onOpenChange={setVideoOpen}>
                 <DialogTrigger asChild>
                   <Button
@@ -56,6 +45,15 @@ export function Hero({ onEvaluateClick }: HeroProps) {
                   </Button>
                 </DialogTrigger>
               </VideoModal>
+
+              <Button
+                size="lg"
+                className="gap-3 px-12 py-6 text-lg"
+                onClick={onEvaluateClick}
+              >
+                Evaluate Your PRD
+                <ArrowRight className="w-5 h-5" />
+              </Button>
             </div>
           </div>
 
@@ -69,11 +67,24 @@ export function Hero({ onEvaluateClick }: HeroProps) {
           </div>
         </div>
 
-        {/* Three Column Evaluation Cards */}
-        <div className="grid md:grid-cols-3 gap-6 md:gap-8 mt-16 md:mt-24 lg:mt-32">
-          <HeroBinaryScoreCard data={null} isLoading={true} />
-          <HeroFixPlanCard data={null} isLoading={true} />
-          <HeroAgentTasksCard data={null} isLoading={true} />
+        {/* Two Column Asymmetric Evaluation Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 mt-16 md:mt-24 lg:mt-32 items-stretch">
+          {/* Left Column: Binary Score (Sets the height) */}
+          <div className="h-full shadow-[var(--elevation-sm)] rounded-[var(--radius-card)] overflow-hidden">
+            <HeroBinaryImage />
+          </div>
+          
+          {/* Right Column: Stacked cards (Matches left height) */}
+          <div className="flex flex-col gap-6 md:gap-8 h-full">
+            {/* Right Top: Fix Plan (Takes 50% height) */}
+            <div className="flex-1 shadow-[var(--elevation-sm)] rounded-[var(--radius-card)] overflow-hidden">
+              <HeroFixPlanImage />
+            </div>
+            {/* Right Bottom: Agent Tasks (Takes 50% height) */}
+            <div className="flex-1 shadow-[var(--elevation-sm)] rounded-[var(--radius-card)] overflow-hidden">
+              <HeroAgentTasksImage />
+            </div>
+          </div>
         </div>
 
         {/* Trust Indicators */}
