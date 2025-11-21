@@ -34,10 +34,10 @@ export async function registerPaymentRoutes(fastify: FastifyInstance): Promise<v
    * Create Stripe Checkout session for $0.99 payment
    * Protected route - requires valid Firebase ID token
    */
-  fastify.post(
+  fastify.post<{ Body: CreateCheckoutSessionBody }>(
     "/api/payments/create-checkout-session",
     { preHandler: authenticateToken },
-    async (request: FastifyRequest<{ Body: CreateCheckoutSessionBody }>, reply: FastifyReply) => {
+    async (request, reply) => {
       try {
         const { evaluationData } = request.body;
         const uid = request.user!.uid;
@@ -140,13 +140,7 @@ export async function registerPaymentRoutes(fastify: FastifyInstance): Promise<v
    */
   fastify.post(
     "/api/payments/webhook",
-    {
-      config: {
-        // Disable body parsing for webhook - we need raw body for signature verification
-        rawBody: true
-      }
-    },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request, reply) => {
       try {
         const signature = request.headers["stripe-signature"] as string;
 

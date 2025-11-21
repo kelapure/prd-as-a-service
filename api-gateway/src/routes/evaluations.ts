@@ -31,10 +31,10 @@ export async function registerEvaluationRoutes(fastify: FastifyInstance): Promis
    * Save a PRD evaluation (requires payment)
    * Protected route - requires valid Firebase ID token
    */
-  fastify.post(
+  fastify.post<{ Body: SaveEvaluationBody }>(
     "/api/evaluations",
     { preHandler: authenticateToken },
-    async (request: FastifyRequest<{ Body: SaveEvaluationBody }>, reply: FastifyReply) => {
+    async (request, reply) => {
       try {
         const { prdTitle, prdText, binaryScore, fixPlan, agentTasks, isPaid } = request.body;
         const uid = request.user!.uid;
@@ -167,10 +167,10 @@ export async function registerEvaluationRoutes(fastify: FastifyInstance): Promis
    * Protected route - requires valid Firebase ID token
    * Ownership check: user can only access their own evaluations
    */
-  fastify.get(
+  fastify.get<{ Params: { id: string } }>(
     "/api/evaluations/:id",
     { preHandler: authenticateToken },
-    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    async (request, reply) => {
       try {
         const { id } = request.params;
         const uid = request.user!.uid;
@@ -219,10 +219,10 @@ export async function registerEvaluationRoutes(fastify: FastifyInstance): Promis
    * Protected route - requires valid Firebase ID token
    * Ownership check: user can only delete their own evaluations
    */
-  fastify.delete(
+  fastify.delete<{ Params: { id: string } }>(
     "/api/evaluations/:id",
     { preHandler: authenticateToken },
-    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    async (request, reply) => {
       try {
         const { id } = request.params;
         const uid = request.user!.uid;

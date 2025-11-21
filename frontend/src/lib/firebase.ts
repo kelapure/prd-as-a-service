@@ -1,6 +1,7 @@
 // Firebase client SDK initialization
 
 import { initializeApp, FirebaseApp } from "firebase/app";
+import { getAnalytics, Analytics, isSupported } from "firebase/analytics";
 import {
   getAuth,
   Auth,
@@ -15,7 +16,11 @@ import {
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 // Validate required environment variables
@@ -30,6 +35,18 @@ const app: FirebaseApp = initializeApp(firebaseConfig);
 
 // Initialize Firebase Auth
 export const auth: Auth = getAuth(app);
+
+// Initialize Firebase Analytics (only in browser and if supported)
+let analytics: Analytics | null = null;
+if (typeof window !== "undefined") {
+  isSupported().then((supported) => {
+    if (supported) {
+      analytics = getAnalytics(app);
+    }
+  });
+}
+
+export { analytics };
 
 // Google Auth provider
 const googleProvider = new GoogleAuthProvider();

@@ -20,10 +20,10 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
    * Create or update user profile
    * Protected route - requires valid Firebase ID token
    */
-  fastify.post(
+  fastify.post<{ Body: RegisterBody }>(
     "/api/auth/register",
     { preHandler: authenticateToken },
-    async (request: FastifyRequest<{ Body: RegisterBody }>, reply: FastifyReply) => {
+    async (request, reply) => {
       try {
         const { firstName, lastName, email } = request.body;
         const uid = request.user!.uid;
