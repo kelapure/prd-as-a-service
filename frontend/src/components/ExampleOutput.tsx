@@ -1,14 +1,17 @@
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { CheckCircle2, XCircle, ChevronDown, ChevronUp, Download, Loader2 } from "lucide-react";
+import { CheckCircle2, XCircle, ChevronDown, ChevronUp, Download, Loader2, Lock } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { useState } from "react";
 import { exportBinaryScoreAsMarkdown, downloadMarkdownFile } from "../lib/exportMarkdown";
+import { PaymentDialog } from "./PaymentDialog";
+import { useAuth } from "../contexts/AuthContext";
 import type { BinaryScoreOutput } from "../types/api";
 
 interface ExampleOutputProps {
   data: BinaryScoreOutput | null;
   isLoading?: boolean;
+  prdText?: string;
 }
 
 // Individual criterion component with collapsible rationale/evidence
@@ -85,7 +88,11 @@ function CriterionItem({ criterion }: { criterion: BinaryScoreOutput['criteria']
   );
 }
 
-export function ExampleOutput({ data, isLoading }: ExampleOutputProps) {
+export function ExampleOutput({ data, isLoading, prdText }: ExampleOutputProps) {
+  const { user } = useAuth();
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [isPaid] = useState(false); // TODO: Track paid status per evaluation
+
   // Use real data if available, otherwise show placeholder
   const criteria = data?.criteria || [];
   const passCount = data?.pass_count || 0;
@@ -96,9 +103,32 @@ export function ExampleOutput({ data, isLoading }: ExampleOutputProps) {
 
   const handleExport = () => {
     if (!data) return;
+    
+    // If not paid and has data, show payment dialog
+    if (!isPaid && user) {
+      setPaymentDialogOpen(true);
+      return;
+    }
+
+    // If not signed in, prompt to sign in first
+    if (!user) {
+      setPaymentDialogOpen(true);
+      return;
+    }
+
+    // User is signed in and paid - allow export
     const markdown = exportBinaryScoreAsMarkdown(data);
     downloadMarkdownFile(markdown, 'prd-binary-score.md');
   };
+
+  // Prepare evaluation data for payment
+  const evaluationData = data && prdText ? {
+    prdTitle: data.prd_title || "PRD Evaluation",
+    prdText,
+    binaryScore: data,
+    fixPlan: {} as any, // Will be filled by parent
+    agentTasks: {} as any // Will be filled by parent
+  } : null;
 
   return (
     <section id="binary-score" className="px-6 py-20 max-w-6xl mx-auto">
@@ -170,19 +200,35 @@ export function ExampleOutput({ data, isLoading }: ExampleOutputProps) {
               </p>
               {data && (
                 <Button
-                  variant="outline"
+                  variant={isPaid ? "outline" : "default"}
                   size="sm"
                   onClick={handleExport}
                   className="gap-2"
                 >
-                  <Download className="w-4 h-4" />
-                  Export Binary Score
+                  {isPaid ? (
+                    <>
+                      <Download className="w-4 h-4" />
+                      Export Binary Score
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="w-4 h-4" />
+                      Unlock Export ($0.99)
+                    </>
+                  )}
                 </Button>
               )}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Payment Dialog */}
+      <PaymentDialog
+        open={paymentDialogOpen}
+        onOpenChange={setPaymentDialogOpen}
+        evaluationData={evaluationData}
+      />
     </section>
   );
 }

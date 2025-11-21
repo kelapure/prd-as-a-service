@@ -1,9 +1,11 @@
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { AlertCircle, TrendingUp, FileText, Loader2, Download, ChevronDown, ChevronUp, ListOrdered, CheckSquare } from "lucide-react";
+import { AlertCircle, TrendingUp, FileText, Loader2, Download, ChevronDown, ChevronUp, ListOrdered, CheckSquare, Lock } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { useState } from "react";
 import { exportFixPlanAsMarkdown, downloadMarkdownFile } from "../lib/exportMarkdown";
+import { PaymentDialog } from "./PaymentDialog";
+import { useAuth } from "../contexts/AuthContext";
 import type { FixPlanOutput } from "../types/api";
 
 const priorityColors: Record<string, string> = {
@@ -21,6 +23,7 @@ const effortLabels: Record<string, string> = {
 interface FixPlanExampleProps {
   data: FixPlanOutput | null;
   isLoading?: boolean;
+  prdText?: string;
 }
 
 // Individual fix plan item component with collapsible details
@@ -119,7 +122,11 @@ function FixPlanItem({ item }: { item: FixPlanOutput['items'][0] }) {
   );
 }
 
-export function FixPlanExample({ data, isLoading }: FixPlanExampleProps) {
+export function FixPlanExample({ data, isLoading, prdText }: FixPlanExampleProps) {
+  const { user } = useAuth();
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [isPaid] = useState(false); // TODO: Track paid status per evaluation
+
   const items = data?.items || [];
   const p0Count = items.filter(item => item.priority === "P0").length;
   const p1Count = items.filter(item => item.priority === "P1").length;
@@ -127,9 +134,26 @@ export function FixPlanExample({ data, isLoading }: FixPlanExampleProps) {
 
   const handleExport = () => {
     if (!data) return;
+    
+    // If not paid, show payment dialog
+    if (!isPaid) {
+      setPaymentDialogOpen(true);
+      return;
+    }
+
+    // User is signed in and paid - allow export
     const markdown = exportFixPlanAsMarkdown(data);
     downloadMarkdownFile(markdown, 'prd-fix-plan.md');
   };
+
+  // Prepare evaluation data for payment
+  const evaluationData = data && prdText ? {
+    prdTitle: "PRD Evaluation",
+    prdText,
+    binaryScore: {} as any,
+    fixPlan: data,
+    agentTasks: {} as any
+  } : null;
 
   return (
     <section id="fix-plan" className="px-6 py-20 bg-background">
@@ -195,17 +219,33 @@ export function FixPlanExample({ data, isLoading }: FixPlanExampleProps) {
           {data && items.length > 0 && (
             <div className="flex justify-center">
               <Button
-                variant="outline"
+                variant={isPaid ? "outline" : "default"}
                 onClick={handleExport}
                 className="gap-2"
               >
-                <Download className="w-4 h-4" />
-                Export Fix Plan
+                {isPaid ? (
+                  <>
+                    <Download className="w-4 h-4" />
+                    Export Fix Plan
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-4 h-4" />
+                    Unlock Export ($0.99)
+                  </>
+                )}
               </Button>
             </div>
           )}
         </div>
       </div>
+
+      {/* Payment Dialog */}
+      <PaymentDialog
+        open={paymentDialogOpen}
+        onOpenChange={setPaymentDialogOpen}
+        evaluationData={evaluationData}
+      />
     </section>
   );
 }

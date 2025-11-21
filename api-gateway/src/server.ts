@@ -12,6 +12,11 @@ import { evaluateFixPlan } from "./evaluators/fixPlan.js";
 import { evaluateAgentTasks } from "./evaluators/agentTasks.js";
 import { hashString } from "./lib/util.js";
 
+// Auth and payment routes
+import { registerAuthRoutes } from "./routes/auth.js";
+import { registerEvaluationRoutes } from "./routes/evaluations.js";
+import { registerPaymentRoutes } from "./routes/payments.js";
+
 dotenv.config();
 
 const logger = pino({ level: process.env.LOG_LEVEL || "info" });
@@ -41,6 +46,11 @@ await fastify.register(rateLimit, {
   max: Number(process.env.RATE_LIMIT_MAX) || 60,
   timeWindow: Number(process.env.RATE_LIMIT_WINDOW_MS) || 60000
 });
+
+// Register auth and payment routes
+await registerAuthRoutes(fastify);
+await registerEvaluationRoutes(fastify);
+await registerPaymentRoutes(fastify);
 
 // Generate unique request ID
 function generateRequestId(): string {
@@ -87,8 +97,10 @@ function writeSSEError(reply: any, requestId: string, error: any, endpoint: stri
   }
 }
 
-// Handle body parsing errors
-fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+// Handle body parsing errors with raw body support for webhooks
+fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (req: any, body, done) => {
+  // Store raw body for webhook signature verification
+  req.rawBody = body;
   try {
     const json = JSON.parse(body as string);
     done(null, json);

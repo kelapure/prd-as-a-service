@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import mermaid from "mermaid";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { CheckSquare, Play, Flag, AlertTriangle, Clock, Loader2, Download } from "lucide-react";
+import { CheckSquare, Play, Flag, AlertTriangle, Clock, Loader2, Download, Lock } from "lucide-react";
 import { exportAgentTasksAsMarkdown, downloadMarkdownFile } from "../lib/exportMarkdown";
+import { PaymentDialog } from "./PaymentDialog";
+import { useAuth } from "../contexts/AuthContext";
 import type { AgentTasksOutput } from "../types/api";
 
 const statusConfig: Record<string, { label: string; className: string; icon: any }> = {
@@ -32,9 +34,13 @@ const statusConfig: Record<string, { label: string; className: string; icon: any
 interface AgentTasksExampleProps {
   data: AgentTasksOutput | null;
   isLoading?: boolean;
+  prdText?: string;
 }
 
-export function AgentTasksExample({ data, isLoading }: AgentTasksExampleProps) {
+export function AgentTasksExample({ data, isLoading, prdText }: AgentTasksExampleProps) {
+  const { user } = useAuth();
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [isPaid] = useState(false); // TODO: Track paid status per evaluation
   const tasks = data?.tasks || [];
   const totalHours = tasks.reduce((sum, task) => sum + task.est_hours, 0);
   const mermaidContainerRef = useRef<HTMLDivElement | null>(null);
@@ -97,9 +103,26 @@ export function AgentTasksExample({ data, isLoading }: AgentTasksExampleProps) {
 
   const handleExport = () => {
     if (!data) return;
+    
+    // If not paid, show payment dialog
+    if (!isPaid) {
+      setPaymentDialogOpen(true);
+      return;
+    }
+
+    // User is signed in and paid - allow export
     const markdown = exportAgentTasksAsMarkdown(data);
     downloadMarkdownFile(markdown, 'prd-agent-tasks.md');
   };
+
+  // Prepare evaluation data for payment
+  const evaluationData = data && prdText ? {
+    prdTitle: "PRD Evaluation",
+    prdText,
+    binaryScore: {} as any,
+    fixPlan: {} as any,
+    agentTasks: data
+  } : null;
 
   return (
     <section id="agent-tasks" className="px-6 py-20 bg-background">
@@ -307,17 +330,33 @@ export function AgentTasksExample({ data, isLoading }: AgentTasksExampleProps) {
           {data && tasks.length > 0 && (
             <div className="flex justify-center">
               <Button
-                variant="outline"
+                variant={isPaid ? "outline" : "default"}
                 onClick={handleExport}
                 className="gap-2"
               >
-                <Download className="w-4 h-4" />
-                Export Task Graph
+                {isPaid ? (
+                  <>
+                    <Download className="w-4 h-4" />
+                    Export Task Graph
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-4 h-4" />
+                    Unlock Export ($0.99)
+                  </>
+                )}
               </Button>
             </div>
           )}
         </div>
       </div>
+
+      {/* Payment Dialog */}
+      <PaymentDialog
+        open={paymentDialogOpen}
+        onOpenChange={setPaymentDialogOpen}
+        evaluationData={evaluationData}
+      />
     </section>
   );
 }
