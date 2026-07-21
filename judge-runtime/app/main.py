@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import logging
 import os
@@ -34,7 +35,7 @@ def _sse(event: str, payload: dict[str, object]) -> str:
 
 def _check_internal_token(value: str | None) -> None:
     expected = os.environ.get("INTERNAL_SERVICE_TOKEN", "").strip()
-    if expected and value != expected:
+    if expected and not hmac.compare_digest((value or "").encode("utf-8"), expected.encode("utf-8")):
         raise HTTPException(status_code=403, detail="Forbidden")
 
 

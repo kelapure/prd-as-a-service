@@ -8,12 +8,17 @@ from pathlib import Path
 
 import fitz
 from docx import Document
+from PIL import Image
 
 
 MAX_TOTAL_BYTES = 25 * 1024 * 1024
 MAX_PAGES = 200
 MAX_TEXT_CHARS = 250_000
 MAX_IMAGES = 12
+MAX_IMAGE_DIMENSION = 1568
+MAX_IMAGE_BYTES = 4 * 1024 * 1024
+MAX_SOURCE_IMAGE_PIXELS = 48_000_000
+PDF_RENDER_ZOOM = 1.35
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".md", ".txt"}
 IMAGE_MIME_BY_SUFFIX = {
     ".png": "image/png",
@@ -45,6 +50,36 @@ class ExtractedDocument:
     sections: list[str] = field(default_factory=list)
     images: list[ExtractedImage] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+
+
+def _bounded_image(data: bytes, media_type: str, locator: str, warnings: list[str]) -> ExtractedImage | None:
+    """Enforce pixel, dimension, and byte caps before an image reaches the model request."""
+    try:
+        with Image.open(io.BytesIO(data)) as source:
+            width, height = source.size
+            if width * height > MAX_SOURCE_IMAGE_PIXELS:
+                warnings.append(f"Skipped an oversized figure at {locator}.")
+                return None
+            if max(width, height) <= MAX_IMAGE_DIMENSION and len(data) <= MAX_IMAGE_BYTES:
+                return ExtractedImage(data=data, media_type=media_type, locator=locator)
+            image = source.convert("RGB")
+        if max(width, height) > MAX_IMAGE_DIMENSION:
+            scale = MAX_IMAGE_DIMENSION / max(width, height)
+            image = image.resize((max(1, round(width * scale)), max(1, round(height * scale))))
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG", optimize=True)
+        encoded, encoded_type = buffer.getvalue(), "image/png"
+        if len(encoded) > MAX_IMAGE_BYTES:
+            buffer = io.BytesIO()
+            image.save(buffer, format="JPEG", quality=85)
+            encoded, encoded_type = buffer.getvalue(), "image/jpeg"
+        if len(encoded) > MAX_IMAGE_BYTES:
+            warnings.append(f"Skipped an oversized figure at {locator}.")
+            return None
+        return ExtractedImage(data=encoded, media_type=encoded_type, locator=locator)
+    except Exception:
+        warnings.append(f"Skipped an unreadable figure at {locator}.")
+        return None
 
 
 def validate_filename(name: str) -> str:
@@ -123,14 +158,19 @@ def _extract_pdf(name: str, data: bytes) -> ExtractedDocument:
             evidence_pages.append(text)
         should_render = len(text) < 80 or bool(page.get_images(full=True))
         if should_render and len(images) < MAX_IMAGES:
-            pixmap = page.get_pixmap(matrix=fitz.Matrix(1.35, 1.35), alpha=False)
-            images.append(
-                ExtractedImage(
-                    data=pixmap.tobytes("png"),
-                    media_type="image/png",
-                    locator=f"{name}, page {page_number}",
-                )
+            zoom = PDF_RENDER_ZOOM
+            long_edge = max(page.rect.width, page.rect.height)
+            if long_edge * zoom > MAX_IMAGE_DIMENSION:
+                zoom = MAX_IMAGE_DIMENSION / long_edge
+            pixmap = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
+            rendered = _bounded_image(
+                pixmap.tobytes("png"),
+                "image/png",
+                f"{name}, page {page_number}",
+                warnings,
             )
+            if rendered:
+                images.append(rendered)
 
     combined = f"[Source: {name}]\n" + "\n\n".join(pages)
     if len(combined) > MAX_TEXT_CHARS:
@@ -217,13 +257,14 @@ def _extract_docx(name: str, data: bytes) -> ExtractedDocument:
         if len(images) >= MAX_IMAGES:
             warnings.append("Figure-aware review was limited to the first 12 embedded images.")
             break
-        images.append(
-            ExtractedImage(
-                data=archive.read(member),
-                media_type=media_type,
-                locator=f"{name}, embedded figure {len(images) + 1}",
-            )
+        embedded = _bounded_image(
+            archive.read(member),
+            media_type,
+            f"{name}, embedded figure {len(images) + 1}",
+            warnings,
         )
+        if embedded:
+            images.append(embedded)
 
     combined = "\n".join(blocks).strip()
     if len(combined) > MAX_TEXT_CHARS:

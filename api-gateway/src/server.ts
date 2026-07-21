@@ -3,7 +3,7 @@ import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import dotenv from "dotenv";
 import Fastify, { type FastifyInstance } from "fastify";
-import { GoogleAuth } from "google-auth-library";
+import { GoogleAuth, type IdTokenClient } from "google-auth-library";
 import { pathToFileURL } from "node:url";
 import { fetch, File, FormData, type Response } from "undici";
 
@@ -45,13 +45,31 @@ function sse(event: string, payload: Record<string, unknown>): string {
   return `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
 }
 
+const googleAuth = new GoogleAuth();
+const idTokenClients = new Map<string, Promise<IdTokenClient>>();
+
+export function idTokenClientForAudience(
+  audience: string,
+  factory: (aud: string) => Promise<IdTokenClient> = (aud) => googleAuth.getIdTokenClient(aud),
+): Promise<IdTokenClient> {
+  let client = idTokenClients.get(audience);
+  if (!client) {
+    client = factory(audience);
+    client.catch(() => {
+      if (idTokenClients.get(audience) === client) idTokenClients.delete(audience);
+    });
+    idTokenClients.set(audience, client);
+  }
+  return client;
+}
+
 async function runtimeHeaders(runtimeUrl: string): Promise<Record<string, string>> {
   const headers: Record<string, string> = {};
   const token = process.env.INTERNAL_SERVICE_TOKEN?.trim();
   if (token) headers["x-internal-service-token"] = token;
   if (process.env.USE_GOOGLE_IDENTITY_TOKEN === "true") {
     const audience = process.env.PRD_JUDGE_RUNTIME_AUDIENCE || runtimeUrl;
-    const client = await new GoogleAuth().getIdTokenClient(audience);
+    const client = await idTokenClientForAudience(audience);
     headers.authorization = `Bearer ${await client.idTokenProvider.fetchIdToken(audience)}`;
   }
   return headers;
@@ -76,9 +94,11 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   const dailyLimit = Number(process.env.DAILY_RUN_LIMIT || 100);
   const evaluationsEnabled = process.env.EVALUATIONS_ENABLED !== "false";
   const requestTimeoutMs = Number(process.env.EVALUATION_TIMEOUT_MS || 150_000);
+  const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS || 0);
   let daily: DailyCounter = { day: now().toISOString().slice(0, 10), count: 0 };
 
   const server = Fastify({
+    trustProxy: Number.isInteger(trustProxyHops) && trustProxyHops > 0 ? trustProxyHops : false,
     logger: {
       level: process.env.LOG_LEVEL || "info",
       redact: {

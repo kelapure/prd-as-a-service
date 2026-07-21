@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import io
 import os
@@ -9,11 +10,19 @@ from unittest.mock import patch
 import fitz
 from fastapi.testclient import TestClient
 from docx import Document
+from PIL import Image
 
 from app.bundle import BUNDLE, RUBRIC_SHA256, TOOLS
-from app.extraction import ExtractedDocument, InputError, extract_document, extract_pasted_text
+from app.extraction import (
+    MAX_IMAGE_DIMENSION,
+    ExtractedDocument,
+    InputError,
+    extract_document,
+    extract_pasted_text,
+)
 from app.judge import (
     EvaluationError,
+    PrdJudge,
     RuntimeConfig,
     _artifact_content,
     _judge_system_prompt,
@@ -97,6 +106,163 @@ class ExtractionTests(unittest.TestCase):
         self.assertIn("Handling time", document.evidence_text)
 
 
+class ImageBoundTests(unittest.TestCase):
+    def test_huge_pdf_page_renders_within_bounded_dimensions(self) -> None:
+        pdf = fitz.open()
+        pdf.new_page(width=10_000, height=10_000)
+        document = extract_document("poster.pdf", pdf.tobytes())
+        self.assertEqual(len(document.images), 1)
+        self.assertEqual(document.images[0].locator, "poster.pdf, page 1")
+        with Image.open(io.BytesIO(document.images[0].data)) as rendered:
+            self.assertLessEqual(max(rendered.size), MAX_IMAGE_DIMENSION)
+
+    def test_oversized_docx_figure_is_downscaled_with_locator(self) -> None:
+        source = Document()
+        source.add_paragraph("The workflow needs a quantified baseline and target. " * 3)
+        figure = io.BytesIO()
+        Image.new("RGB", (3000, 2000), (10, 20, 30)).save(figure, format="PNG")
+        figure.seek(0)
+        source.add_picture(figure)
+        stream = io.BytesIO()
+        source.save(stream)
+        document = extract_document("figures.docx", stream.getvalue())
+        self.assertEqual(len(document.images), 1)
+        self.assertEqual(document.images[0].locator, "figures.docx, embedded figure 1")
+        self.assertIn(document.images[0].media_type, {"image/png", "image/jpeg"})
+        with Image.open(io.BytesIO(document.images[0].data)) as embedded:
+            self.assertLessEqual(max(embedded.size), MAX_IMAGE_DIMENSION)
+
+    def test_absurd_pixel_docx_figure_is_skipped_with_warning(self) -> None:
+        source = Document()
+        source.add_paragraph("The workflow needs a quantified baseline and target. " * 3)
+        figure = io.BytesIO()
+        Image.new("RGB", (100, 100), (10, 20, 30)).save(figure, format="PNG")
+        figure.seek(0)
+        source.add_picture(figure)
+        stream = io.BytesIO()
+        source.save(stream)
+        with patch("app.extraction.MAX_SOURCE_IMAGE_PIXELS", 1_000):
+            document = extract_document("bomb.docx", stream.getvalue())
+        self.assertEqual(document.images, [])
+        self.assertTrue(any("Skipped an oversized figure" in warning for warning in document.warnings))
+
+
+class ConcurrentEvaluationTests(unittest.TestCase):
+    def _judge(self) -> PrdJudge:
+        config = RuntimeConfig(
+            mode="model", model="candidate-model", allowed_models=frozenset({"candidate-model"})
+        )
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
+            return PrdJudge(config)
+
+    def _primary(self) -> ExtractedDocument:
+        return extract_pasted_text("# PRD\n" + "A measurable workflow requirement. " * 10)
+
+    def test_judge_and_rubric_model_calls_run_concurrently(self) -> None:
+        primary = self._primary()
+
+        async def scenario():
+            judge = self._judge()
+            judge_started = asyncio.Event()
+            rubric_started = asyncio.Event()
+
+            async def fake_judge(documents, preflight):
+                judge_started.set()
+                await asyncio.wait_for(rubric_started.wait(), timeout=5)
+                return PrdJudge._fixture_report(primary)
+
+            async def fake_rubric(documents, preflight):
+                rubric_started.set()
+                await asyncio.wait_for(judge_started.wait(), timeout=5)
+                return PrdJudge._fixture_rubric(primary)
+
+            try:
+                with (
+                    patch.object(judge, "_run_judge_model", fake_judge),
+                    patch.object(judge, "_run_rubric_model", fake_rubric),
+                ):
+                    return await asyncio.wait_for(
+                        judge.evaluate([primary], lambda phase, message: None), timeout=10
+                    )
+            finally:
+                await judge.close()
+
+        envelope = asyncio.run(scenario())
+        self.assertEqual(envelope.report.verdict, "REVISE")
+        self.assertEqual(len(envelope.rubric.criteria), 12)
+        self.assertFalse(envelope.validation["model_fallback_used"])
+
+    def test_cancellation_reaches_both_model_calls(self) -> None:
+        primary = self._primary()
+
+        async def scenario():
+            judge = self._judge()
+            judge_started = asyncio.Event()
+            rubric_started = asyncio.Event()
+            observed = {"judge": False, "rubric": False}
+
+            async def fake_judge(documents, preflight):
+                judge_started.set()
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    observed["judge"] = True
+                    raise
+
+            async def fake_rubric(documents, preflight):
+                rubric_started.set()
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    observed["rubric"] = True
+                    raise
+
+            try:
+                with (
+                    patch.object(judge, "_run_judge_model", fake_judge),
+                    patch.object(judge, "_run_rubric_model", fake_rubric),
+                ):
+                    task = asyncio.create_task(judge.evaluate([primary], lambda phase, message: None))
+                    await asyncio.wait_for(judge_started.wait(), timeout=5)
+                    await asyncio.wait_for(rubric_started.wait(), timeout=5)
+                    task.cancel()
+                    with self.assertRaises(asyncio.CancelledError):
+                        await task
+            finally:
+                await judge.close()
+            return observed
+
+        observed = asyncio.run(scenario())
+        self.assertTrue(observed["judge"])
+        self.assertTrue(observed["rubric"])
+
+    def test_rubric_failure_still_raises_a_plain_evaluation_error(self) -> None:
+        primary = self._primary()
+
+        async def scenario():
+            judge = self._judge()
+
+            async def fake_judge(documents, preflight):
+                return PrdJudge._fixture_report(primary)
+
+            async def fake_rubric(documents, preflight):
+                raise EvaluationError("Rubric v2 output failed schema validation")
+
+            try:
+                with (
+                    patch.object(judge, "_run_judge_model", fake_judge),
+                    patch.object(judge, "_run_rubric_model", fake_rubric),
+                ):
+                    await asyncio.wait_for(
+                        judge.evaluate([primary], lambda phase, message: None), timeout=10
+                    )
+            finally:
+                await judge.close()
+
+        with self.assertRaisesRegex(EvaluationError, "Rubric v2"):
+            asyncio.run(scenario())
+
+
 class PromptIsolationTests(unittest.TestCase):
     def test_hostile_document_instruction_stays_untrusted_data(self) -> None:
         document = ExtractedDocument(
@@ -125,6 +291,16 @@ class RuntimeApiTests(unittest.TestCase):
         self.assertTrue(payload["configured"])
         self.assertEqual(payload["judge_version"], BUNDLE.judge_version)
         self.assertEqual(payload["rubric_sha256"], RUBRIC_SHA256)
+
+    def test_internal_token_check_rejects_wrong_and_missing_tokens(self) -> None:
+        with patch.dict(os.environ, {"INTERNAL_SERVICE_TOKEN": "expected-secret"}):
+            self.assertEqual(self.client.get("/health").status_code, 403)
+            wrong = self.client.get("/health", headers={"x-internal-service-token": "wrong"})
+            self.assertEqual(wrong.status_code, 403)
+            right = self.client.get(
+                "/health", headers={"x-internal-service-token": "expected-secret"}
+            )
+            self.assertEqual(right.status_code, 200)
 
     def test_evaluate_stream_returns_valid_versioned_envelope(self) -> None:
         body = "# Claims workflow PRD\n" + "Claims representatives need measurable handling-time targets. " * 8

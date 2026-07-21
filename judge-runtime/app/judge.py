@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
@@ -194,23 +195,38 @@ class PrdJudge:
         preflight = TOOLS.preflight(primary.text, primary.name)
 
         progress("forming_judgment", "Forming the evidence-backed judgment")
-        if self.config.mode == "fixture":
-            report_data = self._fixture_report(primary)
-        else:
-            report_data = await self._run_judge_model(documents, preflight)
 
-        progress("validating_report", "Validating evidence and report consistency")
-        report_data, validation = await self._validate_or_repair(
-            report_data, documents, preflight, reference_text
-        )
-        report = JudgeReport.model_validate(report_data)
-        score_raw = TOOLS.score(report.model_dump(mode="json"))
+        async def judge_pipeline() -> tuple[JudgeReport, dict[str, Any], dict[str, Any]]:
+            if self.config.mode == "fixture":
+                report_data = self._fixture_report(primary)
+            else:
+                report_data = await self._run_judge_model(documents, preflight)
+            progress("validating_report", "Validating evidence and report consistency")
+            validated, validation = await self._validate_or_repair(
+                report_data, documents, preflight, reference_text
+            )
+            report = JudgeReport.model_validate(validated)
+            score_raw = TOOLS.score(report.model_dump(mode="json"))
+            return report, score_raw, validation
 
-        if self.config.mode == "fixture":
-            rubric = self._fixture_rubric(primary)
-        else:
-            rubric = await self._run_rubric_model(documents, preflight)
-        self._verify_rubric_evidence(rubric, reference_text)
+        async def rubric_pipeline() -> RubricDiagnostic:
+            if self.config.mode == "fixture":
+                rubric = self._fixture_rubric(primary)
+            else:
+                rubric = await self._run_rubric_model(documents, preflight)
+            self._verify_rubric_evidence(rubric, reference_text)
+            return rubric
+
+        judge_task = asyncio.create_task(judge_pipeline())
+        rubric_task = asyncio.create_task(rubric_pipeline())
+        try:
+            report, score_raw, validation = await judge_task
+            rubric = await rubric_task
+        except BaseException:
+            judge_task.cancel()
+            rubric_task.cancel()
+            await asyncio.gather(judge_task, rubric_task, return_exceptions=True)
+            raise
 
         elapsed_ms = round((time.time() - started) * 1000)
         warnings = [warning for document in documents for warning in document.warnings]

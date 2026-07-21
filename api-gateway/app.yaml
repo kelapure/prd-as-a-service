@@ -15,6 +15,9 @@ env_variables:
   ALLOWED_ORIGIN: https://evalgpt.com
   RATE_LIMIT_MAX: "5"
   RATE_LIMIT_WINDOW_MS: "3600000"
+  # App Engine appends "client-ip, forwarding-ip" to X-Forwarded-For; trust
+  # exactly those two hops so rate limiting keys on the real client address.
+  TRUST_PROXY_HOPS: "2"
   DAILY_RUN_LIMIT: "100"
   EVALUATIONS_ENABLED: "true"
   EVALUATION_TIMEOUT_MS: "150000"
