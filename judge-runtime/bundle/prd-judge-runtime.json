@@ -1,7 +1,7 @@
 {
   "schema_version": "prd-judge-runtime-bundle/v1",
   "judge_version": "prd-judge-public-beta-v1",
-  "source_commit": "fa3f7cd3d34e2cedc84f53af7e41af23a6196a01",
+  "source_commit": "675063d05c414af7e6982dfa4a6c194c399c2ab8",
   "manifest_sha256": "0720fd773155ba13b702e469607d37247ea00d2bb001ca47a82adf6fdd0b0c85",
   "files": [
     {

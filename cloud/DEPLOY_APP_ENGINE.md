@@ -37,7 +37,7 @@ Set a unique release identifier and the exact model that won the adjudicated bak
     export RELEASE_ID="prd-judge-beta-$(git rev-parse --short HEAD)"
     export IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/evalgpt/prd-judge-runtime:$RELEASE_ID"
     export APPROVED_MODEL="<validated-model-id>"
-    export APPROVED_JUDGE_COMMIT="fa3f7cd3d34e2cedc84f53af7e41af23a6196a01"
+    export APPROVED_JUDGE_COMMIT="675063d05c414af7e6982dfa4a6c194c399c2ab8"
     export APPROVED_JUDGE_MANIFEST="0720fd773155ba13b702e469607d37247ea00d2bb001ca47a82adf6fdd0b0c85"
 
 Create or identify a least-privilege runtime service account. Give it access only to the Anthropic API key secret.
