@@ -1,1120 +1,346 @@
-// API Gateway - HTTP endpoints for EvalPRD evaluation tools
-
-import Fastify from "fastify";
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
-import pino from "pino";
 import dotenv from "dotenv";
-
-// Direct evaluation imports
-import { evaluateBinaryScore } from "./evaluators/binaryScore.js";
-import { evaluateFixPlan } from "./evaluators/fixPlan.js";
-import { evaluateAgentTasks } from "./evaluators/agentTasks.js";
-import { hashString } from "./lib/util.js";
-
-// Auth and payment routes
-import { registerAuthRoutes } from "./routes/auth.js";
-import { registerEvaluationRoutes } from "./routes/evaluations.js";
-import { registerPaymentRoutes } from "./routes/payments.js";
+import Fastify, { type FastifyInstance } from "fastify";
+import { GoogleAuth } from "google-auth-library";
+import { pathToFileURL } from "node:url";
+import { fetch, File, FormData, type Response } from "undici";
 
 dotenv.config();
 
-const logger = pino({ level: process.env.LOG_LEVEL || "info" });
+const MAX_TOTAL_BYTES = 25 * 1024 * 1024;
+const MAX_SUPPORTING_FILES = 5;
+const ALLOWED_EXTENSIONS = new Set([".pdf", ".docx", ".md", ".txt"]);
+const DEFAULT_ALLOWED_ORIGIN = "http://localhost:3000";
+const DEFAULT_RUNTIME_URL = "http://127.0.0.1:8092";
 
-const PORT = Number(process.env.PORT) || 8080;
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || "http://localhost:3001";
-
-// Create Fastify instance with body size limit
-const fastify = Fastify({
-  logger: {
-    level: process.env.LOG_LEVEL || "info"
-  },
-  bodyLimit: 100 * 1024 * 1024, // 100MB limit for large PRDs
-  requestIdLogLabel: 'requestId',
-  requestIdHeader: 'x-request-id'
-});
-
-// Register CORS with additional headers for SSE
-await fastify.register(cors, {
-  origin: ALLOWED_ORIGIN,
-  credentials: true,
-  exposedHeaders: ["Content-Type", "Cache-Control", "Connection"]
-});
-
-// Register rate limiting
-await fastify.register(rateLimit, {
-  max: Number(process.env.RATE_LIMIT_MAX) || 60,
-  timeWindow: Number(process.env.RATE_LIMIT_WINDOW_MS) || 60000
-});
-
-// Register auth and payment routes
-await registerAuthRoutes(fastify);
-await registerEvaluationRoutes(fastify);
-await registerPaymentRoutes(fastify);
-
-// Generate unique request ID
-function generateRequestId(): string {
-  return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+interface UploadedPart {
+  fieldname: "prd" | "supporting_files";
+  filename: string;
+  mimetype: string;
+  data: Buffer;
 }
 
-// Helper function to safely write SSE error response
-function writeSSEError(reply: any, requestId: string, error: any, endpoint: string): void {
-  try {
-    // Check if stream is already destroyed
-    if (reply.raw.destroyed || reply.raw.closed) {
-      logger.warn({ requestId, endpoint, error: error?.message }, "Cannot write SSE error: stream already destroyed");
-      return;
-    }
+interface BuildServerOptions {
+  runtimeFetch?: typeof fetch;
+  now?: () => Date;
+}
 
-    if (!reply.raw.headersSent) {
-      reply.raw.writeHead(200, {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
-        "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
-        "Access-Control-Allow-Credentials": "true"
+interface DailyCounter {
+  day: string;
+  count: number;
+}
+
+function extension(filename: string): string {
+  const dot = filename.lastIndexOf(".");
+  return dot >= 0 ? filename.slice(dot).toLowerCase() : "";
+}
+
+function safeFilename(filename: string): string {
+  return filename.split(/[\\/]/).pop() || "upload";
+}
+
+function sse(event: string, payload: Record<string, unknown>): string {
+  return `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
+}
+
+async function runtimeHeaders(runtimeUrl: string): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {};
+  const token = process.env.INTERNAL_SERVICE_TOKEN?.trim();
+  if (token) headers["x-internal-service-token"] = token;
+  if (process.env.USE_GOOGLE_IDENTITY_TOKEN === "true") {
+    const audience = process.env.PRD_JUDGE_RUNTIME_AUDIENCE || runtimeUrl;
+    const client = await new GoogleAuth().getIdTokenClient(audience);
+    headers.authorization = `Bearer ${await client.idTokenProvider.fetchIdToken(audience)}`;
+  }
+  return headers;
+}
+
+async function runtimeHealth(runtimeFetch: typeof fetch): Promise<Response> {
+  const runtimeUrl = process.env.PRD_JUDGE_RUNTIME_URL || DEFAULT_RUNTIME_URL;
+  return runtimeFetch(`${runtimeUrl}/health`, {
+    headers: await runtimeHeaders(runtimeUrl),
+    signal: AbortSignal.timeout(5_000),
+  });
+}
+
+export async function buildServer(options: BuildServerOptions = {}): Promise<FastifyInstance> {
+  const runtimeFetch = options.runtimeFetch || fetch;
+  const now = options.now || (() => new Date());
+  const allowedOrigins = (process.env.ALLOWED_ORIGIN || DEFAULT_ALLOWED_ORIGIN)
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  if (!allowedOrigins.length) throw new Error("ALLOWED_ORIGIN must contain at least one origin");
+  const dailyLimit = Number(process.env.DAILY_RUN_LIMIT || 100);
+  const evaluationsEnabled = process.env.EVALUATIONS_ENABLED !== "false";
+  const requestTimeoutMs = Number(process.env.EVALUATION_TIMEOUT_MS || 150_000);
+  let daily: DailyCounter = { day: now().toISOString().slice(0, 10), count: 0 };
+
+  const server = Fastify({
+    logger: {
+      level: process.env.LOG_LEVEL || "info",
+      redact: {
+        paths: [
+          "req.headers.authorization",
+          "req.headers.cookie",
+          "req.body",
+          "res.body",
+        ],
+        censor: "[redacted]",
+      },
+    },
+    bodyLimit: MAX_TOTAL_BYTES + 1024 * 1024,
+    requestIdHeader: "x-request-id",
+  });
+
+  await server.register(cors, {
+    origin: (origin, callback) => {
+      callback(null, !origin || allowedOrigins.includes(origin));
+    },
+    credentials: false,
+    methods: ["GET", "POST", "OPTIONS"],
+  });
+  await server.register(rateLimit, {
+    max: Number(process.env.RATE_LIMIT_MAX || 5),
+    timeWindow: Number(process.env.RATE_LIMIT_WINDOW_MS || 60 * 60 * 1000),
+  });
+  await server.register(multipart, {
+    limits: {
+      files: 1 + MAX_SUPPORTING_FILES,
+      fileSize: MAX_TOTAL_BYTES,
+      fields: 2,
+      parts: 8,
+    },
+  });
+
+  server.addHook("onSend", async (_request, reply, payload) => {
+    reply.header("Cache-Control", "no-store");
+    reply.header("X-Content-Type-Options", "nosniff");
+    reply.header("Referrer-Policy", "no-referrer");
+    reply.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+    reply.header(
+      "Content-Security-Policy",
+      "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
+    );
+    return payload;
+  });
+
+  const healthHandler = async (_request: unknown, reply: any) => {
+    try {
+      const response = await runtimeHealth(runtimeFetch);
+      const runtime = (await response.json()) as Record<string, unknown>;
+      return reply.status(response.ok && runtime.configured ? 200 : 503).send({
+        status: response.ok && runtime.configured ? "ok" : "degraded",
+        gateway: "ok",
+        runtime,
+      });
+    } catch {
+      return reply.status(503).send({
+        status: "degraded",
+        gateway: "ok",
+        runtime: { status: "unreachable" },
       });
     }
-    const errorMessage = error?.message || String(error) || "Unknown error";
-    reply.raw.write(`data: ${JSON.stringify({ type: "error", error: errorMessage })}\n\n`);
-    reply.raw.end();
-  } catch (writeError: any) {
-    logger.error({
-      requestId,
-      endpoint,
-      writeError: writeError?.message,
-      originalError: error?.message,
-      streamDestroyed: reply.raw.destroyed,
-      streamClosed: reply.raw.closed
-    }, "Failed to write SSE error response");
+  };
+  server.get("/health", healthHandler);
+  server.get("/api/health", healthHandler);
+
+  server.post("/api/prd-judge/evaluate", async (request, reply) => {
+    if (!evaluationsEnabled) {
+      return reply.status(503).send({
+        error: "PRD Judge is temporarily unavailable while the public beta is paused.",
+        retryable: true,
+      });
+    }
+    const today = now().toISOString().slice(0, 10);
+    if (daily.day !== today) daily = { day: today, count: 0 };
+    if (daily.count >= dailyLimit) {
+      return reply.status(503).send({
+        error: "The public beta has reached its daily evaluation limit. Try again tomorrow.",
+        retryable: true,
+      });
+    }
+
+    const uploads: UploadedPart[] = [];
+    let pastedText = "";
+    let pastedFieldCount = 0;
+    let totalBytes = 0;
     try {
-      if (!reply.raw.destroyed && !reply.raw.closed) {
-        reply.raw.end();
+      for await (const part of request.parts()) {
+        if (part.type === "field") {
+          if (part.fieldname !== "prd_text") {
+            return reply.status(400).send({ error: `Unexpected form field ${part.fieldname}` });
+          }
+          pastedFieldCount += 1;
+          if (pastedFieldCount > 1) {
+            return reply.status(400).send({ error: "Provide prd_text only once." });
+          }
+          pastedText = String(part.value || "");
+          continue;
+        }
+        if (part.fieldname !== "prd" && part.fieldname !== "supporting_files") {
+          await part.toBuffer();
+          return reply.status(400).send({ error: `Unexpected file field ${part.fieldname}` });
+        }
+        const filename = safeFilename(part.filename);
+        const fileExtension = extension(filename);
+        if (!ALLOWED_EXTENSIONS.has(fileExtension)) {
+          await part.toBuffer();
+          return reply.status(400).send({
+            error: "Unsupported file type. Use PDF, DOCX, Markdown, or TXT; legacy .doc is not supported.",
+          });
+        }
+        const data = await part.toBuffer();
+        totalBytes += data.byteLength;
+        if (totalBytes > MAX_TOTAL_BYTES) {
+          return reply.status(413).send({ error: "Combined uploads exceed the 25 MB limit." });
+        }
+        uploads.push({
+          fieldname: part.fieldname,
+          filename,
+          mimetype: part.mimetype || "application/octet-stream",
+          data,
+        });
       }
-    } catch {
-      // Stream already closed, ignore
+    } catch (error) {
+      request.log.warn({ errorType: error instanceof Error ? error.name : "unknown" }, "Upload rejected");
+      return reply.status(400).send({ error: "The upload could not be read within the beta limits." });
     }
-  }
-}
 
-// Handle body parsing errors with raw body support for webhooks
-fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (req: any, body, done) => {
-  // Store raw body for webhook signature verification
-  req.rawBody = body;
-  try {
-    const json = JSON.parse(body as string);
-    done(null, json);
-  } catch (err: any) {
-    const requestId = generateRequestId();
-    logger.error({
-      requestId,
-      endpoint: req.url,
-      method: req.method,
-      error: {
-        message: err?.message,
-        stack: err?.stack,
-        name: err?.name
-      }
-    }, "JSON body parsing failed");
-    done(err, undefined);
-  }
-});
-
-// Global error handler for unhandled errors
-fastify.setErrorHandler(async (error, request, reply) => {
-  const requestId = request.id || generateRequestId();
-  const endpoint = request.url || "unknown";
-  const origin = request.headers.origin || "unknown";
-
-  logger.error({
-    requestId,
-    endpoint,
-    method: request.method,
-    url: request.url,
-    origin,
-    error: {
-      message: error.message,
-      stack: error.stack,
-      name: error.name,
-      code: (error as any).code,
-      statusCode: (error as any).statusCode
+    const primaryFiles = uploads.filter((upload) => upload.fieldname === "prd");
+    const supportingFiles = uploads.filter((upload) => upload.fieldname === "supporting_files");
+    if ((primaryFiles.length === 1) === Boolean(pastedText.trim())) {
+      return reply.status(400).send({ error: "Provide exactly one PRD file or pasted PRD text." });
     }
-  }, "Unhandled error in Fastify");
+    if (primaryFiles.length > 1 || supportingFiles.length > MAX_SUPPORTING_FILES) {
+      return reply.status(400).send({ error: "Provide one PRD and no more than five supporting files." });
+    }
+    if (pastedText.length > 250_000) {
+      return reply.status(413).send({ error: "Pasted PRD text exceeds 250,000 characters." });
+    }
+    totalBytes += Buffer.byteLength(pastedText, "utf8");
+    if (totalBytes > MAX_TOTAL_BYTES) {
+      return reply.status(413).send({ error: "Combined uploads exceed the 25 MB limit." });
+    }
 
-  // If headers not sent and this is an SSE endpoint, try to send SSE error
-  if (!reply.raw.headersSent && endpoint.includes("/api/evalprd/")) {
-    writeSSEError(reply, requestId, error, endpoint);
-  } else if (!reply.raw.headersSent) {
-    reply.status(error.statusCode || 500).send({
-      error: error.message || "Internal server error",
-      requestId
+    const runtimeUrl = process.env.PRD_JUDGE_RUNTIME_URL || DEFAULT_RUNTIME_URL;
+    const form = new FormData();
+    if (pastedText.trim()) form.append("prd_text", pastedText);
+    for (const upload of uploads) {
+      form.append(
+        upload.fieldname,
+        new File([upload.data], upload.filename, { type: upload.mimetype }),
+      );
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+    reply.raw.once("close", () => {
+      clearTimeout(timeout);
+      controller.abort();
     });
-  }
-});
-
-// Streaming Routes using Server-Sent Events
-fastify.post("/api/evalprd/binary_score", async (request, reply) => {
-  const requestId = generateRequestId();
-  const endpoint = "/api/evalprd/binary_score";
-  const origin = request.headers.origin || "unknown";
-  let heartbeatInterval: NodeJS.Timeout | null = null;
-  let clientDisconnected = false;
-  let onClose: (() => void) | null = null;
-  let onError: ((err: Error) => void) | null = null;
-
-  try {
-    // Log request metadata
-    const bodySize = request.body ? JSON.stringify(request.body).length : 0;
-    const bodyHash = request.body ? hashString(JSON.stringify(request.body)) : "none";
-    
-    logger.info({
-      requestId,
-      endpoint,
-      method: request.method,
-      origin,
-      bodySize,
-      bodyHash,
-      contentType: request.headers["content-type"]
-    }, "binary_score request received");
-
-    // Validate request body exists
-    if (!request.body) {
-      logger.warn({ requestId, endpoint }, "Request body is null or undefined");
-      return reply.status(400).send({ error: "Request body is required", requestId });
-    }
-
-    // Validate Content-Type
-    const contentType = request.headers["content-type"];
-    if (contentType && !contentType.includes("application/json")) {
-      logger.warn({ requestId, endpoint, contentType }, "Invalid Content-Type");
-      return reply.status(400).send({ error: "Content-Type must be application/json", requestId });
-    }
-
-    // Extract prd_text with type assertion
-    const { prd_text } = request.body as { prd_text?: string };
-
-    if (!prd_text) {
-      logger.warn({ requestId, endpoint }, "prd_text is missing from request body");
-      return reply.status(400).send({ error: "prd_text is required", requestId });
-    }
-
-    // Set SSE headers with error handling
+    const startedAt = now().getTime();
+    let upstream: Response;
     try {
-      reply.raw.writeHead(200, {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
-        "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
-        "Access-Control-Allow-Credentials": "true",
-        "X-Accel-Buffering": "no"  // Disable nginx buffering (App Engine)
+      upstream = await runtimeFetch(`${runtimeUrl}/evaluate`, {
+        method: "POST",
+        body: form,
+        headers: await runtimeHeaders(runtimeUrl),
+        signal: controller.signal,
       });
-      // Force headers to be sent immediately to bypass load balancer buffering
-      if (typeof reply.raw.flushHeaders === 'function') {
-        reply.raw.flushHeaders();
-      }
-    } catch (headerError: any) {
-      logger.error({
-        requestId,
-        endpoint,
-        error: {
-          message: headerError?.message,
-          stack: headerError?.stack
-        }
-      }, "Failed to write SSE headers");
-      return reply.status(500).send({ error: "Failed to initialize stream", requestId });
-    }
-
-    // Track if client disconnected
-    onClose = () => {
-      clientDisconnected = true;
-      logger.info({ requestId, endpoint }, "Client disconnected");
-      if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-        heartbeatInterval = null;
-      }
-    };
-    onError = (err: Error) => {
-      clientDisconnected = true;
-      logger.warn({ requestId, endpoint, error: err?.message }, "Stream error, client likely disconnected");
-      if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-        heartbeatInterval = null;
-      }
-    };
-    reply.raw.once("close", onClose);
-    reply.raw.once("error", onError);
-
-    // Send immediate "start" event to establish connection
-    try {
-      reply.raw.write(`data: {"type":"start"}\n\n`);
-      logger.info({ requestId, endpoint }, "Sent initial start event");
-    } catch (startError: any) {
-      logger.error({ requestId, endpoint, error: startError?.message }, "Failed to send start event");
-      return reply.status(500).send({ error: "Failed to initialize stream", requestId });
-    }
-
-    // Send heartbeat every 5s as data events to keep connection alive
-    // Reduced from 10s to ensure App Engine doesn't timeout long-running requests
-    heartbeatInterval = setInterval(() => {
-      try {
-        if (!reply.raw.destroyed && !clientDisconnected) {
-          reply.raw.write(`data: {"type":"heartbeat"}\n\n`);
-        } else {
-          if (heartbeatInterval) {
-            clearInterval(heartbeatInterval);
-            heartbeatInterval = null;
-          }
-        }
-      } catch (heartbeatError: any) {
-        logger.warn({ requestId, endpoint, error: heartbeatError?.message }, "Heartbeat write failed");
-        if (heartbeatInterval) {
-          clearInterval(heartbeatInterval);
-          heartbeatInterval = null;
-        }
-      }
-    }, 5000);
-
-    // Evaluate PRD
-    logger.info({ requestId, endpoint }, "About to call evaluateBinaryScore");
-    let progressCallCount = 0;
-    let sseWriteSuccessCount = 0;
-    let sseWriteSkipCount = 0;
-    const result = await evaluateBinaryScore(
-      { prd_text },
-      (delta, accumulated) => {
-        progressCallCount++;
-        if (progressCallCount <= 5 || progressCallCount % 100 === 0) {
-          logger.info({
-            requestId,
-            endpoint,
-            progressCallCount,
-            deltaLength: delta.length,
-            accumulatedLength: accumulated.length,
-            streamDestroyed: reply.raw.destroyed,
-            clientDisconnected
-          }, "onProgress called");
-        }
-        try {
-          if (!reply.raw.destroyed && !clientDisconnected) {
-            // CRITICAL FIX: Only send delta, not accumulated, to avoid massive payloads
-            // Frontend can accumulate deltas locally if needed
-            const sseEvent = `data: ${JSON.stringify({ type: "delta", delta })}\n\n`;
-            if (progressCallCount <= 5 || progressCallCount % 100 === 0) {
-              logger.info({ requestId, endpoint, progressCallCount, sseEventSize: sseEvent.length, accumulatedLength: accumulated.length }, "About to write SSE delta");
-            }
-            reply.raw.write(sseEvent);
-            // Force socket flush to bypass App Engine buffering
-            const socket = (reply.raw as any).socket || (reply.raw as any).connection;
-            if (socket && typeof socket.uncork === 'function') {
-              socket.cork();
-              socket.uncork();
-            }
-            sseWriteSuccessCount++;
-            if (progressCallCount <= 5 || progressCallCount % 100 === 0) {
-              logger.info({ requestId, endpoint, progressCallCount, sseWriteSuccessCount }, "SSE delta written and flushed successfully");
-            }
-          } else {
-            sseWriteSkipCount++;
-            if (sseWriteSkipCount === 1 || sseWriteSkipCount % 100 === 0) {
-              logger.warn({
-                requestId,
-                endpoint,
-                progressCallCount,
-                sseWriteSkipCount,
-                destroyed: reply.raw.destroyed,
-                disconnected: clientDisconnected
-              }, "Skipped SSE write - stream destroyed or client disconnected");
-            }
-          }
-        } catch (writeError: any) {
-          logger.error({ requestId, endpoint, progressCallCount, error: writeError?.message, stack: writeError?.stack }, "Delta write failed with exception");
-        }
-      }
-    );
-    logger.info({ requestId, endpoint, progressCallCount, sseWriteSuccessCount, sseWriteSkipCount }, "evaluateBinaryScore completed");
-
-    // Check if client disconnected during evaluation
-    if (clientDisconnected || reply.raw.destroyed) {
-      logger.warn({ requestId, endpoint }, "Client disconnected during evaluation, skipping final result");
-      if (onClose) reply.raw.removeListener("close", onClose);
-      if (onError) reply.raw.removeListener("error", onError);
-      // Try to send error event if stream is still writable
-      try {
-        if (!reply.raw.destroyed && !reply.raw.closed) {
-          writeSSEError(reply, requestId, new Error("Client disconnected during evaluation"), endpoint);
-        }
-      } catch {
-        // Stream already closed, ignore
-      }
-      return;
-    }
-
-    // Clear heartbeat and send final result
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval);
-      heartbeatInterval = null;
-    }
-
-    // Serialize result to JSON with error handling
-    let resultJson: string;
-    try {
-      resultJson = JSON.stringify({ type: "done", result });
-    } catch (stringifyError: any) {
-      // Try to get result size for logging (might fail if result has circular refs)
-      let resultSize = 0;
-      try {
-        resultSize = result ? JSON.stringify(result).length : 0;
-      } catch {
-        resultSize = -1; // Indicates we couldn't measure size
-      }
-      
-      logger.error({
-        requestId,
-        endpoint,
-        error: {
-          message: stringifyError?.message,
-          stack: stringifyError?.stack,
-          name: stringifyError?.name
-        },
-        resultSize
-      }, "Failed to stringify result");
-      // Clean up listeners before trying to write error
-      if (onClose) reply.raw.removeListener("close", onClose);
-      if (onError) reply.raw.removeListener("error", onError);
-      // Only write error if stream is not destroyed
-      if (!reply.raw.destroyed && !reply.raw.closed && !clientDisconnected) {
-        writeSSEError(reply, requestId, new Error(`Failed to serialize result: ${stringifyError?.message || "Unknown error"}`), endpoint);
-      } else {
-        logger.warn({ requestId, endpoint, clientDisconnected, streamDestroyed: reply.raw.destroyed }, "Skipping SSE error write: stream already destroyed or client disconnected");
-      }
-      return;
-    }
-
-    // Write final result with error handling
-    try {
-      // Clean up listeners
-      if (onClose) reply.raw.removeListener("close", onClose);
-      if (onError) reply.raw.removeListener("error", onError);
-
-      if (!reply.raw.destroyed && !clientDisconnected) {
-        reply.raw.write(`data: ${resultJson}\n\n`);
-        reply.raw.end();
-        logger.info({ requestId, endpoint }, "binary_score request completed successfully");
-      } else {
-        logger.warn({ requestId, endpoint, clientDisconnected, streamDestroyed: reply.raw.destroyed }, "Stream already destroyed or client disconnected, cannot write final result");
-        // Try to end stream safely even if destroyed
-        try {
-          if (!reply.raw.destroyed && !reply.raw.closed) {
-            reply.raw.end();
-          }
-        } catch {
-          // Stream already closed, ignore
-        }
-      }
-    } catch (writeError: any) {
-      logger.error({
-        requestId,
-        endpoint,
-        error: {
-          message: writeError?.message,
-          stack: writeError?.stack,
-          name: writeError?.name
-        }
-      }, "Failed to write final result");
-      // Clean up listeners before trying to write error
-      if (onClose) reply.raw.removeListener("close", onClose);
-      if (onError) reply.raw.removeListener("error", onError);
-      // Only write error if stream is not destroyed
-      if (!reply.raw.destroyed && !reply.raw.closed && !clientDisconnected) {
-        writeSSEError(reply, requestId, writeError, endpoint);
-      } else {
-        logger.warn({ requestId, endpoint, clientDisconnected, streamDestroyed: reply.raw.destroyed }, "Skipping SSE error write: stream already destroyed or client disconnected");
-      }
-    }
-
-  } catch (error: any) {
-    // Clear heartbeat if set
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval);
-      heartbeatInterval = null;
-    }
-
-    // Clean up listeners if they were set
-    try {
-      if (onClose) reply.raw.removeListener("close", onClose);
-      if (onError) reply.raw.removeListener("error", onError);
-    } catch {
-      // Listeners might not have been set if error occurred early
-    }
-
-    // Log full error details
-    logger.error({
-      requestId,
-      endpoint,
-      error: {
-        message: error?.message,
-        stack: error?.stack,
-        name: error?.name,
-        code: (error as any)?.code,
-        statusCode: (error as any)?.statusCode
-      }
-    }, "binary_score streaming failed");
-
-    // Write SSE error response only if stream is not destroyed
-    if (!reply.raw.destroyed && !reply.raw.closed && !clientDisconnected) {
-      writeSSEError(reply, requestId, error, endpoint);
-    } else {
-      logger.warn({ requestId, endpoint, clientDisconnected, streamDestroyed: reply.raw.destroyed }, "Skipping SSE error write: stream already destroyed or client disconnected");
-    }
-  }
-});
-
-fastify.post("/api/evalprd/fix_plan", async (request, reply) => {
-  const requestId = generateRequestId();
-  const endpoint = "/api/evalprd/fix_plan";
-  const origin = request.headers.origin || "unknown";
-  let heartbeatInterval: NodeJS.Timeout | null = null;
-  let clientDisconnected = false;
-  let onClose: (() => void) | null = null;
-  let onError: ((err: Error) => void) | null = null;
-
-  try {
-    // Log request metadata
-    const bodySize = request.body ? JSON.stringify(request.body).length : 0;
-    const bodyHash = request.body ? hashString(JSON.stringify(request.body)) : "none";
-    
-    logger.info({
-      requestId,
-      endpoint,
-      method: request.method,
-      origin,
-      bodySize,
-      bodyHash,
-      contentType: request.headers["content-type"]
-    }, "fix_plan request received");
-
-    // Validate request body exists
-    if (!request.body) {
-      logger.warn({ requestId, endpoint }, "Request body is null or undefined");
-      return reply.status(400).send({ error: "Request body is required", requestId });
-    }
-
-    // Validate Content-Type
-    const contentType = request.headers["content-type"];
-    if (contentType && !contentType.includes("application/json")) {
-      logger.warn({ requestId, endpoint, contentType }, "Invalid Content-Type");
-      return reply.status(400).send({ error: "Content-Type must be application/json", requestId });
-    }
-
-    // Extract prd_text with type assertion
-    const { prd_text } = request.body as { prd_text?: string };
-
-    if (!prd_text) {
-      logger.warn({ requestId, endpoint }, "prd_text is missing from request body");
-      return reply.status(400).send({ error: "prd_text is required", requestId });
-    }
-
-    // Set SSE headers with error handling
-    try {
-      reply.raw.writeHead(200, {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
-        "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
-        "Access-Control-Allow-Credentials": "true",
-        "X-Accel-Buffering": "no"  // Disable nginx buffering (App Engine)
+    } catch (error) {
+      clearTimeout(timeout);
+      request.log.warn({ errorType: error instanceof Error ? error.name : "unknown" }, "Judge runtime unavailable or timed out");
+      return reply.status(503).send({
+        error: "The approved PRD Judge model is temporarily unavailable or took too long to respond.",
+        retryable: true,
       });
-      // Force headers to be sent immediately to bypass load balancer buffering
-      if (typeof reply.raw.flushHeaders === 'function') {
-        reply.raw.flushHeaders();
-      }
-    } catch (headerError: any) {
-      logger.error({
-        requestId,
-        endpoint,
-        error: {
-          message: headerError?.message,
-          stack: headerError?.stack
-        }
-      }, "Failed to write SSE headers");
-      return reply.status(500).send({ error: "Failed to initialize stream", requestId });
     }
 
-    // Track if client disconnected
-    onClose = () => {
-      clientDisconnected = true;
-      logger.info({ requestId, endpoint }, "Client disconnected");
-      if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-        heartbeatInterval = null;
-      }
-    };
-    onError = (err: Error) => {
-      clientDisconnected = true;
-      logger.warn({ requestId, endpoint, error: err?.message }, "Stream error, client likely disconnected");
-      if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-        heartbeatInterval = null;
-      }
-    };
-    reply.raw.once("close", onClose);
-    reply.raw.once("error", onError);
-
-    // Send immediate "start" event to establish connection
-    try {
-      reply.raw.write(`data: {"type":"start"}\n\n`);
-      logger.info({ requestId, endpoint }, "Sent initial start event");
-    } catch (startError: any) {
-      logger.error({ requestId, endpoint, error: startError?.message }, "Failed to send start event");
-      return reply.status(500).send({ error: "Failed to initialize stream", requestId });
-    }
-
-    // Send heartbeat every 5s as data events to keep connection alive
-    // Reduced from 10s to ensure App Engine doesn't timeout long-running requests
-    heartbeatInterval = setInterval(() => {
-      try {
-        if (!reply.raw.destroyed && !clientDisconnected) {
-          reply.raw.write(`data: {"type":"heartbeat"}\n\n`);
-        } else {
-          if (heartbeatInterval) {
-            clearInterval(heartbeatInterval);
-            heartbeatInterval = null;
-          }
-        }
-      } catch (heartbeatError: any) {
-        logger.warn({ requestId, endpoint, error: heartbeatError?.message }, "Heartbeat write failed");
-        if (heartbeatInterval) {
-          clearInterval(heartbeatInterval);
-          heartbeatInterval = null;
-        }
-      }
-    }, 5000);
-
-    // Evaluate PRD
-    logger.info({ requestId, endpoint }, "About to call evaluateFixPlan");
-    let progressCallCount = 0;
-    let sseWriteSuccessCount = 0;
-    let sseWriteSkipCount = 0;
-    const result = await evaluateFixPlan(
-      { prd_text },
-      (delta, accumulated) => {
-        progressCallCount++;
-        if (progressCallCount <= 5 || progressCallCount % 100 === 0) {
-          logger.info({
-            requestId,
-            endpoint,
-            progressCallCount,
-            deltaLength: delta.length,
-            accumulatedLength: accumulated.length,
-            streamDestroyed: reply.raw.destroyed,
-            clientDisconnected
-          }, "onProgress called");
-        }
-        try {
-          if (!reply.raw.destroyed && !clientDisconnected) {
-            // CRITICAL FIX: Only send delta, not accumulated, to avoid massive payloads
-            // Frontend can accumulate deltas locally if needed
-            const sseEvent = `data: ${JSON.stringify({ type: "delta", delta })}\n\n`;
-            if (progressCallCount <= 5 || progressCallCount % 100 === 0) {
-              logger.info({ requestId, endpoint, progressCallCount, sseEventSize: sseEvent.length, accumulatedLength: accumulated.length }, "About to write SSE delta");
-            }
-            reply.raw.write(sseEvent);
-            // Force socket flush to bypass App Engine buffering
-            const socket = (reply.raw as any).socket || (reply.raw as any).connection;
-            if (socket && typeof socket.uncork === 'function') {
-              socket.cork();
-              socket.uncork();
-            }
-            sseWriteSuccessCount++;
-            if (progressCallCount <= 5 || progressCallCount % 100 === 0) {
-              logger.info({ requestId, endpoint, progressCallCount, sseWriteSuccessCount }, "SSE delta written and flushed successfully");
-            }
-          } else {
-            sseWriteSkipCount++;
-            if (sseWriteSkipCount === 1 || sseWriteSkipCount % 100 === 0) {
-              logger.warn({
-                requestId,
-                endpoint,
-                progressCallCount,
-                sseWriteSkipCount,
-                destroyed: reply.raw.destroyed,
-                disconnected: clientDisconnected
-              }, "Skipped SSE write - stream destroyed or client disconnected");
-            }
-          }
-        } catch (writeError: any) {
-          logger.error({ requestId, endpoint, progressCallCount, error: writeError?.message, stack: writeError?.stack }, "Delta write failed with exception");
-        }
-      }
-    );
-    logger.info({ requestId, endpoint, progressCallCount, sseWriteSuccessCount, sseWriteSkipCount }, "evaluateFixPlan completed");
-
-    // Check if client disconnected during evaluation
-    if (clientDisconnected || reply.raw.destroyed) {
-      logger.warn({ requestId, endpoint }, "Client disconnected during evaluation, skipping final result");
-      if (onClose) reply.raw.removeListener("close", onClose);
-      if (onError) reply.raw.removeListener("error", onError);
-      // Try to send error event if stream is still writable
-      try {
-        if (!reply.raw.destroyed && !reply.raw.closed) {
-          writeSSEError(reply, requestId, new Error("Client disconnected during evaluation"), endpoint);
-        }
-      } catch {
-        // Stream already closed, ignore
-      }
-      return;
-    }
-
-    // Clear heartbeat and send final result
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval);
-      heartbeatInterval = null;
-    }
-
-    // Serialize result to JSON with error handling
-    let resultJson: string;
-    try {
-      resultJson = JSON.stringify({ type: "done", result });
-    } catch (stringifyError: any) {
-      // Try to get result size for logging (might fail if result has circular refs)
-      let resultSize = 0;
-      try {
-        resultSize = result ? JSON.stringify(result).length : 0;
-      } catch {
-        resultSize = -1; // Indicates we couldn't measure size
-      }
-      
-      logger.error({
-        requestId,
-        endpoint,
-        error: {
-          message: stringifyError?.message,
-          stack: stringifyError?.stack,
-          name: stringifyError?.name
-        },
-        resultSize
-      }, "Failed to stringify result");
-      // Clean up listeners before trying to write error
-      if (onClose) reply.raw.removeListener("close", onClose);
-      if (onError) reply.raw.removeListener("error", onError);
-      // Only write error if stream is not destroyed
-      if (!reply.raw.destroyed && !reply.raw.closed && !clientDisconnected) {
-        writeSSEError(reply, requestId, new Error(`Failed to serialize result: ${stringifyError?.message || "Unknown error"}`), endpoint);
-      } else {
-        logger.warn({ requestId, endpoint, clientDisconnected, streamDestroyed: reply.raw.destroyed }, "Skipping SSE error write: stream already destroyed or client disconnected");
-      }
-      return;
-    }
-
-    // Write final result with error handling
-    try {
-      // Clean up listeners
-      if (onClose) reply.raw.removeListener("close", onClose);
-      if (onError) reply.raw.removeListener("error", onError);
-
-      if (!reply.raw.destroyed && !clientDisconnected) {
-        reply.raw.write(`data: ${resultJson}\n\n`);
-        reply.raw.end();
-        logger.info({ requestId, endpoint }, "fix_plan request completed successfully");
-      } else {
-        logger.warn({ requestId, endpoint, clientDisconnected, streamDestroyed: reply.raw.destroyed }, "Stream already destroyed or client disconnected, cannot write final result");
-        // Try to end stream safely even if destroyed
-        try {
-          if (!reply.raw.destroyed && !reply.raw.closed) {
-            reply.raw.end();
-          }
-        } catch {
-          // Stream already closed, ignore
-        }
-      }
-    } catch (writeError: any) {
-      logger.error({
-        requestId,
-        endpoint,
-        error: {
-          message: writeError?.message,
-          stack: writeError?.stack,
-          name: writeError?.name
-        }
-      }, "Failed to write final result");
-      // Clean up listeners before trying to write error
-      if (onClose) reply.raw.removeListener("close", onClose);
-      if (onError) reply.raw.removeListener("error", onError);
-      // Only write error if stream is not destroyed
-      if (!reply.raw.destroyed && !reply.raw.closed && !clientDisconnected) {
-        writeSSEError(reply, requestId, writeError, endpoint);
-      } else {
-        logger.warn({ requestId, endpoint, clientDisconnected, streamDestroyed: reply.raw.destroyed }, "Skipping SSE error write: stream already destroyed or client disconnected");
-      }
-    }
-
-  } catch (error: any) {
-    // Clear heartbeat if set
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval);
-      heartbeatInterval = null;
-    }
-
-    // Clean up listeners if they were set
-    try {
-      if (onClose) reply.raw.removeListener("close", onClose);
-      if (onError) reply.raw.removeListener("error", onError);
-    } catch {
-      // Listeners might not have been set if error occurred early
-    }
-
-    // Log full error details
-    logger.error({
-      requestId,
-      endpoint,
-      error: {
-        message: error?.message,
-        stack: error?.stack,
-        name: error?.name,
-        code: (error as any)?.code,
-        statusCode: (error as any)?.statusCode
-      }
-    }, "fix_plan streaming failed");
-
-    // Write SSE error response only if stream is not destroyed
-    if (!reply.raw.destroyed && !reply.raw.closed && !clientDisconnected) {
-      writeSSEError(reply, requestId, error, endpoint);
-    } else {
-      logger.warn({ requestId, endpoint, clientDisconnected, streamDestroyed: reply.raw.destroyed }, "Skipping SSE error write: stream already destroyed or client disconnected");
-    }
-  }
-});
-
-fastify.post("/api/evalprd/agent_tasks", async (request, reply) => {
-  const requestId = generateRequestId();
-  const endpoint = "/api/evalprd/agent_tasks";
-  const origin = request.headers.origin || "unknown";
-  let heartbeatInterval: NodeJS.Timeout | null = null;
-  let clientDisconnected = false;
-  let onClose: (() => void) | null = null;
-  let onError: ((err: Error) => void) | null = null;
-
-  try {
-    // Log request metadata
-    const bodySize = request.body ? JSON.stringify(request.body).length : 0;
-    const bodyHash = request.body ? hashString(JSON.stringify(request.body)) : "none";
-    
-    logger.info({
-      requestId,
-      endpoint,
-      method: request.method,
-      origin,
-      bodySize,
-      bodyHash,
-      contentType: request.headers["content-type"]
-    }, "agent_tasks request received");
-
-    // Validate request body exists
-    if (!request.body) {
-      logger.warn({ requestId, endpoint }, "Request body is null or undefined");
-      return reply.status(400).send({ error: "Request body is required", requestId });
-    }
-
-    // Validate Content-Type
-    const contentType = request.headers["content-type"];
-    if (contentType && !contentType.includes("application/json")) {
-      logger.warn({ requestId, endpoint, contentType }, "Invalid Content-Type");
-      return reply.status(400).send({ error: "Content-Type must be application/json", requestId });
-    }
-
-    // Extract prd_text with type assertion
-    const { prd_text } = request.body as { prd_text?: string };
-
-    if (!prd_text) {
-      logger.warn({ requestId, endpoint }, "prd_text is missing from request body");
-      return reply.status(400).send({ error: "prd_text is required", requestId });
-    }
-
-    // Set SSE headers with error handling
-    try {
-      reply.raw.writeHead(200, {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
-        "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
-        "Access-Control-Allow-Credentials": "true",
-        "X-Accel-Buffering": "no"  // Disable nginx buffering (App Engine)
+    if (!upstream.ok || !upstream.body) {
+      clearTimeout(timeout);
+      const payload = (await upstream.json().catch(() => ({}))) as { detail?: string };
+      return reply.status(upstream.status || 502).send({
+        error: payload.detail || "The PRD Judge runtime rejected the evaluation.",
+        retryable: upstream.status >= 500,
       });
-      // Force headers to be sent immediately to bypass load balancer buffering
-      if (typeof reply.raw.flushHeaders === 'function') {
-        reply.raw.flushHeaders();
-      }
-    } catch (headerError: any) {
-      logger.error({
-        requestId,
-        endpoint,
-        error: {
-          message: headerError?.message,
-          stack: headerError?.stack
-        }
-      }, "Failed to write SSE headers");
-      return reply.status(500).send({ error: "Failed to initialize stream", requestId });
     }
 
-    // Track if client disconnected
-    onClose = () => {
-      clientDisconnected = true;
-      logger.info({ requestId, endpoint }, "Client disconnected");
-      if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-        heartbeatInterval = null;
-      }
-    };
-    onError = (err: Error) => {
-      clientDisconnected = true;
-      logger.warn({ requestId, endpoint, error: err?.message }, "Stream error, client likely disconnected");
-      if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-        heartbeatInterval = null;
-      }
-    };
-    reply.raw.once("close", onClose);
-    reply.raw.once("error", onError);
+    daily.count += 1;
+    const requestOrigin = request.headers.origin;
+    const responseOrigin = requestOrigin
+      ? (allowedOrigins.includes(requestOrigin) ? requestOrigin : undefined)
+      : allowedOrigins[0];
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-store",
+      Connection: "keep-alive",
+      ...(responseOrigin ? { "Access-Control-Allow-Origin": responseOrigin, Vary: "Origin" } : {}),
+      "X-Accel-Buffering": "no",
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "no-referrer",
+      "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+      "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
+    });
+    reply.raw.write(sse("progress", { phase: "uploading", message: "Upload received securely" }));
 
-    // Send immediate "start" event to establish connection
     try {
-      reply.raw.write(`data: {"type":"start"}\n\n`);
-      logger.info({ requestId, endpoint }, "Sent initial start event");
-    } catch (startError: any) {
-      logger.error({ requestId, endpoint, error: startError?.message }, "Failed to send start event");
-      return reply.status(500).send({ error: "Failed to initialize stream", requestId });
-    }
-
-    // Send heartbeat every 5s as data events to keep connection alive
-    // Reduced from 10s to ensure App Engine doesn't timeout long-running requests
-    heartbeatInterval = setInterval(() => {
-      try {
-        if (!reply.raw.destroyed && !clientDisconnected) {
-          reply.raw.write(`data: {"type":"heartbeat"}\n\n`);
-        } else {
-          if (heartbeatInterval) {
-            clearInterval(heartbeatInterval);
-            heartbeatInterval = null;
-          }
-        }
-      } catch (heartbeatError: any) {
-        logger.warn({ requestId, endpoint, error: heartbeatError?.message }, "Heartbeat write failed");
-        if (heartbeatInterval) {
-          clearInterval(heartbeatInterval);
-          heartbeatInterval = null;
-        }
+      const reader = upstream.body.getReader();
+      let eventTail = "";
+      let sawComplete = false;
+      let sawError = false;
+      while (!reply.raw.destroyed) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const markerText = eventTail + Buffer.from(value).toString("utf8");
+        sawComplete ||= markerText.includes("event: complete");
+        sawError ||= markerText.includes("event: error");
+        eventTail = markerText.slice(-64);
+        reply.raw.write(Buffer.from(value));
       }
-    }, 5000);
-
-    // Evaluate PRD
-    logger.info({ requestId, endpoint }, "About to call evaluateAgentTasks");
-    let progressCallCount = 0;
-    let sseWriteSuccessCount = 0;
-    let sseWriteSkipCount = 0;
-    const result = await evaluateAgentTasks(
-      { prd_text },
-      (delta, accumulated) => {
-        progressCallCount++;
-        if (progressCallCount <= 5 || progressCallCount % 100 === 0) {
-          logger.info({
-            requestId,
-            endpoint,
-            progressCallCount,
-            deltaLength: delta.length,
-            accumulatedLength: accumulated.length,
-            streamDestroyed: reply.raw.destroyed,
-            clientDisconnected
-          }, "onProgress called");
-        }
-        try {
-          if (!reply.raw.destroyed && !clientDisconnected) {
-            // CRITICAL FIX: Only send delta, not accumulated, to avoid massive payloads (60KB+ for agent_tasks)
-            // Frontend can accumulate deltas locally if needed
-            const sseEvent = `data: ${JSON.stringify({ type: "delta", delta })}\n\n`;
-            if (progressCallCount <= 5 || progressCallCount % 100 === 0) {
-              logger.info({ requestId, endpoint, progressCallCount, sseEventSize: sseEvent.length, accumulatedLength: accumulated.length }, "About to write SSE delta");
-            }
-            reply.raw.write(sseEvent);
-            // Force socket flush to bypass App Engine buffering
-            const socket = (reply.raw as any).socket || (reply.raw as any).connection;
-            if (socket && typeof socket.uncork === 'function') {
-              socket.cork();
-              socket.uncork();
-            }
-            sseWriteSuccessCount++;
-            if (progressCallCount <= 5 || progressCallCount % 100 === 0) {
-              logger.info({ requestId, endpoint, progressCallCount, sseWriteSuccessCount }, "SSE delta written and flushed successfully");
-            }
-          } else {
-            sseWriteSkipCount++;
-            if (sseWriteSkipCount === 1 || sseWriteSkipCount % 100 === 0) {
-              logger.warn({
-                requestId,
-                endpoint,
-                progressCallCount,
-                sseWriteSkipCount,
-                destroyed: reply.raw.destroyed,
-                disconnected: clientDisconnected
-              }, "Skipped SSE write - stream destroyed or client disconnected");
-            }
-          }
-        } catch (writeError: any) {
-          logger.error({ requestId, endpoint, progressCallCount, error: writeError?.message, stack: writeError?.stack }, "Delta write failed with exception");
-        }
-      }
-    );
-    logger.info({ requestId, endpoint, progressCallCount, sseWriteSuccessCount, sseWriteSkipCount }, "evaluateAgentTasks completed");
-
-    // Check if client disconnected during evaluation
-    if (clientDisconnected || reply.raw.destroyed) {
-      logger.warn({ requestId, endpoint }, "Client disconnected during evaluation, skipping final result");
-      if (onClose) reply.raw.removeListener("close", onClose);
-      if (onError) reply.raw.removeListener("error", onError);
-      // Try to send error event if stream is still writable
-      try {
-        if (!reply.raw.destroyed && !reply.raw.closed) {
-          writeSSEError(reply, requestId, new Error("Client disconnected during evaluation"), endpoint);
-        }
-      } catch {
-        // Stream already closed, ignore
-      }
-      return;
-    }
-
-    // Clear heartbeat and send final result
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval);
-      heartbeatInterval = null;
-    }
-
-    // Serialize result to JSON with error handling
-    let resultJson: string;
-    try {
-      resultJson = JSON.stringify({ type: "done", result });
-    } catch (stringifyError: any) {
-      // Try to get result size for logging (might fail if result has circular refs)
-      let resultSize = 0;
-      try {
-        resultSize = result ? JSON.stringify(result).length : 0;
-      } catch {
-        resultSize = -1; // Indicates we couldn't measure size
-      }
-      
-      logger.error({
-        requestId,
-        endpoint,
-        error: {
-          message: stringifyError?.message,
-          stack: stringifyError?.stack,
-          name: stringifyError?.name
-        },
-        resultSize
-      }, "Failed to stringify result");
-      // Clean up listeners before trying to write error
-      if (onClose) reply.raw.removeListener("close", onClose);
-      if (onError) reply.raw.removeListener("error", onError);
-      // Only write error if stream is not destroyed
-      if (!reply.raw.destroyed && !reply.raw.closed && !clientDisconnected) {
-        writeSSEError(reply, requestId, new Error(`Failed to serialize result: ${stringifyError?.message || "Unknown error"}`), endpoint);
+      if (!reply.raw.destroyed) reply.raw.end();
+      clearTimeout(timeout);
+      const eventFacts = {
+        durationMs: now().getTime() - startedAt,
+        primaryExtension: primaryFiles.length ? extension(primaryFiles[0].filename) : "paste",
+        supportingFileCount: supportingFiles.length,
+        totalBytes,
+      };
+      if (sawComplete && !sawError) {
+        request.log.info(eventFacts, "Ephemeral PRD evaluation completed");
       } else {
-        logger.warn({ requestId, endpoint, clientDisconnected, streamDestroyed: reply.raw.destroyed }, "Skipping SSE error write: stream already destroyed or client disconnected");
+        request.log.warn(eventFacts, "Ephemeral PRD evaluation failed before completion");
       }
-      return;
-    }
-
-    // Write final result with error handling
-    try {
-      // Clean up listeners
-      if (onClose) reply.raw.removeListener("close", onClose);
-      if (onError) reply.raw.removeListener("error", onError);
-
-      if (!reply.raw.destroyed && !clientDisconnected) {
-        reply.raw.write(`data: ${resultJson}\n\n`);
+    } catch (error) {
+      clearTimeout(timeout);
+      request.log.warn({ errorType: error instanceof Error ? error.name : "unknown" }, "Evaluation stream ended early");
+      if (!reply.raw.destroyed) {
+        reply.raw.write(
+          sse("error", {
+            code: "stream_failed",
+            message: "The evaluation stream ended before a validated report was returned.",
+            retryable: true,
+          }),
+        );
         reply.raw.end();
-        logger.info({ requestId, endpoint }, "agent_tasks request completed successfully");
-      } else {
-        logger.warn({ requestId, endpoint, clientDisconnected, streamDestroyed: reply.raw.destroyed }, "Stream already destroyed or client disconnected, cannot write final result");
-        // Don't call writeSSEError if stream is destroyed - it will fail anyway
-      }
-    } catch (writeError: any) {
-      logger.error({
-        requestId,
-        endpoint,
-        error: {
-          message: writeError?.message,
-          stack: writeError?.stack,
-          name: writeError?.name
-        }
-      }, "Failed to write final result");
-      // Clean up listeners before trying to write error
-      if (onClose) reply.raw.removeListener("close", onClose);
-      if (onError) reply.raw.removeListener("error", onError);
-      // Only write error if stream is not destroyed
-      if (!reply.raw.destroyed && !reply.raw.closed && !clientDisconnected) {
-        writeSSEError(reply, requestId, writeError, endpoint);
-      } else {
-        logger.warn({ requestId, endpoint, clientDisconnected, streamDestroyed: reply.raw.destroyed }, "Skipping SSE error write: stream already destroyed or client disconnected");
       }
     }
+  });
 
-  } catch (error: any) {
-    // Clear heartbeat if set
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval);
-      heartbeatInterval = null;
-    }
-
-    // Clean up listeners if they were set
-    try {
-      if (onClose) reply.raw.removeListener("close", onClose);
-      if (onError) reply.raw.removeListener("error", onError);
-    } catch {
-      // Listeners might not have been set if error occurred early
-    }
-
-    // Log full error details
-    logger.error({
-      requestId,
-      endpoint,
-      error: {
-        message: error?.message,
-        stack: error?.stack,
-        name: error?.name,
-        code: (error as any)?.code,
-        statusCode: (error as any)?.statusCode
-      }
-    }, "agent_tasks streaming failed");
-
-    // Write SSE error response only if stream is not destroyed
-    if (!reply.raw.destroyed && !reply.raw.closed && !clientDisconnected) {
-      writeSSEError(reply, requestId, error, endpoint);
-    } else {
-      logger.warn({ requestId, endpoint, clientDisconnected, streamDestroyed: reply.raw.destroyed }, "Skipping SSE error write: stream already destroyed or client disconnected");
-    }
-  }
-});
-
-// Health check
-fastify.get("/health", async (request, reply) => {
-  return { status: "ok", timestamp: new Date().toISOString() };
-});
-
-// Start server
-async function start() {
-  try {
-    await fastify.listen({ port: PORT, host: "0.0.0.0" });
-    logger.info({ port: PORT }, "API Gateway started");
-  } catch (error) {
-    logger.error({ error }, "Failed to start API Gateway");
-    process.exit(1);
-  }
+  return server;
 }
 
-// Graceful shutdown
-process.on("SIGTERM", async () => {
-  logger.info("SIGTERM received, shutting down gracefully");
-  await fastify.close();
-  process.exit(0);
-});
+async function start(): Promise<void> {
+  const server = await buildServer();
+  await server.listen({ port: Number(process.env.PORT || 8080), host: "0.0.0.0" });
+}
 
-start();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  start().catch((error) => {
+    process.stderr.write(`Failed to start API gateway: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+  });
+}
