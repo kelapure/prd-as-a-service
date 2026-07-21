@@ -3,8 +3,12 @@
 The runtime is an internal, stateless service for the EvalGPT public beta. It loads an
 integrity-checked snapshot exported from the canonical `prd_judge` agent, extracts
 PDF/DOCX/Markdown/text in memory, runs PRD Judge and the secondary PRD Eval Rubric v2
-in separate model contexts, validates quotes against the supplied sources, and applies
-the canonical deterministic readiness score after the report is valid.
+concurrently in separate model contexts, validates quotes against the supplied sources,
+and applies the canonical deterministic readiness score after the report is valid.
+
+Scanned-page renders and embedded figures are capped at 12 per document and are resized
+or re-encoded to bounded dimensions and bytes before they reach the model. An oversized
+or unreadable figure is skipped and reported as an extraction warning.
 
 ## Local development
 

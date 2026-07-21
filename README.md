@@ -114,7 +114,8 @@ POST /api/prd-judge/evaluate accepts multipart input:
 - PDF, DOCX, Markdown, and TXT only;
 - 25 MB combined;
 - 200 known pages across the supplied documents;
-- 250,000 pasted characters and 250,000 extracted characters per document.
+- 250,000 pasted characters and 250,000 extracted characters per document;
+- at most 12 rendered pages or embedded figures per document, size-bounded before the model call; oversized or unreadable figures are skipped with a warning.
 
 The streamed response emits progress, complete, or error events. The final envelope is evalgpt-prd-judge/v1.
 
