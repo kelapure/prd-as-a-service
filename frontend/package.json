@@ -25,6 +25,6 @@
     "test:browser": "npm run build && node tests/browser-accessibility.mjs",
     "test:full-flow": "npm --prefix ../api-gateway run build && VITE_API_BASE=http://127.0.0.1:8081 npm run build && node tests/full-flow.mjs",
     "postinstall": "vite build",
-    "start": "serve -s build -l $PORT"
+    "start": "serve -s build -l $PORT -c ../serve.json"
   }
 }

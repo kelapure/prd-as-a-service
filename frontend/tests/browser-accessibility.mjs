@@ -12,7 +12,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const origin = "http://127.0.0.1:4174";
 const evidenceDir = process.env.EVIDENCE_DIR || "/tmp/evalgpt-evidence";
 const chrome = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const preview = spawn(resolve(root, "node_modules/.bin/vite"), ["preview", "--host", "127.0.0.1", "--port", "4174"], {
+const preview = spawn(resolve(root, "node_modules/.bin/serve"), ["-s", "build", "-l", "4174", "-c", "../serve.json"], {
   cwd: root,
   stdio: ["ignore", "pipe", "pipe"],
 });
@@ -21,7 +21,7 @@ async function waitForServer() {
   for (let attempt = 0; attempt < 50; attempt += 1) {
     try {
       const response = await fetch(origin);
-      if (response.ok) return;
+      if (response.ok) return response;
     } catch {
       // Preview is still starting.
     }
@@ -43,9 +43,17 @@ async function audit(page, label) {
 await mkdir(evidenceDir, { recursive: true });
 let browser;
 try {
-  await waitForServer();
+  const response = await waitForServer();
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+  assert.equal(response.headers.get("permissions-policy"), "camera=(), microphone=(), geolocation=()");
+  assert.match(response.headers.get("content-security-policy") || "", /default-src 'self'/);
   browser = await chromium.launch({ headless: true, executablePath: chrome });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  const context = await browser.newContext({
+    bypassCSP: true,
+    viewport: { width: 1440, height: 1000 },
+  });
+  const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(origin, { waitUntil: "networkidle" });
