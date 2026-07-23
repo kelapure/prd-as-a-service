@@ -52,7 +52,7 @@ h4 { font-size: 1.35rem; font-weight: 600; }
 .brand { display: inline-flex; align-items: center; gap: var(--space-3); font-weight: 600; text-decoration: none; }
 .brand-mark { display: inline-grid; place-items: center; min-width: 48px; height: 32px; background: var(--ink); color: var(--chalk); font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.06em; }
 .site-header nav, .site-footer nav { display: flex; align-items: center; gap: var(--space-6); }
-.site-header nav a, .site-header nav button, .site-footer nav a { border: 0; background: none; text-decoration: none; cursor: pointer; font-size: 0.9rem; }
+.site-header nav a, .site-header nav button, .site-footer nav a, .site-footer nav button { border: 0; background: none; text-decoration: none; cursor: pointer; font-size: 0.9rem; }
 .site-header .header-cta { background: var(--ink); color: var(--chalk); min-height: 42px; padding: 0 var(--space-5); }
 
 .hero { min-height: calc(100vh - 68px); display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.55fr); align-items: center; gap: clamp(var(--space-12), 8vw, 120px); padding-top: var(--space-20); padding-bottom: var(--space-20); }
@@ -116,8 +116,10 @@ textarea { width: 100%; min-height: 280px; resize: vertical; border: 1px solid c
 .phase-list li.is-complete { border-color: var(--success); color: color-mix(in srgb, var(--color-chalk) 75%, transparent); }
 .form-error { margin-top: var(--space-6); border-left: 3px solid var(--danger); padding: var(--space-4); background: color-mix(in srgb, var(--status-danger) 12%, transparent); }
 .form-error p { margin: var(--space-1) 0 0; }
+.form-notice { margin-top: var(--space-6); border-left: 3px solid var(--info); padding: var(--space-4); background: color-mix(in srgb, var(--status-info) 8%, transparent); }
 
 .result-shell { max-width: 1320px; scroll-margin-top: 84px; }
+#top, #evaluate, #methodology, #privacy, #path-title { scroll-margin-top: 84px; }
 .result-actions { justify-content: flex-end; margin: var(--space-5) 0; }
 .result-actions .button { min-height: 42px; font-size: 0.85rem; }
 .verdict-panel { background: var(--ink); color: var(--chalk); padding: clamp(var(--space-6), 6vw, var(--space-16)); }
@@ -125,7 +127,7 @@ textarea { width: 100%; min-height: 280px; resize: vertical; border: 1px solid c
 .score { margin: 0; font-family: var(--font-mono); font-size: clamp(5rem, 14vw, 10rem); font-weight: 500; line-height: 0.8; letter-spacing: -0.08em; }
 .score span { font-size: 0.25em; letter-spacing: 0; }
 .verdict-label { margin: 0 0 var(--space-2); font-size: clamp(2rem, 5vw, 4.5rem); line-height: 0.95; font-weight: 600; }
-.result-meta { color: color-mix(in srgb, var(--color-chalk) 65%, transparent); font-family: var(--font-mono); font-size: 0.8rem; }
+.result-meta { color: color-mix(in srgb, var(--color-chalk) 78%, transparent); font-family: var(--font-mono); font-size: 0.8rem; }
 .verdict-panel h2 { max-width: 960px; font-size: clamp(1.75rem, 4vw, 3.5rem); line-height: 1.1; }
 .verdict-next-action { max-width: 780px; margin-top: var(--space-10); border-top: 1px solid color-mix(in srgb, var(--color-chalk) 24%, transparent); padding-top: var(--space-5); }
 .verdict-next-action > p:nth-child(2) { margin-bottom: var(--space-3); font-size: 1.15rem; font-weight: 600; }
