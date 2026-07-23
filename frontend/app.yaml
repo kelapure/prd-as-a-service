@@ -4,6 +4,8 @@ env: standard
 
 handlers:
   # Let the Node server handle all routes (SPA)
+  # Security headers come from serve.json via the package.json start script;
+  # App Engine does not allow http_headers on the script handler.
   - url: /.*
     script: auto
     secure: always

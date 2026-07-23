@@ -127,6 +127,6 @@ Both App Engine services use the supported Node.js 24 runtime. The frontend's
 production security headers live in `frontend/serve.json`, because App Engine
 does not allow `http_headers` on the dynamic Node.js script handler.
 
-The local Fable review record is in docs/FABLE_UX_REVIEW.md. It does not replace the required fresh-context Fable review against the version-specific deployed preview.
+The Fable review record, including the fresh-context passes against the version-specific deployed preview, is in docs/FABLE_UX_REVIEW.md. That UX pass does not clear the non-UX certification gates in cloud/RELEASE_GATES.md.
 
 Do not put model keys or internal tokens in tracked YAML. Use Secret Manager. Verify the active GCP project, service accounts, domain mapping, and rollback version before changing production traffic.
