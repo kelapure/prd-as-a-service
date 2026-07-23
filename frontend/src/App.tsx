@@ -145,7 +145,7 @@ export default function App() {
       <footer className="site-footer">
         <div className="brand"><span className="brand-mark">8090</span><span>EvalGPT</span></div>
         <p>Evidence-backed PRD judgment. Public beta.</p>
-        <nav aria-label="Footer navigation"><a href="#methodology">Methodology</a><a href="#privacy">Privacy</a><a href="#top">Back to top</a></nav>
+        <nav aria-label="Footer navigation"><button type="button" onClick={showExample}>Example result</button><a href="#methodology">Methodology</a><a href="#privacy">Privacy</a><a href="#top">Back to top</a></nav>
       </footer>
     </>
   );

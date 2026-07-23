@@ -1,6 +1,13 @@
 import type { JudgeEnvelope, ProgressUpdate } from "../types/judge";
 
 
+export class EvaluationCancelledError extends Error {
+  constructor() {
+    super("Evaluation cancelled. Your document was not saved.");
+    this.name = "EvaluationCancelledError";
+  }
+}
+
 const localHostnames = new Set(["localhost", "127.0.0.1"]);
 const API_BASE = import.meta.env.VITE_API_BASE
   || (localHostnames.has(window.location.hostname) ? "http://127.0.0.1:8080" : "");
@@ -83,7 +90,7 @@ export async function evaluatePrd(
       if (controller.signal.reason === "timeout") {
         throw new Error("The evaluation exceeded the 10-minute safety timeout.");
       }
-      throw new Error("Evaluation cancelled. Your document was not saved.");
+      throw new EvaluationCancelledError();
     }
     throw error;
   } finally {

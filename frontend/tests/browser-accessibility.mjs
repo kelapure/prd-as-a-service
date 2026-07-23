@@ -12,7 +12,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const origin = "http://127.0.0.1:4174";
 const evidenceDir = process.env.EVIDENCE_DIR || "/tmp/evalgpt-evidence";
 const chrome = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const preview = spawn(resolve(root, "node_modules/.bin/vite"), ["preview", "--host", "127.0.0.1", "--port", "4174"], {
+const preview = spawn(resolve(root, "node_modules/.bin/serve"), ["-s", "build", "-l", "4174", "-c", "../serve.json"], {
   cwd: root,
   stdio: ["ignore", "pipe", "pipe"],
 });
@@ -21,7 +21,7 @@ async function waitForServer() {
   for (let attempt = 0; attempt < 50; attempt += 1) {
     try {
       const response = await fetch(origin);
-      if (response.ok) return;
+      if (response.ok) return response;
     } catch {
       // Preview is still starting.
     }
@@ -43,14 +43,51 @@ async function audit(page, label) {
 await mkdir(evidenceDir, { recursive: true });
 let browser;
 try {
-  await waitForServer();
+  const response = await waitForServer();
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+  assert.equal(response.headers.get("permissions-policy"), "camera=(), microphone=(), geolocation=()");
+  assert.match(response.headers.get("content-security-policy") || "", /default-src 'self'/);
   browser = await chromium.launch({ headless: true, executablePath: chrome });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+
+  const enforcedContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  await enforcedContext.addInitScript(() => {
+    window.__cspViolations = [];
+    document.addEventListener("securitypolicyviolation", (event) => {
+      window.__cspViolations.push(`${event.violatedDirective} blocked ${event.blockedURI}`);
+    });
+  });
+  const enforcedPage = await enforcedContext.newPage();
+  const enforcedErrors = [];
+  enforcedPage.on("pageerror", (error) => enforcedErrors.push(error.message));
+  await enforcedPage.goto(origin, { waitUntil: "networkidle" });
+  assert.equal(await enforcedPage.locator("h1").innerText(), "Know if your PRD is ready to build.");
+  await enforcedPage.getByRole("button", { name: "View an example result" }).click();
+  await enforcedPage.locator("#judge-result").waitFor();
+  assert.equal(await enforcedPage.locator(".verdict-label").innerText(), "Revise");
+  assert.deepEqual(
+    await enforcedPage.evaluate(() => window.__cspViolations),
+    [],
+    "the app must load its bundle, styles, and example flow under its own enforced CSP",
+  );
+  assert.deepEqual(enforcedErrors, [], `CSP-enforced page errors: ${enforcedErrors.join("; ")}`);
+  await enforcedContext.close();
+
+  const context = await browser.newContext({
+    bypassCSP: true,
+    viewport: { width: 1440, height: 1000 },
+  });
+  const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(origin, { waitUntil: "networkidle" });
   assert.equal(await page.title(), "EvalGPT — Evidence-backed PRD judgment");
   assert.equal(await page.locator("h1").innerText(), "Know if your PRD is ready to build.");
+  const inputMethod = page.getByRole("group", { name: "PRD input method" });
+  assert.equal(await inputMethod.getByRole("button", { name: "Upload a file" }).getAttribute("aria-pressed"), "true");
+  await inputMethod.getByRole("button", { name: "Paste text" }).click();
+  assert.equal(await inputMethod.getByRole("button", { name: "Paste text" }).getAttribute("aria-pressed"), "true");
+  assert.equal(await page.locator("footer").getByRole("button", { name: "Example result" }).count(), 1);
   await audit(page, "desktop homepage");
   await page.screenshot({ path: resolve(evidenceDir, "local-home-desktop.png"), fullPage: true });
 
@@ -60,9 +97,14 @@ try {
   assert.equal(await page.locator(".verdict-label").innerText(), "Revise");
   assert.equal(await page.locator("#path-title").innerText(), "Path to GO");
   assert.equal(await page.locator("#judge-result .score").getAttribute("aria-label"), "Readiness score 5 out of 10");
+  assert.equal(await page.getByText("Findings by severity").count(), 1);
   await audit(page, "desktop result");
   await page.screenshot({ path: resolve(evidenceDir, "local-result-desktop-viewport.png") });
   await page.locator("#judge-result").screenshot({ path: resolve(evidenceDir, "local-result-desktop.png") });
+  await page.getByRole("link", { name: "See the complete decision sequence" }).click();
+  const pathTop = await page.locator("#path-title").evaluate((element) => element.getBoundingClientRect().top);
+  const headerBottom = await page.locator(".site-header").evaluate((element) => element.getBoundingClientRect().bottom);
+  assert.ok(pathTop >= headerBottom, "Path to GO anchor must clear the sticky header");
 
   const htmlDownload = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download HTML" }).click();
@@ -93,6 +135,19 @@ try {
     total: body.dataset.printTotalDetails,
   }));
   assert.equal(printState.open, printState.total, "print must expand every disclosure before rendering");
+
+  await page.goto(origin, { waitUntil: "networkidle" });
+  await page.route("http://127.0.0.1:8080/api/prd-judge/evaluate", async (route) => {
+    await new Promise((resolveWait) => setTimeout(resolveWait, 2_000));
+    await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "delayed test response" }) });
+  });
+  await page.getByRole("group", { name: "PRD input method" }).getByRole("button", { name: "Paste text" }).click();
+  await page.locator("#prd-text").fill("A sufficiently long PRD fixture that keeps the evaluation request pending until the user cancels it.");
+  await page.getByRole("button", { name: "Evaluate this PRD" }).click();
+  await page.getByRole("button", { name: "Cancel evaluation" }).click();
+  await page.getByRole("status").filter({ hasText: "Evaluation cancelled." }).waitFor();
+  assert.equal(await page.locator(".form-error").count(), 0, "A user-initiated cancel must not render as an error");
+  await page.unroute("http://127.0.0.1:8080/api/prd-judge/evaluate");
 
   for (const viewport of [{ width: 834, height: 1112, name: "tablet" }, { width: 375, height: 812, name: "mobile" }]) {
     await page.setViewportSize(viewport);

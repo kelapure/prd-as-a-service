@@ -1,17 +1,14 @@
 service: default
-runtime: nodejs20
+runtime: nodejs24
 env: standard
 
 handlers:
   # Let the Node server handle all routes (SPA)
+  # Security headers come from serve.json via the package.json start script;
+  # App Engine does not allow http_headers on the script handler.
   - url: /.*
     script: auto
     secure: always
-    http_headers:
-      X-Content-Type-Options: nosniff
-      Referrer-Policy: no-referrer
-      Permissions-Policy: "camera=(), microphone=(), geolocation=()"
-      Content-Security-Policy: "default-src 'self'; connect-src 'self' https://*.r.appspot.com; img-src 'self' data: blob:; style-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
 
 env_variables:
   NODE_ENV: production

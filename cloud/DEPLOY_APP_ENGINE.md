@@ -176,6 +176,7 @@ Verify:
 - PDF/DOCX extraction warnings;
 - result hierarchy and exports;
 - mobile/narrow layout and keyboard navigation;
+- security headers from frontend/serve.json on served frontend responses;
 - no auth, payment, saved-history, or Firestore routes;
 - content-free logs;
 - /api/health;

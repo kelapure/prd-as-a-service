@@ -47,7 +47,7 @@ try {
   browser = await chromium.launch({ headless: true, executablePath: chrome });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await page.goto("http://127.0.0.1:4175", { waitUntil: "networkidle" });
-  await page.getByRole("tab", { name: "Paste text" }).click();
+  await page.getByRole("button", { name: "Paste text" }).click();
   await page.locator("#prd-text").fill(
     "# Claims workflow PRD\n" + "Claims representatives need measurable handling-time targets, clear escalation ownership, and a validated decision path. ".repeat(8),
   );

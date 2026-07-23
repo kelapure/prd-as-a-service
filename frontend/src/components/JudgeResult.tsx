@@ -139,7 +139,7 @@ export function JudgeResult({ result, onReset }: JudgeResultProps) {
                 ))}
               </div>
             ) : (
-              <p className="empty-state">No findings were required for this stage-aware judgment.</p>
+              <p className="empty-state">No material findings. Nothing blocks this PRD at its current stage.</p>
             )}
           </section>
 
@@ -190,7 +190,7 @@ export function JudgeResult({ result, onReset }: JudgeResultProps) {
 
         <aside className="result-aside" aria-label="Judgment facts">
           <div className="fact-panel">
-            <p className="eyebrow">Blocking facts</p>
+            <p className="eyebrow">Findings by severity</p>
             <dl>
               <div><dt>P0</dt><dd>{severityCounts.P0}</dd></div>
               <div><dt>P1</dt><dd>{severityCounts.P1}</dd></div>

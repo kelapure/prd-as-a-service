@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 
-import { evaluatePrd } from "../lib/evaluate";
+import { EvaluationCancelledError, evaluatePrd } from "../lib/evaluate";
 import type { JudgeEnvelope, ProgressPhase, ProgressUpdate } from "../types/judge";
 
 
@@ -34,6 +34,7 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
   const [progress, setProgress] = useState<ProgressUpdate | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const controllerRef = useRef<AbortController | null>(null);
 
   const totalBytes = useMemo(
@@ -65,6 +66,7 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError("");
+    setNotice("");
     if (mode === "file" && !primary) return setError("Choose one PRD to evaluate.");
     if (mode === "paste" && pastedText.trim().length < 50) {
       return setError("Paste at least 50 characters of PRD content.");
@@ -90,7 +92,11 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
       setSupporting([]);
       onResult(result);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "The evaluation could not be completed.");
+      if (caught instanceof EvaluationCancelledError) {
+        setNotice(caught.message);
+      } else {
+        setError(caught instanceof Error ? caught.message : "The evaluation could not be completed.");
+      }
     } finally {
       controllerRef.current = null;
       setRunning(false);
@@ -109,11 +115,10 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
       </div>
 
       <form className="evaluation-form" onSubmit={submit} noValidate>
-        <div className="mode-switch" role="tablist" aria-label="PRD input method">
+        <div className="mode-switch" role="group" aria-label="PRD input method">
           <button
             type="button"
-            role="tab"
-            aria-selected={mode === "file"}
+            aria-pressed={mode === "file"}
             className={mode === "file" ? "is-active" : ""}
             onClick={() => setMode("file")}
             disabled={running}
@@ -122,8 +127,7 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
           </button>
           <button
             type="button"
-            role="tab"
-            aria-selected={mode === "paste"}
+            aria-pressed={mode === "paste"}
             className={mode === "paste" ? "is-active" : ""}
             onClick={() => setMode("paste")}
             disabled={running}
@@ -133,7 +137,7 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
         </div>
 
         {mode === "file" ? (
-          <div className="upload-field" role="tabpanel">
+          <div className="upload-field">
             <label className="drop-field" htmlFor="primary-prd">
               <span className="drop-title">{primary ? primary.name : "Choose the PRD"}</span>
               <span>{primary ? `${(primary.size / 1024 / 1024).toFixed(2)} MB` : "PDF, DOCX, Markdown, or TXT"}</span>
@@ -149,7 +153,7 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
             />
           </div>
         ) : (
-          <div className="paste-field" role="tabpanel">
+          <div className="paste-field">
             <label htmlFor="prd-text">PRD text</label>
             <textarea
               id="prd-text"
@@ -210,6 +214,9 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
             <strong>Evaluation not completed.</strong>
             <p>{error}</p>
           </div>
+        )}
+        {notice && (
+          <p className="form-notice" role="status">{notice}</p>
         )}
 
         <div className="form-actions">
