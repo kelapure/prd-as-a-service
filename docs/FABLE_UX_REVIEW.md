@@ -1,8 +1,8 @@
 # Fable UX review record
 
-Date: 2026-07-21
+Date: 2026-07-23
 Model: `claude-fable-5`, xhigh effort
-Status: local prototype and local production-build pixels reviewed; deployed-preview review remains a launch gate.
+Status: local and deployed-preview reviews passed. The overall public-beta release remains blocked by the non-UX certification gates.
 
 ## Pass 1: prototype and information architecture
 
@@ -37,6 +37,35 @@ Resolution and rerun:
 
 Automated browser checks also report no serious or critical axe violations at desktop, tablet, or 375-pixel mobile widths. They verify result focus, zero horizontal overflow, and the representative result hierarchy.
 
-## Remaining binding review
+## Deployed-preview review
 
-The required second pass must be repeated in a fresh context against the deployed, version-specific preview, not substituted with this local review. Launch remains blocked until that preview exists and Fable clears its real loading, error, long-finding, no-finding, and interaction states.
+Fable reviewed the version-specific, zero-traffic App Engine preview in a new
+session:
+
+- Preview: `prd-judge-beta-d5af393-20260723`
+- Frontend commit: `d5af393`
+- Viewports: 1440-pixel desktop, 834-pixel tablet, and 375-pixel mobile
+- States: homepage, example result, live evaluation result, loading, retryable
+  error, no findings, and an extremely long finding
+
+The first deployed-preview pass returned `PASS` with no blocking finding. It
+also identified small issues with anchor offsets, mobile example access,
+cancel-state framing, input-mode semantics, no-findings language, confidence
+contrast, and finding-count labels. Those issues were resolved in `d5af393`
+and covered by browser regression checks.
+
+A second fresh-context review inspected the rebuilt and redeployed preview. It
+again returned `PASS`: the verdict, score, confidence, and first action were
+visible above the fold at all three widths; Path to GO remained ahead of
+findings and diagnostics; evidence stayed traceable; long findings wrapped
+without overflow; and loading, retryable error, export, and no-findings
+patterns remained comprehensible.
+
+The deployed browser run reported no page errors, no horizontal overflow, and
+no serious or critical axe findings at any tested width. A live paste flow
+focused the result and rendered the versioned fixture report through the
+private runtime path.
+
+This UX pass does not certify the fixture model as a production model and does
+not satisfy the frozen-suite, precision, recall, retention, or target-user
+comprehension release gates.
