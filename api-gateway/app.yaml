@@ -2,13 +2,10 @@ service: api
 runtime: nodejs20
 env: standard
 
-# Automatically scale based on load
 automatic_scaling:
   target_cpu_utilization: 0.65
   min_instances: 0
   max_instances: 10
-  min_pending_latency: automatic
-  max_pending_latency: automatic
 
 entrypoint: npm start
 
@@ -16,12 +13,20 @@ env_variables:
   NODE_ENV: production
   LOG_LEVEL: info
   ALLOWED_ORIGIN: https://evalgpt.com
-  EVALPRD_MODEL: claude-sonnet-4-5-20250929
-  # ANTHROPIC_API_KEY: Set this in app.local.yaml (git-ignored)
+  RATE_LIMIT_MAX: "5"
+  RATE_LIMIT_WINDOW_MS: "3600000"
+  # App Engine appends "client-ip, forwarding-ip" to X-Forwarded-For; trust
+  # exactly those two hops so rate limiting keys on the real client address.
+  TRUST_PROXY_HOPS: "2"
+  DAILY_RUN_LIMIT: "100"
+  EVALUATIONS_ENABLED: "true"
+  EVALUATION_TIMEOUT_MS: "150000"
+  USE_GOOGLE_IDENTITY_TOKEN: "true"
+  # PRD_JUDGE_RUNTIME_URL and PRD_JUDGE_RUNTIME_AUDIENCE are set in the
+  # generated, git-ignored app.local.yaml after the private Cloud Run deploy.
+  # INTERNAL_SERVICE_TOKEN comes from Secret Manager, never this file.
 
 handlers:
-  # Let the Node server handle all routes
   - url: /.*
     script: auto
     secure: always
-

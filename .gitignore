@@ -1,6 +1,5 @@
 # Dependencies
 node_modules/
-package-lock.json
 
 # Build outputs
 dist/
@@ -69,6 +68,7 @@ api-gateway/node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/.env
+frontend/.env*.local
 
 # App Engine local overlay (contains secrets) — do not commit
 app.local.yaml
@@ -80,3 +80,9 @@ output-*.json
 
 # CLI and temporary scripts
 eval-cli.mjs
+
+# Python environments and caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/

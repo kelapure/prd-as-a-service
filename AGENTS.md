@@ -1,42 +1,57 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
-- `frontend/` — React + Vite UI; entry `src/App.tsx`, assets in `public/`, builds to `build/`.
-- `api-gateway/` — Fastify TypeScript HTTP server bridging to MCP; entry `src/server.ts`.
-- `mcp-server/` — MCP server with tools in `src/tools/` (`binary_score.ts`, `fix_plan.ts`, `agent_tasks.ts`).
-- `infra/` — Dockerfiles and `docker-compose.yml` for local stack.
-- `data/` — Sample PRDs; `tests/` — add integration tests, use `fixtures/` and `contracts/`.
+## Project structure
 
-## Build, Test, and Development Commands
-- Per package (run inside `frontend/`, `api-gateway/`, `mcp-server/`):
-  - Install: `npm install`
-  - Dev: `npm run dev` (frontend → `:3000`, gateway → `:8080`, MCP via `ts-node`).
-  - Build: `npm run build`; Start (Node services): `npm start`
-  - Type-check: `npm run type-check`
-- All services via Docker: `cp .env.example .env && docker-compose -f infra/docker-compose.yml up`
-- Smoke tests:
-  - Health: `curl -s localhost:8080/health`
-  - Binary score: `curl -X POST localhost:8080/api/evalprd/binary_score -H 'Content-Type: application/json' --data @test-request.json`
+- `frontend/` — React + Vite public-beta UI; builds to `build/`.
+- `api-gateway/` — Fastify same-origin API and SSE proxy; public endpoint is
+  `POST /api/prd-judge/evaluate`.
+- `judge-runtime/` — IAM-protected FastAPI runtime for extraction, judgment,
+  validation, deterministic scoring, and the secondary rubric diagnostic.
+- `tests/` — end-to-end smoke and canonical runtime-bundle conformance tests.
+- `cloud/` — deployment and release-gate runbooks.
 
-## Coding Style & Naming Conventions
-- TypeScript strict mode; 2-space indentation; ES modules.
-- Names: variables/functions `camelCase`; types/interfaces and React components `PascalCase`.
-- Tools use `snake_case` in `mcp-server/src/tools/` to match API contract.
-- No linter configured; keep imports tidy and prefer explicit types at module boundaries.
+## Product and privacy constraints
 
-## Testing Guidelines
-- No formal runner yet. Place integration tests under `tests/`; fixtures in `tests/fixtures/`.
-- Cover the three endpoints (happy/negative paths) and schema shape of responses.
-- Validate locally with the curl examples above and `npm run type-check` in both Node services.
+- PRD Judge is the authoritative readiness decision. PRD Eval Rubric v2 is a
+  secondary diagnostic and never overrides the verdict.
+- The beta is anonymous and ephemeral. Do not add accounts, payment, saved
+  history, persistent sharing, or a public developer API.
+- Do not put document content, extracted text, findings, or evidence in logs,
+  analytics, storage, browser local storage, or error reporting.
+- Do not automatically fall back to an unvalidated model.
+- Keep the runtime private and use the same-origin gateway as the only browser
+  interface.
 
-## Commit & Pull Request Guidelines
-- Git history lacks a convention; use Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`).
-- PRs should include: clear description, linked issues, repro steps, backend logs or UI screenshots, and updates to `README.md`/`.env.example` if envs change.
+## Build and test commands
 
-## Security & Configuration Tips
-- Never commit secrets. Use `.env` (see root `.env.example`) and restrict `ALLOWED_ORIGIN` in production.
-- Require Node `>=20`. Keep rate limits configured in the gateway and avoid expanding public endpoints without auth.
+```bash
+# Runtime
+cd judge-runtime && .venv/bin/python -m pytest
 
-## Agent-Specific Instructions
-- Keep changes minimal and scoped; follow directory and naming conventions.
-- If you change commands, env vars, or API contracts, update `README.md` and examples in the same PR.
+# Gateway
+cd api-gateway && npm ci && npm run type-check && npm test
+
+# Frontend
+cd frontend && npm ci && npm run type-check && npm run test:browser
+
+# Cross-service, from repo root
+judge-runtime/.venv/bin/python tests/check_bundle_conformance.py \
+  --canonical-root /path/to/clean/salesfactory-agents/prd_judge
+node tests/smoke.mjs
+```
+
+The complete release criteria are in `cloud/RELEASE_GATES.md`. A green local
+suite is necessary but not sufficient for launch.
+
+## Coding and review
+
+- TypeScript uses strict mode, ES modules, two-space indentation, `camelCase`
+  values, and `PascalCase` components/types.
+- Keep API and file-format validation explicit at service boundaries.
+- Any API, environment, privacy, or deployment change must update the relevant
+  README, example environment file, and tests in the same change.
+- UI changes must follow the 8090 semantic-token system, validate desktop,
+  tablet, and narrow mobile layouts, and complete the required Fable reviews.
+- Never commit credentials, raw PRD content produced during testing, or
+  deployed-preview data.
+- Use Conventional Commit prefixes.

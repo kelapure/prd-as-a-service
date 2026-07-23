@@ -1,383 +1,184 @@
-# Deploy to App Engine + evalgpt.com
+# Deploy the PRD Judge public beta
 
-This guide documents the actual deployment process for EvalPRD to Google Cloud App Engine with custom domain.
+The beta uses three services:
 
-## Prerequisites
-
-- Google Cloud project: `dompe-dev-439304`
-- Domain registered: `evalgpt.com`
-- `gcloud` CLI installed and authenticated
-- Anthropic API key with sufficient quota
+1. private Cloud Run service: Python PRD Judge runtime;
+2. App Engine api service: same-origin Fastify gateway;
+3. App Engine default service: React frontend.
 
-## 1) Configure gcloud and App Engine
+Do not deploy from the old detached workspace. Use a clean branch/worktree and stop if cloud/RELEASE_GATES.md is not satisfied.
 
-```bash
-PROJECT_ID=dompe-dev-439304
-REGION=us-central
+## 1. Verify live state before changing it
 
-gcloud config set project "$PROJECT_ID"
-gcloud services enable appengine.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
-gcloud app describe || gcloud app create --region="$REGION"
-```
+Never assume the historical project ID in older documents is still authoritative.
 
-## 2) Grant App Engine Service Account Permissions
+    gcloud auth login
+    gcloud auth application-default login
+    gcloud config list
+    gcloud projects describe "$PROJECT_ID"
+    gcloud app describe --project "$PROJECT_ID"
+    gcloud app services list --project "$PROJECT_ID"
+    gcloud app versions list --project "$PROJECT_ID"
+    gcloud app domain-mappings list --project "$PROJECT_ID"
+    gcloud run services list --region "$REGION" --project "$PROJECT_ID"
 
-**Important:** App Engine uses a service account that needs permissions for Cloud Build and Artifact Registry.
+Record the current default/api versions and traffic splits as the rollback target.
+Capture the actual App Engine service account and hostname instead of deriving them
+from a remembered project convention:
 
-```bash
-# Grant Artifact Registry permissions
-gcloud artifacts repositories create us.gcr.io \
-  --repository-format=docker \
-  --location=us \
-  --description="Container images for App Engine" || true
+    export APP_ENGINE_SA="$(gcloud app describe --project "$PROJECT_ID" --format='value(serviceAccount)')"
+    export APP_HOST="$(gcloud app describe --project "$PROJECT_ID" --format='value(defaultHostname)')"
+    test -n "$APP_ENGINE_SA" && test -n "$APP_HOST"
 
-gcloud artifacts repositories add-iam-policy-binding us.gcr.io \
-  --location=us \
-  --member=serviceAccount:${PROJECT_ID}@appspot.gserviceaccount.com \
-  --role=roles/artifactregistry.writer
-```
-
-## 3) Configure Secrets with app.local.yaml
+## 2. Build and deploy the private runtime
 
-**IMPORTANT:** Never commit API keys to git. Use `app.local.yaml` (already in .gitignore).
-
-The `api-gateway/app.local.yaml` file should already exist (git-ignored). Update it with your Anthropic API key:
+Set a unique release identifier and the exact model that won the adjudicated bakeoff.
 
-```yaml
-service: api
-runtime: nodejs20
-env: standard
+    export RELEASE_ID="prd-judge-beta-$(git rev-parse --short HEAD)"
+    export IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/evalgpt/prd-judge-runtime:$RELEASE_ID"
+    export APPROVED_MODEL="<validated-model-id>"
+    export APPROVED_JUDGE_COMMIT="675063d05c414af7e6982dfa4a6c194c399c2ab8"
+    export APPROVED_JUDGE_MANIFEST="0720fd773155ba13b702e469607d37247ea00d2bb001ca47a82adf6fdd0b0c85"
 
-automatic_scaling:
-  target_cpu_utilization: 0.65
-  min_instances: 0
-  max_instances: 10
-
-env_variables:
-  NODE_ENV: production
-  LOG_LEVEL: info
-  ALLOWED_ORIGIN: https://evalgpt.com
-  EVALPRD_MODEL: claude-sonnet-4-5-20250929
-  ANTHROPIC_API_KEY: sk-ant-YOUR-ACTUAL-KEY-HERE
-
-handlers:
-  - url: /.*
-    script: auto
-    secure: always
-```
-
-This is a **complete** App Engine configuration file (not just an overlay). It includes all settings from `app.yaml` plus the secret API key.
-
-## 4) Build Frontend and API Gateway
-
-```bash
-# Build frontend
-cd frontend
-npm install
-npm run build
-cd ..
-
-# Build API gateway
-cd api-gateway
-npm install
-npm run build
-cd ..
-```
-
-## 5) Deploy API Service (Standard Environment)
-
-> ⚠️ **IMPORTANT**: Deploy `api-gateway/app.local.yaml` (complete config with secrets), NOT `api-gateway/app.yaml` (public template without secrets).
-
-```bash
-# Deploy API service with secrets (run from repo root)
-gcloud app deploy api-gateway/app.local.yaml --quiet
-```
-
-**Why app.local.yaml?**
-- `api-gateway/app.yaml` - Public template (committed to git, no secrets)
-- `api-gateway/app.local.yaml` - Complete deployment config (git-ignored, includes ANTHROPIC_API_KEY)
-- App Engine uses the source directory where the yaml file is located (api-gateway/)
-
-This deploys:
-- Service: `api`
-- Environment: Standard (Node.js 20)
-- Includes: API Gateway with direct Anthropic integration
-- Source: `api-gateway/` directory with all Node.js code
-
-## 6) Deploy Frontend Service (Standard Environment)
-
-```bash
-# Deploy frontend (must be named 'default' as it's the first service)
-gcloud app deploy frontend/app.yaml --quiet
-```
-
-This deploys:
-- Service: `default` (required name for first service)
-- Environment: Standard (Node.js 20)
-- Type: React SPA
-
-## 7) Deploy Dispatch Rules
-
-The `cloud/dispatch.yaml` file routes requests between services:
-
-```yaml
-dispatch:
-  # API endpoints for evalgpt.com domain
-  - url: "evalgpt.com/api/*"
-    service: api
-  - url: "www.evalgpt.com/api/*"
-    service: api
-
-  # All other paths go to the frontend (default service)
-  - url: "evalgpt.com/*"
-    service: default
-  - url: "www.evalgpt.com/*"
-    service: default
-```
-
-Deploy dispatch rules:
-
-```bash
-gcloud app deploy cloud/dispatch.yaml --quiet
-```
-
-## 8) Verify Domain Ownership
-
-Before mapping custom domain, verify ownership:
-
-1. Go to [Google Search Console](https://search.google.com/search-console)
-2. Add property: `evalgpt.com`
-3. Choose DNS verification method
-4. Add TXT record to your DNS:
-   ```
-   Host: @ (or blank)
-   Type: TXT
-   Value: google-site-verification=XXXXXXXXXX
-   ```
-5. Wait for verification (usually instant, max 48 hours)
-
-## 9) Configure DNS Records
-
-At your domain registrar (e.g., Namecheap), add these records:
-
-**A Records (for evalgpt.com):**
-```
-Type: A
-Host: @ (or blank)
-Value: 216.239.32.21
-TTL: Automatic
-
-Type: A
-Host: @ (or blank)
-Value: 216.239.34.21
-TTL: Automatic
-
-Type: A
-Host: @ (or blank)
-Value: 216.239.36.21
-TTL: Automatic
-
-Type: A
-Host: @ (or blank)
-Value: 216.239.38.21
-TTL: Automatic
-```
-
-**CNAME Record (for www.evalgpt.com):**
-```
-Type: CNAME
-Host: www
-Value: ghs.googlehosted.com.
-TTL: Automatic
-```
-
-Wait 5-15 minutes for DNS propagation. Verify:
-```bash
-dig evalgpt.com +short
-dig www.evalgpt.com +short
-```
-
-## 10) Map Custom Domain with SSL
-
-```bash
-# Create domain mappings with automatic SSL
-gcloud app domain-mappings create evalgpt.com --certificate-management=AUTOMATIC
-gcloud app domain-mappings create www.evalgpt.com --certificate-management=AUTOMATIC
-```
-
-## 11) Monitor SSL Certificate Provisioning
-
-SSL certificates typically take 15-30 minutes to provision.
-
-Create SSL status checker:
-```bash
-cat > check-ssl.sh << 'EOF'
-#!/bin/bash
-echo "Checking SSL certificate status..."
-STATUS=$(gcloud app domain-mappings describe evalgpt.com --format="value(sslSettings.certificateId)")
-if [ -z "$STATUS" ]; then
-  echo "❌ SSL Certificate: PENDING"
-  echo "   Certificate ID: $(gcloud app domain-mappings describe evalgpt.com --format='value(sslSettings.pendingManagedCertificateId)')"
-  echo "   Try again in 5-10 minutes"
-else
-  echo "✅ SSL Certificate: ACTIVE"
-  echo "   Certificate ID: $STATUS"
-  echo "   HTTPS is now available at https://evalgpt.com"
-fi
-EOF
-chmod +x check-ssl.sh
-```
-
-Check status:
-```bash
-./check-ssl.sh
-```
-
-Or view detailed status:
-```bash
-gcloud beta app ssl-certificates list
-```
-
-## 12) Verify Deployment
-
-**Test HTTP (works immediately):**
-```bash
-curl -I http://evalgpt.com
-```
-
-**Test HTTPS (after SSL provisions):**
-```bash
-curl -I https://evalgpt.com
-```
-
-**Test API health:**
-```bash
-curl -i https://evalgpt.com/api/health
-```
-
-**Test binary_score endpoint:**
-```bash
-curl -s -X POST "https://evalgpt.com/api/evalprd/binary_score" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "prd_text": "# Test PRD\n\n## Problem\nUsers need metrics.\n\n## Solution\nDashboard.\n\n## Requirements\n- Real-time data\n\n## Success Criteria\n- Fast response"
-  }' | jq '.readiness_gate'
-```
-
-**View logs:**
-```bash
-# Frontend logs
-gcloud app logs tail -s default
-
-# API logs
-gcloud app logs tail -s api
-```
-
-## Troubleshooting
-
-### SSL Certificate Stuck in FAILED_RETRYING_NOT_VISIBLE
-
-If SSL certificates fail to provision:
-
-1. Delete existing domain mappings:
-   ```bash
-   gcloud app domain-mappings delete evalgpt.com --quiet
-   gcloud app domain-mappings delete www.evalgpt.com --quiet
-   ```
-
-2. Verify DNS is working:
-   ```bash
-   dig evalgpt.com +short
-   curl -I http://evalgpt.com
-   ```
-
-3. Recreate domain mappings:
-   ```bash
-   gcloud app domain-mappings create evalgpt.com --certificate-management=AUTOMATIC
-   gcloud app domain-mappings create www.evalgpt.com --certificate-management=AUTOMATIC
-   ```
-
-4. Wait 15-30 minutes for fresh provisioning
-
-### Build Fails with "Permission Denied" on Artifact Registry
-
-If Cloud Build fails with artifact registry permissions:
-
-```bash
-gcloud artifacts repositories add-iam-policy-binding us.gcr.io \
-  --location=us \
-  --member=serviceAccount:${PROJECT_ID}@appspot.gserviceaccount.com \
-  --role=roles/artifactregistry.writer
-```
-
-### Frontend Shows Old Content
-
-Browser cache issue. Clear with:
-- Chrome/Edge: `Ctrl+Shift+R` (Windows) or `Cmd+Shift+R` (Mac)
-- Open in incognito/private window
-
-### API Returns 500 or Timeouts
-
-Check API logs:
-```bash
-gcloud app logs tail -s api --level=error
-```
-
-Common issues:
-- Anthropic API key invalid/expired
-- Anthropic quota exceeded
-- API Gateway failed to start (check build logs)
-
-## Architecture Summary
-
-```
-Internet
-  ↓
-Google Cloud Load Balancer (with SSL)
-  ↓
-dispatch.yaml routes requests:
-  ├─ /api/* → api service (Standard, Node.js 20)
-  │            └─ API Gateway (Fastify + Anthropic SDK)
-  │                └─ Anthropic API (claude-sonnet-4-5-20250929)
-  │
-  └─ /* → default service (Standard, Node.js 20)
-           └─ React SPA (Vite)
-```
-
-## Post-Deployment
-
-- API keys are managed via `app.local.yaml` (never committed to git)
-- Monitor costs in Cloud Console
-- Set up budget alerts
-- Configure log-based metrics for monitoring
-- Enable Cloud CDN for better performance (optional)
-
-## Quick Redeploy Commands
-
-**Update frontend only:**
-```bash
-cd frontend && npm run build && cd ..
-gcloud app deploy frontend/app.yaml --quiet
-```
-
-**Update API only:**
-```bash
-cd api-gateway && npm run build && cd ..
-gcloud app deploy api-gateway/app.local.yaml --quiet
-```
-
-**Update both services:**
-```bash
-# Build both
-cd frontend && npm run build && cd ..
-cd api-gateway && npm run build && cd ..
-
-# Deploy both (must be separate commands - each service needs its own deploy)
-gcloud app deploy api-gateway/app.local.yaml --quiet
-gcloud app deploy frontend/app.yaml --quiet
-```
-
-**Update dispatch rules:**
-```bash
-gcloud app deploy cloud/dispatch.yaml --quiet
-```
+Create or identify a least-privilege runtime service account. Give it access only to the Anthropic API key secret.
+
+    gcloud builds submit judge-runtime --tag "$IMAGE" --project "$PROJECT_ID"
+
+    gcloud run deploy prd-judge-runtime \
+      --image "$IMAGE" \
+      --region "$REGION" \
+      --project "$PROJECT_ID" \
+      --service-account "prd-judge-runtime@$PROJECT_ID.iam.gserviceaccount.com" \
+      --no-allow-unauthenticated \
+      --set-secrets "ANTHROPIC_API_KEY=evalgpt-anthropic-api-key:latest" \
+      --set-env-vars "JUDGE_RUNTIME_MODE=model,PRD_JUDGE_MODEL=$APPROVED_MODEL,PRD_JUDGE_ALLOWED_MODELS=$APPROVED_MODEL,PRD_JUDGE_EXPECTED_SOURCE_COMMIT=$APPROVED_JUDGE_COMMIT,PRD_JUDGE_EXPECTED_MANIFEST_SHA256=$APPROVED_JUDGE_MANIFEST,PRD_JUDGE_MODEL_TIMEOUT_SECONDS=120,LOG_LEVEL=INFO" \
+      --memory 2Gi \
+      --timeout 600 \
+      --concurrency 8 \
+      --max-instances 10
+
+Capture the service URL:
+
+    export RUNTIME_URL="$(gcloud run services describe prd-judge-runtime --region "$REGION" --project "$PROJECT_ID" --format='value(status.url)')"
+
+Grant only the verified App Engine service account permission to invoke it:
+
+    gcloud run services add-iam-policy-binding prd-judge-runtime \
+      --region "$REGION" \
+      --project "$PROJECT_ID" \
+      --member "serviceAccount:$APP_ENGINE_SA" \
+      --role roles/run.invoker
+
+## 3. Configure the gateway without secrets in source
+
+Derive the version-specific preview origins. They are used only to bind the
+preview frontend to the exact preview gateway during Fable and canary review.
+
+    export FRONTEND_PREVIEW_URL="https://$RELEASE_ID-dot-$APP_HOST"
+    export API_PREVIEW_URL="https://$RELEASE_ID-dot-api-dot-$APP_HOST"
+
+Copy api-gateway/app.yaml to the git-ignored api-gateway/app.local.yaml and add
+the runtime URL. Set `ALLOWED_ORIGIN` to both the production and exact preview
+frontend origins:
+
+    env_variables:
+      PRD_JUDGE_RUNTIME_URL: "<RUNTIME_URL>"
+      PRD_JUDGE_RUNTIME_AUDIENCE: "<RUNTIME_URL>"
+      ALLOWED_ORIGIN: "https://evalgpt.com,<FRONTEND_PREVIEW_URL>"
+
+Keep the other environment variables from the tracked file. The gateway obtains an IAM identity token from the App Engine service account. It does not need the model API key.
+
+## 4. Build and test the exact release
+
+    cd judge-runtime
+    JUDGE_RUNTIME_MODE=fixture .venv/bin/python -m pytest -q
+    cd ../api-gateway
+    npm ci
+    npm audit
+    npm run type-check
+    npm test
+    cd ../frontend
+    npm ci
+    npm audit
+    npm run type-check
+    npm run build
+    cd ..
+    node tests/smoke.mjs
+
+Run the approved-model evaluation suite separately. Fixture mode proves integration, not judgment quality.
+
+## 5. Deploy preview versions without traffic
+
+    gcloud app deploy api-gateway/app.local.yaml \
+      --project "$PROJECT_ID" \
+      --version "$RELEASE_ID" \
+      --no-promote \
+      --quiet
+
+Bind the preview frontend build to the exact API version. This file is ignored
+by Git but intentionally included in the preview build context:
+
+    printf 'VITE_API_BASE=%s\n' "$API_PREVIEW_URL" > frontend/.env.production.local
+
+    gcloud app deploy frontend/app.yaml \
+      --project "$PROJECT_ID" \
+      --version "$RELEASE_ID" \
+      --no-promote \
+      --quiet
+
+    gcloud app deploy cloud/dispatch.yaml --project "$PROJECT_ID" --quiet
+
+Open the version-specific frontend and API URLs. Verify /api/health returns status ok, the pinned judge commit/manifest, and the exact approved model.
+
+Complete the fresh-context Fable pixel review against this preview before traffic changes.
+
+## 6. Canary and rollback
+
+Record OLD_FRONTEND and OLD_API before splitting traffic. During canary, the new
+frontend calls the exact new API version using `VITE_API_BASE`; old production
+pages continue using the old API service at 100 percent. This prevents an old UI
+from ever reaching the breaking public-beta API contract.
+
+Advance only while the release gates remain green:
+
+    # 10 percent
+    gcloud app services set-traffic default --splits "$OLD_FRONTEND=0.90,$RELEASE_ID=0.10" --split-by=random --migrate --project "$PROJECT_ID"
+
+    # Then 50 percent, then 100 percent after the observation windows. These
+    # users exercise the exact new API URL embedded in the new frontend.
+    gcloud app services set-traffic default --splits "$OLD_FRONTEND=0.50,$RELEASE_ID=0.50" --split-by=random --migrate --project "$PROJECT_ID"
+    gcloud app services set-traffic default --splits "$RELEASE_ID=1" --migrate --project "$PROJECT_ID"
+
+After the exact-pair canary reaches 100 percent and the observation window
+passes, point the API service at the already-canary-tested gateway version.
+Then remove the preview API override and deploy one final frontend version. That
+final build returns the browser to the required same-origin `/api` gateway:
+
+    gcloud app services set-traffic api --splits "$RELEASE_ID=1" --migrate --project "$PROJECT_ID"
+    rm -f frontend/.env.production.local
+    export FINAL_FRONTEND_VERSION="$RELEASE_ID-final"
+    gcloud app deploy frontend/app.yaml --project "$PROJECT_ID" --version "$FINAL_FRONTEND_VERSION" --no-promote --quiet
+    gcloud app services set-traffic default --splits "$FINAL_FRONTEND_VERSION=1" --migrate --project "$PROJECT_ID"
+
+Rollback is immediate:
+
+    gcloud app services set-traffic default --splits "$OLD_FRONTEND=1" --migrate --project "$PROJECT_ID"
+    gcloud app services set-traffic api --splits "$OLD_API=1" --migrate --project "$PROJECT_ID"
+
+Also set `EVALUATIONS_ENABLED=false` on the gateway or remove the Cloud Run invoker binding if a privacy, evidence, or false-GO incident requires a hard stop. `DAILY_RUN_LIMIT` is an abuse-control ceiling per gateway instance, not the emergency switch.
+
+## 7. Production verification
+
+Verify:
+
+- homepage metadata and public-beta label;
+- file and paste evaluation;
+- PDF/DOCX extraction warnings;
+- result hierarchy and exports;
+- mobile/narrow layout and keyboard navigation;
+- no auth, payment, saved-history, or Firestore routes;
+- content-free logs;
+- /api/health;
+- completion rate, 5xx rate, p95 latency, model version, judge version, and cost per run.
+
+Do not claim certified or generally available until the frozen family-separated validation report exists for the exact deployed versions.

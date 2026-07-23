@@ -1,5 +1,7 @@
 # Bug Summary: Click-to-Browse Not Working in Upload Dialog
 
+> Historical record. `UploadDialog.tsx` was removed in the July 2026 public-beta rebuild, so this bug no longer applies to the current frontend.
+
 ## Problem Statement
 The file upload dialog's "click to browse" functionality is not working. Users cannot click anywhere in the drop zone to open the file picker. Drag-and-drop works, but clicking does not.
 
