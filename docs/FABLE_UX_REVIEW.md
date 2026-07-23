@@ -42,19 +42,23 @@ Automated browser checks also report no serious or critical axe violations at de
 Fable reviewed the version-specific, zero-traffic App Engine preview in a new
 session:
 
-- Preview: `prd-judge-beta-d5af393-20260723`
-- Frontend commit: `d5af393`
+- First-pass preview: deployed from frontend commit `7af185e`, the branch
+  state before the UX fixes; its App Engine version identifier was not
+  recorded at review time
+- Second-pass preview: `prd-judge-beta-d5af393-20260723`, deployed from
+  frontend commit `d5af393`
 - Viewports: 1440-pixel desktop, 834-pixel tablet, and 375-pixel mobile
 - States: homepage, example result, live evaluation result, loading, retryable
   error, no findings, and an extremely long finding
 
-The first deployed-preview pass returned `PASS` with no blocking finding. It
-also identified small issues with anchor offsets, mobile example access,
-cancel-state framing, input-mode semantics, no-findings language, confidence
-contrast, and finding-count labels. Those issues were resolved in `d5af393`
-and covered by browser regression checks.
+The first deployed-preview pass, against the `7af185e` preview, returned
+`PASS` with no blocking finding. It also identified small issues with anchor
+offsets, mobile example access, cancel-state framing, input-mode semantics,
+no-findings language, confidence contrast, and finding-count labels. Those
+issues were resolved in `d5af393` and covered by browser regression checks.
 
-A second fresh-context review inspected the rebuilt and redeployed preview. It
+A second fresh-context review inspected the rebuilt and redeployed
+`prd-judge-beta-d5af393-20260723` preview. It
 again returned `PASS`: the verdict, score, confidence, and first action were
 visible above the fold at all three widths; Path to GO remained ahead of
 findings and diagnostics; evidence stayed traceable; long findings wrapped

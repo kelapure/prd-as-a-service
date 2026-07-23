@@ -49,6 +49,30 @@ try {
   assert.equal(response.headers.get("permissions-policy"), "camera=(), microphone=(), geolocation=()");
   assert.match(response.headers.get("content-security-policy") || "", /default-src 'self'/);
   browser = await chromium.launch({ headless: true, executablePath: chrome });
+
+  const enforcedContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  await enforcedContext.addInitScript(() => {
+    window.__cspViolations = [];
+    document.addEventListener("securitypolicyviolation", (event) => {
+      window.__cspViolations.push(`${event.violatedDirective} blocked ${event.blockedURI}`);
+    });
+  });
+  const enforcedPage = await enforcedContext.newPage();
+  const enforcedErrors = [];
+  enforcedPage.on("pageerror", (error) => enforcedErrors.push(error.message));
+  await enforcedPage.goto(origin, { waitUntil: "networkidle" });
+  assert.equal(await enforcedPage.locator("h1").innerText(), "Know if your PRD is ready to build.");
+  await enforcedPage.getByRole("button", { name: "View an example result" }).click();
+  await enforcedPage.locator("#judge-result").waitFor();
+  assert.equal(await enforcedPage.locator(".verdict-label").innerText(), "Revise");
+  assert.deepEqual(
+    await enforcedPage.evaluate(() => window.__cspViolations),
+    [],
+    "the app must load its bundle, styles, and example flow under its own enforced CSP",
+  );
+  assert.deepEqual(enforcedErrors, [], `CSP-enforced page errors: ${enforcedErrors.join("; ")}`);
+  await enforcedContext.close();
+
   const context = await browser.newContext({
     bypassCSP: true,
     viewport: { width: 1440, height: 1000 },

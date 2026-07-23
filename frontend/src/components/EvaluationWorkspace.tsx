@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 
-import { evaluatePrd } from "../lib/evaluate";
+import { EvaluationCancelledError, evaluatePrd } from "../lib/evaluate";
 import type { JudgeEnvelope, ProgressPhase, ProgressUpdate } from "../types/judge";
 
 
@@ -92,11 +92,10 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
       setSupporting([]);
       onResult(result);
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "The evaluation could not be completed.";
-      if (message.startsWith("Evaluation cancelled.")) {
-        setNotice(message);
+      if (caught instanceof EvaluationCancelledError) {
+        setNotice(caught.message);
       } else {
-        setError(message);
+        setError(caught instanceof Error ? caught.message : "The evaluation could not be completed.");
       }
     } finally {
       controllerRef.current = null;
