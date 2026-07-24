@@ -1,12 +1,28 @@
 # Deploy the PRD Judge public beta
 
-The beta uses three services:
+Live evaluation uses three services:
 
 1. private Cloud Run service: Python PRD Judge runtime;
 2. App Engine api service: same-origin Fastify gateway;
 3. App Engine default service: React frontend.
 
-Do not deploy from the old detached workspace. Use a clean branch/worktree and stop if cloud/RELEASE_GATES.md is not satisfied.
+Do not deploy from the old detached workspace. Use a clean branch/worktree. Live evaluation must stop if `cloud/RELEASE_GATES.md` is not satisfied.
+
+## Fail-closed public information preview
+
+The frontend can be promoted without changing the runtime, API service, routing, or secrets when the narrower public-preview gates pass. The build must leave `VITE_PUBLIC_EVALUATIONS_ENABLED` unset or set it to exactly `false`; any other value except the exact string `true` remains closed.
+
+    cd frontend
+    rm -f .env.production.local
+    VITE_PUBLIC_EVALUATIONS_ENABLED=false npm run build
+    npm run test:browser:public
+    gcloud app deploy app.yaml \
+      --project "$PROJECT_ID" \
+      --version "$RELEASE_ID" \
+      --no-promote \
+      --quiet
+
+Inspect that exact version with Fable, confirm that no file input, text area, or evaluate action is present, and then canary only the App Engine default service at 10, 50, and 100 percent. Leave the API service traffic unchanged. This public information preview does not authorize document evaluation.
 
 ## 1. Verify live state before changing it
 

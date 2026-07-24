@@ -217,7 +217,9 @@ try {
   await page.goto(origin, { waitUntil: "networkidle" });
   await page.route("http://127.0.0.1:8080/api/prd-judge/evaluate", async (route) => {
     await new Promise((resolveWait) => setTimeout(resolveWait, 2_000));
-    await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "delayed test response" }) });
+    // The cancel click aborts the request before the delayed response fires;
+    // fulfilling an already-cancelled route must not crash the test.
+    await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "delayed test response" }) }).catch(() => {});
   });
   await page.getByRole("group", { name: "PRD input method" }).getByRole("button", { name: "Paste text" }).click();
   await page.locator("#prd-text").fill("A sufficiently long PRD fixture that keeps the evaluation request pending until the user cancels it.");

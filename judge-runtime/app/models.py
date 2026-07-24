@@ -68,7 +68,20 @@ class RubricEvidence(BaseModel):
 
 
 class RubricCriterion(BaseModel):
-    id: str
+    id: Literal[
+        "C1",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C7",
+        "C8",
+        "C9",
+        "C10",
+        "C11",
+        "C12",
+    ]
     name: str
     status: Literal["pass", "fail"]
     rationale: str
@@ -78,7 +91,7 @@ class RubricCriterion(BaseModel):
 
 class RubricDiagnostic(BaseModel):
     version: Literal["prd-eval-rubric-v2"] = "prd-eval-rubric-v2"
-    criteria: list[RubricCriterion]
+    criteria: list[RubricCriterion] = Field(min_length=12, max_length=12)
     pass_count: int = Field(ge=0, le=12)
     fail_count: int = Field(ge=0, le=12)
 

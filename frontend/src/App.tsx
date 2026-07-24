@@ -6,6 +6,8 @@ import { EXAMPLE_RESULT } from "./data/exampleResult";
 import type { JudgeEnvelope } from "./types/judge";
 
 
+const PUBLIC_EVALUATIONS_ENABLED = import.meta.env.VITE_PUBLIC_EVALUATIONS_ENABLED === "true";
+
 const RUBRIC = [
   "Business problem",
   "Current process",
@@ -49,8 +51,16 @@ export default function App() {
         </a>
         <nav aria-label="Primary navigation">
           <a href="#methodology">Methodology</a>
-          <button type="button" onClick={showExample}>Example result</button>
-          <button className="header-cta" type="button" onClick={() => scrollTo("evaluate")}>Evaluate a PRD</button>
+          {PUBLIC_EVALUATIONS_ENABLED
+            ? <button type="button" onClick={showExample}>Example result</button>
+            : <a href="#evaluate">Access status</a>}
+          <button
+            className="header-cta"
+            type="button"
+            onClick={PUBLIC_EVALUATIONS_ENABLED ? () => scrollTo("evaluate") : showExample}
+          >
+            {PUBLIC_EVALUATIONS_ENABLED ? "Evaluate a PRD" : "View example"}
+          </button>
         </nav>
       </header>
 
@@ -60,15 +70,26 @@ export default function App() {
             <p className="eyebrow">PRD Judge · Public beta</p>
             <h1>Know if your PRD is ready to build.</h1>
             <p className="hero-lede">
-              Upload a PRD to get a verdict, a deterministic readiness score, an evidence-backed path to GO, and a separate draft-strength diagnostic. Every finding explains what failed, why it matters, where the evidence came from, and the smallest credible fix.
+              {PUBLIC_EVALUATIONS_ENABLED
+                ? "Upload a PRD to get a verdict, a deterministic readiness score, an evidence-backed path to GO, and a separate draft-strength diagnostic. Every finding explains what failed, why it matters, where the evidence came from, and the smallest credible fix."
+                : "PRD Judge is an evidence-backed readiness decision, not another writing score. Explore a synthetic example now. Document evaluation will open only after the exact judge, model, evidence, and privacy controls pass final certification."}
             </p>
             <div className="hero-actions">
-              <button className="button button-primary" type="button" onClick={() => scrollTo("evaluate")}>Evaluate a PRD</button>
-              <button className="button button-secondary" type="button" onClick={showExample}>View an example result</button>
+              {PUBLIC_EVALUATIONS_ENABLED ? (
+                <>
+                  <button className="button button-primary" type="button" onClick={() => scrollTo("evaluate")}>Evaluate a PRD</button>
+                  <button className="button button-secondary" type="button" onClick={showExample}>View an example result</button>
+                </>
+              ) : (
+                <>
+                  <button className="button button-primary" type="button" onClick={showExample}>View a synthetic example</button>
+                  <button className="button button-secondary" type="button" onClick={() => scrollTo("methodology")}>Read the methodology</button>
+                </>
+              )}
             </div>
           </div>
           <div className="decision-specimen" aria-label="Example verdict summary">
-            <p className="eyebrow">Decision specimen</p>
+            <p className="eyebrow">{PUBLIC_EVALUATIONS_ENABLED ? "Decision specimen" : "Synthetic example"}</p>
             <div className="specimen-score"><span>5</span>/10</div>
             <p className="specimen-verdict">Revise</p>
             <p>The product direction is credible. Two unowned decisions still block a safe handoff.</p>
@@ -79,10 +100,10 @@ export default function App() {
         </section>
 
         <div className="trust-strip" aria-label="Public beta commitments">
-          <span>Free during beta</span>
+          <span>{PUBLIC_EVALUATIONS_ENABLED ? "Free during beta" : "Public preview"}</span>
           <span>No account</span>
-          <span>No EvalGPT document storage</span>
-          <span>Exportable report</span>
+          <span>{PUBLIC_EVALUATIONS_ENABLED ? "No EvalGPT document storage" : "Synthetic example"}</span>
+          <span>{PUBLIC_EVALUATIONS_ENABLED ? "Exportable report" : "Uploads remain closed"}</span>
         </div>
 
         <section className="value-section section-shell">
@@ -99,7 +120,41 @@ export default function App() {
           </div>
         </section>
 
-        <EvaluationWorkspace onResult={revealResult} />
+        {PUBLIC_EVALUATIONS_ENABLED ? (
+          <EvaluationWorkspace onResult={revealResult} />
+        ) : (
+          <section className="availability-section section-shell" id="evaluate" aria-labelledby="availability-title">
+            <div className="availability-intro">
+              <p className="eyebrow">Evaluation access</p>
+              <h2 id="availability-title">The interface is ready. Live judgment is not open yet.</h2>
+              <p>
+                We will not accept PRDs until the frozen certification suite, the approved production model, and provider retention terms are verified for the exact deployed runtime. You can inspect the complete synthetic result now.
+              </p>
+              <div className="availability-actions">
+                <button className="button button-primary" type="button" onClick={showExample}>View the example result</button>
+                <button className="button availability-method-link" type="button" onClick={() => scrollTo("methodology")}>Read the methodology</button>
+              </div>
+            </div>
+            <div className="availability-status" aria-label="Public evaluation release status">
+              <div className="availability-row">
+                <span className="availability-state state-complete">Complete</span>
+                <p><strong>Result contract and browser exports</strong><span>The verdict, path to GO, evidence ledger, rubric, and separate draft-strength diagnostic render in one ordered report.</span></p>
+              </div>
+              <div className="availability-row">
+                <span className="availability-state state-complete">Complete</span>
+                <p><strong>Fable UX review</strong><span>The responsive interface and realistic result states passed the required fresh-context review.</span></p>
+              </div>
+              <div className="availability-row">
+                <span className="availability-state state-progress">In progress</span>
+                <p><strong>Frozen model certification</strong><span>The exact production judge and model must meet the false-GO, evidence, precision, and recall thresholds.</span></p>
+              </div>
+              <div className="availability-row">
+                <span className="availability-state state-required">Required</span>
+                <p><strong>Privacy and comprehension evidence</strong><span>Provider retention terms and target-user comprehension must be verified before document access opens.</span></p>
+              </div>
+            </div>
+          </section>
+        )}
         {result && <JudgeResult result={result} onReset={() => { setResult(null); scrollTo("evaluate"); }} />}
 
         <section className="method-section section-shell" id="methodology">
@@ -132,12 +187,22 @@ export default function App() {
         <section className="privacy-section section-shell" id="privacy">
           <div>
             <p className="eyebrow">Privacy during public beta</p>
-            <h2>Your document is an input, not an account asset.</h2>
+            <h2>{PUBLIC_EVALUATIONS_ENABLED ? "Your document is an input, not an account asset." : "No document upload is accepted in this preview."}</h2>
           </div>
           <div className="privacy-copy">
-            <p>EvalGPT processes uploads in memory for the active evaluation and does not write source documents, extracted text, findings, or evidence to application storage, analytics, or browser local storage.</p>
-            <p>Subprocessor: the Anthropic API processes the content to return the evaluation. Provider retention is governed by the deployed API account terms; EvalGPT will not claim provider-side zero retention or no training until those terms are verified for the production account.</p>
-            <p>Closing or refreshing the page loses the report unless you export it.</p>
+            {PUBLIC_EVALUATIONS_ENABLED ? (
+              <>
+                <p>EvalGPT processes uploads in memory for the active evaluation and does not write source documents, extracted text, findings, or evidence to application storage, analytics, or browser local storage.</p>
+                <p>The production subprocessor and exact retention behavior are published only after they are verified for the deployed API account. EvalGPT does not claim provider-side zero retention or no training without that verification.</p>
+                <p>Closing or refreshing the page loses the report unless you export it.</p>
+              </>
+            ) : (
+              <>
+                <p>The public preview does not send, process, or store a PRD because there is no upload or paste control.</p>
+                <p>The example result is synthetic and contains no client material. It is rendered entirely from data shipped with this site.</p>
+                <p>The production subprocessor and exact retention behavior will be published before live evaluation opens.</p>
+              </>
+            )}
           </div>
         </section>
       </main>

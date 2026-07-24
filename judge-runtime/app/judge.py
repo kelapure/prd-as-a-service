@@ -11,7 +11,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from anthropic import AsyncAnthropic
+from anthropic import AsyncAnthropic, transform_schema
 from pydantic import ValidationError
 
 from .bundle import (
@@ -41,6 +41,15 @@ ALLOWED_MODEL_ENV = "PRD_JUDGE_ALLOWED_MODELS"
 SCORE_MODEL_ENV = "PRD_SCORE_MODEL"
 SCORE_ALLOWED_MODEL_ENV = "PRD_SCORE_ALLOWED_MODELS"
 SCORE_ENABLED_ENV = "PRD_SCORE_ENABLED"
+JUDGE_OUTPUT_CONFIG: dict[str, Any] = {
+    "format": {"type": "json_schema", "schema": transform_schema(JudgeReport)}
+}
+RUBRIC_OUTPUT_CONFIG: dict[str, Any] = {
+    "format": {"type": "json_schema", "schema": transform_schema(RubricDiagnostic)}
+}
+SCORE_OUTPUT_CONFIG: dict[str, Any] = {
+    "format": {"type": "json_schema", "schema": transform_schema(RawPrdScoreReport)}
+}
 Progress = Callable[[str, str], None]
 logger = logging.getLogger("evalgpt.prd_score")
 
@@ -133,26 +142,21 @@ class RuntimeConfig:
         )
 
 
-def _json_object(text: str) -> dict[str, Any]:
-    candidate = text.strip()
-    if candidate.startswith("```"):
-        candidate = re.sub(r"^```(?:json)?\s*", "", candidate)
-        candidate = re.sub(r"\s*```$", "", candidate)
-    start = candidate.find("{")
-    end = candidate.rfind("}")
-    if start < 0 or end <= start:
-        raise EvaluationError("The approved model did not return a JSON object")
+def _structured_object(message: Any, label: str) -> dict[str, Any]:
+    text = "".join(
+        block.text for block in message.content if getattr(block, "type", "") == "text"
+    )
     try:
-        value = json.loads(candidate[start : end + 1])
+        value = json.loads(text)
     except json.JSONDecodeError as exc:
-        raise EvaluationError(f"The approved model returned malformed JSON: {exc}") from exc
+        raise EvaluationError(
+            f"The approved {label} model did not return the required structured output"
+        ) from exc
     if not isinstance(value, dict):
-        raise EvaluationError("The approved model response must be a JSON object")
+        raise EvaluationError(
+            f"The approved {label} model did not return the required structured output"
+        )
     return value
-
-
-def _message_text(message: Any) -> str:
-    return "".join(block.text for block in message.content if getattr(block, "type", "") == "text")
 
 
 def _reference_text(documents: list[ExtractedDocument]) -> str:
@@ -479,8 +483,9 @@ class PrdJudge:
             temperature=0,
             system=_judge_system_prompt(),
             messages=[{"role": "user", "content": _artifact_content(documents, preflight)}],
+            output_config=JUDGE_OUTPUT_CONFIG,
         )
-        return _json_object(_message_text(message))
+        return _structured_object(message, "PRD Judge")
 
     async def _run_rubric_model(
         self, documents: list[ExtractedDocument], preflight: dict[str, Any]
@@ -492,11 +497,15 @@ class PrdJudge:
             temperature=0,
             system=_rubric_system_prompt(),
             messages=[{"role": "user", "content": _artifact_content(documents, preflight)}],
+            output_config=RUBRIC_OUTPUT_CONFIG,
         )
+        data = _structured_object(message, "PRD Eval Rubric")
         try:
-            return RubricDiagnostic.model_validate(_json_object(_message_text(message)))
+            return RubricDiagnostic.model_validate(data)
         except ValidationError as exc:
-            raise EvaluationError(f"Rubric v2 output failed schema validation: {exc}") from exc
+            raise EvaluationError(
+                "The approved PRD Eval Rubric model did not return a valid rubric diagnostic"
+            ) from exc
 
     async def _run_score_model(
         self, documents: list[ExtractedDocument], preflight: dict[str, Any]
@@ -513,8 +522,9 @@ class PrdJudge:
                     "content": _artifact_content(documents, preflight),
                 }
             ],
+            output_config=SCORE_OUTPUT_CONFIG,
         )
-        return _json_object(_message_text(message))
+        return _structured_object(message, "PRD Score")
 
     async def _validate_score_or_repair(
         self,
@@ -564,8 +574,9 @@ class PrdJudge:
             temperature=0,
             system=_score_system_prompt(),
             messages=[{"role": "user", "content": content}],
+            output_config=SCORE_OUTPUT_CONFIG,
         )
-        repaired = _json_object(_message_text(message))
+        repaired = _structured_object(message, "PRD Score repair")
         try:
             raw = RawPrdScoreReport.model_validate(repaired)
             finalized = SCORE_TOOLS.finalize(
@@ -619,8 +630,9 @@ class PrdJudge:
             temperature=0,
             system=_judge_system_prompt(),
             messages=[{"role": "user", "content": content}],
+            output_config=JUDGE_OUTPUT_CONFIG,
         )
-        repaired = _json_object(_message_text(message))
+        repaired = _structured_object(message, "PRD Judge repair")
         repaired_validation = TOOLS.validate(repaired, reference_text)
         try:
             JudgeReport.model_validate(repaired)

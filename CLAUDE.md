@@ -12,6 +12,10 @@ draft-strength diagnostic.
 - PRD Score is an independent authoring diagnostic. Do not average, blend,
   rescale, or otherwise use it to alter the verdict or readiness score.
 - Public beta is free, anonymous, responsive, and ephemeral.
+- The frontend fails closed: `VITE_PUBLIC_EVALUATIONS_ENABLED` defaults to
+  `false`, and that public information preview has no upload, paste, or
+  evaluate controls. Do not enable live evaluation before the release gates in
+  `cloud/RELEASE_GATES.md` pass.
 - Do not add authentication, payment, saved history, persistent sharing, or a
   public developer API during beta.
 - Do not write source documents, extracted text, findings, or evidence to

@@ -1,6 +1,20 @@
 # PRD Judge public-beta release gates
 
-Every checkbox is blocking unless marked post-beta. Evidence belongs in the release issue or PR.
+Every checkbox below is blocking for accepting or evaluating user documents unless marked post-beta. Evidence belongs in the release issue or PR.
+
+## Fail-closed public information preview
+
+A frontend-only information preview may be promoted while the live-evaluation gates remain open only when all of these narrower conditions pass:
+
+- [ ] The production build omits upload, paste, evaluate, and supporting-document controls because `VITE_PUBLIC_EVALUATIONS_ENABLED` is unset or exactly `false`.
+- [ ] The preview makes the closed state conspicuous and does not imply that a user can submit a document.
+- [ ] The example result is synthetic or explicitly licensed and is labeled as an example.
+- [ ] Public-preview browser tests prove that no document input is present at desktop, tablet, or narrow-mobile widths.
+- [ ] The exact deployed preview passes the required fresh-context Fable review with no unresolved P0/P1.
+- [ ] No runtime, API, routing, secret, storage, authentication, payment, or production-model change is included in the frontend promotion.
+- [ ] The existing frontend version and traffic split are recorded, and the new frontend advances through 10, 50, and 100 percent only after browser and content checks pass.
+
+This exception does not authorize live evaluation. Setting `VITE_PUBLIC_EVALUATIONS_ENABLED=true` remains blocked until every applicable gate below passes.
 
 ## Judgment and evidence
 
