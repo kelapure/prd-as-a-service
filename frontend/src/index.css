@@ -72,9 +72,6 @@ h4 { font-size: 1.35rem; font-weight: 600; }
 .specimen-rule { height: 1px; margin: var(--space-8) 0 var(--space-4); background: var(--border-strong); }
 .specimen-next { display: grid; grid-template-columns: 36px 1fr; gap: var(--space-3); margin-bottom: var(--space-3); }
 .specimen-next span { font-family: var(--font-mono); color: var(--fg-3); }
-.trust-strip { display: grid; grid-template-columns: repeat(4, 1fr); border-block: 1px solid var(--border); background: var(--canvas-alt); }
-.trust-strip span { padding: var(--space-5) var(--space-6); border-right: 1px solid var(--border); text-align: center; font-family: var(--font-mono); font-size: 0.78rem; }
-.trust-strip span:last-child { border-right: 0; }
 
 .value-section, .rubric-section { border-bottom: 1px solid var(--border); }
 .value-grid { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--border-strong); }
@@ -293,9 +290,6 @@ blockquote cite { color: var(--fg-3); font-family: var(--font-mono); font-size: 
   .availability-actions .button { width: 100%; }
   .availability-row { grid-template-columns: 1fr; gap: var(--space-2); }
   .availability-state { width: fit-content; }
-  .trust-strip { grid-template-columns: repeat(2, 1fr); }
-  .trust-strip span:nth-child(2) { border-right: 0; }
-  .trust-strip span:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
   .value-grid { grid-template-columns: 1fr; }
   .value-grid article { min-height: 220px; border-right: 0; border-bottom: 1px solid var(--border); }
   .value-grid h3 { margin-top: var(--space-8); }
@@ -333,7 +327,7 @@ blockquote cite { color: var(--fg-3); font-family: var(--font-mono); font-size: 
 }
 
 @media print {
-  .site-header, .site-footer, .hero, .trust-strip, .value-section, .workspace, .availability-section, .method-section, .rubric-section, .privacy-section, .no-print { display: none !important; }
+  .site-header, .site-footer, .hero, .value-section, .workspace, .availability-section, .method-section, .rubric-section, .privacy-section, .no-print { display: none !important; }
   body { background: white; }
   .result-shell { max-width: none; padding: 0; }
   .result-grid { grid-template-columns: 1fr; }

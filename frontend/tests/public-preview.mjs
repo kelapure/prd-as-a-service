@@ -43,7 +43,6 @@ async function assertClosed(page) {
   assert.equal(await page.getByRole("group", { name: "PRD input method" }).count(), 0);
   assert.equal(await page.getByRole("button", { name: "Evaluate this PRD" }).count(), 0);
   assert.equal(await page.locator("input, textarea").count(), 0);
-  assert.equal(await page.getByText("Uploads remain closed", { exact: true }).count(), 1);
 }
 
 await mkdir(evidenceDir, { recursive: true });
@@ -76,6 +75,8 @@ try {
   await page.goto(origin, { waitUntil: "networkidle" });
   assert.equal(await page.title(), "EvalGPT — Evidence-backed PRD judgment");
   assert.equal(await page.locator("h1").innerText(), "Know if your PRD is ready to build.");
+  assert.equal(await page.locator(".trust-strip").count(), 0);
+  assert.equal(await page.getByText(/public beta/i).count(), 0);
   assert.equal(await page.getByText("The interface is ready. Live judgment is not open yet.").count(), 1);
   assert.equal(await page.getByText("The public preview does not send, process, or store a PRD because there is no upload or paste control.").count(), 1);
   assert.equal(await page.getByText("Fable UX review", { exact: true }).count(), 1);
@@ -91,7 +92,7 @@ try {
   await page.locator("#judge-result").waitFor();
   await page.waitForFunction(() => document.activeElement?.id === "judge-result");
   assert.equal(await page.locator(".verdict-label").innerText(), "Revise");
-  assert.equal(await page.getByText("PRD Judge · Public beta · Example result", { exact: true }).count(), 1);
+  assert.equal(await page.getByText("PRD Judge · Example result", { exact: true }).count(), 1);
   assert.equal(await page.locator("#path-title").innerText(), "Path to GO");
   await assertClosed(page);
   await audit(page, "desktop public example result");

@@ -67,7 +67,7 @@ export default function App() {
       <main id="main">
         <section className="hero section-shell" id="top">
           <div className="hero-copy">
-            <p className="eyebrow">PRD Judge · Public beta</p>
+            <p className="eyebrow">PRD Judge</p>
             <h1>Know if your PRD is ready to build.</h1>
             <p className="hero-lede">
               {PUBLIC_EVALUATIONS_ENABLED
@@ -98,13 +98,6 @@ export default function App() {
             <p className="specimen-next"><span>02</span> Assign the manual override path.</p>
           </div>
         </section>
-
-        <div className="trust-strip" aria-label="Public beta commitments">
-          <span>{PUBLIC_EVALUATIONS_ENABLED ? "Free during beta" : "Public preview"}</span>
-          <span>No account</span>
-          <span>{PUBLIC_EVALUATIONS_ENABLED ? "No EvalGPT document storage" : "Synthetic example"}</span>
-          <span>{PUBLIC_EVALUATIONS_ENABLED ? "Exportable report" : "Uploads remain closed"}</span>
-        </div>
 
         <section className="value-section section-shell">
           <div className="section-heading narrow-heading">
@@ -186,7 +179,7 @@ export default function App() {
 
         <section className="privacy-section section-shell" id="privacy">
           <div>
-            <p className="eyebrow">Privacy during public beta</p>
+            <p className="eyebrow">Privacy</p>
             <h2>{PUBLIC_EVALUATIONS_ENABLED ? "Your document is an input, not an account asset." : "No document upload is accepted in this preview."}</h2>
           </div>
           <div className="privacy-copy">
@@ -209,7 +202,7 @@ export default function App() {
 
       <footer className="site-footer">
         <div className="brand"><span className="brand-mark">8090</span><span>EvalGPT</span></div>
-        <p>Evidence-backed PRD judgment. Public beta.</p>
+        <p>Evidence-backed PRD judgment.</p>
         <nav aria-label="Footer navigation"><button type="button" onClick={showExample}>Example result</button><a href="#methodology">Methodology</a><a href="#privacy">Privacy</a><a href="#top">Back to top</a></nav>
       </footer>
     </>

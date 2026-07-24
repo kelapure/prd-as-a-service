@@ -91,7 +91,7 @@ export function JudgeResult({ result, onReset }: JudgeResultProps) {
       aria-labelledby="result-title"
     >
       <header className="verdict-panel">
-        <p className="eyebrow">PRD Judge · Public beta{example ? " · Example result" : ""}</p>
+        <p className="eyebrow">PRD Judge{example ? " · Example result" : ""}</p>
         <div className="verdict-lockup">
           <p className="score" aria-label={`Readiness score ${score.value} out of ${score.out_of}`}>{score.value}<span>/{score.out_of}</span></p>
           <div>
