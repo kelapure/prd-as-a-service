@@ -118,6 +118,19 @@ class BundleTests(unittest.TestCase):
             judge = PrdJudge(config)
         self.assertEqual(judge.score_timeout_seconds, 300.0)
 
+    def test_model_client_default_timeout_matches_production(self) -> None:
+        config = RuntimeConfig(
+            mode="model",
+            model="candidate-model",
+            allowed_models=frozenset({"candidate-model"}),
+        )
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}, clear=True),
+            patch("app.judge.AsyncAnthropic") as client,
+        ):
+            PrdJudge(config)
+        client.assert_called_once_with(timeout=240.0)
+
 
 class StructuredOutputTests(unittest.TestCase):
     def test_missing_parsed_output_fails_closed(self) -> None:
