@@ -108,6 +108,7 @@ If an enabled model is absent from its allowlist or its bundle pins do not match
     npm run type-check
     npm run build
     npm run test:browser
+    node tests/score-envelope-guard.mjs
     npm run test:full-flow
 
     # Full fixture-backed stack

@@ -173,7 +173,10 @@ A later review-driven frontend commit `a0bc696` landed after that rerun. It
 makes the page fail closed with reload guidance when a complete event carries
 any envelope other than `evalgpt-prd-judge/v2` with a `prd_score` block, and it
 keeps an in-scope Layer 3 zero visible in the deterministic-total breakdown on
-the page and in the HTML export.
+the page and in the HTML export. The browser regression check
+`frontend/tests/score-envelope-guard.mjs` pins both behaviors against the built
+frontend and captures its screenshot and export evidence; run it with
+`node tests/score-envelope-guard.mjs` from `frontend/` after a build.
 
 ## Scope
 
