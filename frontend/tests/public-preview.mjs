@@ -53,6 +53,10 @@ try {
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
   assert.equal(response.headers.get("referrer-policy"), "no-referrer");
   assert.match(response.headers.get("content-security-policy") || "", /default-src 'self'/);
+  assert.match(
+    response.headers.get("content-security-policy") || "",
+    /connect-src 'self' https:\/\/evalgpt-api-gateway-m55fnl6poa-uc\.a\.run\.app/,
+  );
 
   browser = await chromium.launch({ headless: true, executablePath: chrome });
   const enforcedPage = await browser.newPage({ viewport: { width: 1440, height: 1000 } });

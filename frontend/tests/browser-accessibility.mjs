@@ -48,6 +48,10 @@ try {
   assert.equal(response.headers.get("referrer-policy"), "no-referrer");
   assert.equal(response.headers.get("permissions-policy"), "camera=(), microphone=(), geolocation=()");
   assert.match(response.headers.get("content-security-policy") || "", /default-src 'self'/);
+  assert.match(
+    response.headers.get("content-security-policy") || "",
+    /connect-src 'self' https:\/\/evalgpt-api-gateway-m55fnl6poa-uc\.a\.run\.app/,
+  );
   browser = await chromium.launch({ headless: true, executablePath: chrome });
 
   const enforcedContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
