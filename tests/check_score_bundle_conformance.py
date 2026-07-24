@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
+import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -13,6 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "judge-runtime"))
 
 from app.bundle import SCORE_BUNDLE, SCORE_TOOLS  # noqa: E402
+
+
+SCORE_BUNDLE_PATH = ROOT / "judge-runtime" / "bundle" / "prd-score-runtime.json"
 
 
 def _criterion(identifier: str, score: int) -> dict:
@@ -44,14 +48,21 @@ def main() -> int:
         raise SystemExit(
             f"source commit mismatch: bundle={SCORE_BUNDLE.source_commit} canonical={commit}"
         )
-    for relative, bundled in SCORE_BUNDLE.files.items():
-        source = (canonical / relative).read_text(encoding="utf-8")
-        if source != bundled:
-            source_hash = hashlib.sha256(source.encode()).hexdigest()
-            bundle_hash = hashlib.sha256(bundled.encode()).hexdigest()
-            raise SystemExit(
-                f"content mismatch {relative}: bundle={bundle_hash} canonical={source_hash}"
-            )
+    exporter = canonical / "scripts" / "export_runtime_bundle.py"
+    if not exporter.is_file():
+        raise SystemExit(f"canonical exporter not found: {exporter}")
+    with tempfile.TemporaryDirectory() as temporary:
+        expected_path = Path(temporary) / "prd-score-runtime.json"
+        subprocess.check_call(
+            [sys.executable, str(exporter), "--output", str(expected_path)],
+            cwd=canonical,
+        )
+        expected = json.loads(expected_path.read_text(encoding="utf-8"))
+    bundled = json.loads(SCORE_BUNDLE_PATH.read_text(encoding="utf-8"))
+    if expected != bundled:
+        raise SystemExit(
+            "bundled PRD Score runtime differs from the canonical exporter output"
+        )
     fixture = (
         "# Product requirements document\n\n"
         "Claims reviewers need a measured handling-time baseline.\n"
