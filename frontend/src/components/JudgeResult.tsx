@@ -249,7 +249,10 @@ export function JudgeResult({ result, onReset }: JudgeResultProps) {
               <>
                 <p className="eyebrow">Secondary authoring diagnostic</p>
                 <h3 id="draft-strength-title">Draft strength unavailable</h3>
-                <p className="empty-state">The readiness judgment is complete and unaffected. The separate draft-strength diagnostic did not return a validated report.</p>
+                <p className="empty-state">
+                  {scoreDiagnostic.validation.warnings?.[0]
+                    || "The separate draft-strength diagnostic did not return a validated report; the readiness judgment is unaffected."}
+                </p>
               </>
             )}
           </section>

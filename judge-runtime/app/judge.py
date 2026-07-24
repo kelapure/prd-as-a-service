@@ -293,10 +293,11 @@ class PrdJudge:
         preflight = TOOLS.preflight(primary.text, primary.name)
 
         progress("forming_judgment", "Forming the evidence-backed judgment")
-        progress(
-            "scoring_draft",
-            "Scoring draft strength independently from readiness",
-        )
+        if self.config.score_enabled:
+            progress(
+                "scoring_draft",
+                "Scoring draft strength independently from readiness",
+            )
 
         async def judge_pipeline() -> tuple[JudgeReport, dict[str, Any], dict[str, Any]]:
             if self.config.mode == "fixture":
@@ -357,7 +358,7 @@ class PrdJudge:
                 )
             except asyncio.CancelledError:
                 raise
-            except (EvaluationError, ValidationError, KeyError, TypeError, ValueError):
+            except Exception:
                 return PrdScoreDiagnostic(
                     status="unavailable",
                     report=None,
@@ -410,7 +411,7 @@ class PrdJudge:
                 "prd_score_calculation": (
                     prd_score.report.calculation_version
                     if prd_score.report is not None
-                    else "prd-score-calculation-v1"
+                    else SCORE_TOOLS.calculation_version
                 ),
                 "prd_score_model": self.config.score_model,
             },
@@ -709,7 +710,8 @@ class PrdJudge:
 
     @staticmethod
     def _fixture_prd_score(primary: ExtractedDocument) -> dict[str, Any]:
-        quote = primary.evidence_text.strip().splitlines()[-1][:160]
+        evidence_source = primary.evidence_text.strip()
+        quote = evidence_source.splitlines()[-1][:160] if evidence_source else ""
 
         def row(identifier: str, value: int) -> dict[str, Any]:
             return {
@@ -718,9 +720,10 @@ class PrdJudge:
                 "anchor": f"{value}: calibrated anchor",
                 "evidence": [
                     {
-                        "status": "used",
+                        "status": "used" if quote else "missing",
                         "source": primary.name,
-                        "quote": quote,
+                        "quote": quote
+                        or f"No extractable source text was available to quote for {identifier}.",
                         "locator": "Primary artifact",
                     }
                 ],

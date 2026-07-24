@@ -8,6 +8,8 @@ import unittest
 from unittest.mock import patch
 
 import fitz
+import httpx
+from anthropic import APIConnectionError
 from fastapi.testclient import TestClient
 from docx import Document
 from PIL import Image
@@ -114,6 +116,24 @@ class ExtractionTests(unittest.TestCase):
             pdf.new_page()
         with self.assertRaisesRegex(InputError, "limit is 200"):
             extract_document("too-long.pdf", pdf.tobytes())
+
+    def test_fixture_prd_score_handles_documents_without_extractable_text(self) -> None:
+        pdf = fitz.open()
+        pdf.new_page()
+        document = extract_document("scan.pdf", pdf.tobytes())
+        self.assertEqual(document.evidence_text, "")
+        report = PrdJudge._fixture_prd_score(document)
+        statuses = {
+            row["evidence"][0]["status"]
+            for key in ("layer1", "layer2", "writing_layer")
+            for row in report[key]
+        }
+        self.assertEqual(statuses, {"missing"})
+        finalized = SCORE_TOOLS.finalize(report, document.evidence_text)
+        validation = SCORE_TOOLS.validate(
+            finalized, document.evidence_text, document.evidence_text
+        )
+        self.assertTrue(validation["ok"], validation.get("errors"))
 
     def test_docx_extracts_headings_and_tables(self) -> None:
         source = Document()
@@ -321,8 +341,45 @@ class ConcurrentEvaluationTests(unittest.TestCase):
         self.assertEqual(envelope.prd_score.status, "unavailable")
         self.assertIsNone(envelope.prd_score.report)
 
+    def test_score_api_failure_does_not_suppress_the_authoritative_judgment(self) -> None:
+        primary = self._primary()
+        phases: list[str] = []
+
+        async def scenario():
+            judge = self._judge()
+
+            async def fake_judge(documents, preflight):
+                return PrdJudge._fixture_report(primary)
+
+            async def fake_rubric(documents, preflight):
+                return PrdJudge._fixture_rubric(primary)
+
+            async def fake_score(documents, preflight):
+                raise APIConnectionError(
+                    request=httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+                )
+
+            try:
+                with (
+                    patch.object(judge, "_run_judge_model", fake_judge),
+                    patch.object(judge, "_run_rubric_model", fake_rubric),
+                    patch.object(judge, "_run_score_model", fake_score),
+                ):
+                    return await judge.evaluate(
+                        [primary], lambda phase, message: phases.append(phase)
+                    )
+            finally:
+                await judge.close()
+
+        envelope = asyncio.run(scenario())
+        self.assertEqual(envelope.report.verdict, "REVISE")
+        self.assertEqual(envelope.prd_score.status, "unavailable")
+        self.assertIsNone(envelope.prd_score.report)
+        self.assertIn("scoring_draft", phases)
+
     def test_disabled_score_does_not_call_score_model_or_block_judgment(self) -> None:
         primary = self._primary()
+        phases: list[str] = []
 
         async def scenario():
             config = RuntimeConfig(
@@ -351,7 +408,7 @@ class ConcurrentEvaluationTests(unittest.TestCase):
                     patch.object(judge, "_run_score_model", forbidden_score),
                 ):
                     return await judge.evaluate(
-                        [primary], lambda phase, message: None
+                        [primary], lambda phase, message: phases.append(phase)
                     )
             finally:
                 await judge.close()
@@ -360,6 +417,7 @@ class ConcurrentEvaluationTests(unittest.TestCase):
         self.assertEqual(envelope.report.verdict, "REVISE")
         self.assertEqual(envelope.prd_score.status, "unavailable")
         self.assertIn("not enabled", envelope.prd_score.validation["warnings"][0])
+        self.assertNotIn("scoring_draft", phases)
 
     def test_rubric_failure_still_raises_a_plain_evaluation_error(self) -> None:
         primary = self._primary()

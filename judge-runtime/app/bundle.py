@@ -170,6 +170,10 @@ class CanonicalScoreTools:
             else:
                 sys.modules["score_report"] = previous
 
+    @property
+    def calculation_version(self) -> str:
+        return str(self._scorer.CALCULATION_VERSION)
+
     def finalize(
         self, report: dict[str, Any], primary_text: str
     ) -> dict[str, Any]:

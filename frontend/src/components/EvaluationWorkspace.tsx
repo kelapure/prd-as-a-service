@@ -33,6 +33,7 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
   const [pastedText, setPastedText] = useState("");
   const [supporting, setSupporting] = useState<File[]>([]);
   const [progress, setProgress] = useState<ProgressUpdate | null>(null);
+  const [seenPhases, setSeenPhases] = useState<ProgressPhase[]>([]);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -45,7 +46,15 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
     ),
     [mode, pastedText, primary, supporting],
   );
-  const activeIndex = progress ? PHASES.findIndex((phase) => phase.id === progress.phase) : -1;
+  const visiblePhases = PHASES.filter(
+    (phase) => phase.id !== "scoring_draft" || seenPhases.includes("scoring_draft"),
+  );
+  const activeIndex = progress ? visiblePhases.findIndex((phase) => phase.id === progress.phase) : -1;
+
+  const trackProgress = (update: ProgressUpdate) => {
+    setSeenPhases((phases) => (phases.includes(update.phase) ? phases : [...phases, update.phase]));
+    setProgress(update);
+  };
 
   const choosePrimary = (file: File | null) => {
     setError("");
@@ -77,6 +86,7 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
     const controller = new AbortController();
     controllerRef.current = controller;
     setRunning(true);
+    setSeenPhases(["uploading"]);
     setProgress({ phase: "uploading", message: "Preparing an ephemeral evaluation" });
     try {
       const result = await evaluatePrd(
@@ -85,7 +95,7 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
           pastedText: mode === "paste" ? pastedText : undefined,
           supportingFiles: supporting,
         },
-        setProgress,
+        trackProgress,
         controller.signal,
       );
       setPrimary(null);
@@ -197,7 +207,7 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
           <div className="progress-panel" role="status" aria-live="polite">
             <p className="progress-message">{progress.message}</p>
             <ol className="phase-list">
-              {PHASES.map((phase, index) => (
+              {visiblePhases.map((phase, index) => (
                 <li
                   key={phase.id}
                   className={index < activeIndex ? "is-complete" : index === activeIndex ? "is-current" : ""}

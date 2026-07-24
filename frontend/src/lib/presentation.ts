@@ -75,7 +75,8 @@ export function scoreDisplay(
   adjustedScore: number | undefined,
 ): string {
   if (adjustedScore !== undefined && adjustedScore !== score) {
-    return `${score}→${adjustedScore}/5 · normalized`;
+    const rule = adjustedScore > score ? "normalized" : "capped";
+    return `${score}→${adjustedScore}/5 · ${rule}`;
   }
   return `${adjustedScore ?? score}/5`;
 }
