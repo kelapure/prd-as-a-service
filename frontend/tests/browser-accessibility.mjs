@@ -132,6 +132,14 @@ try {
     await page.getByText("3→4/5 · normalized").count(),
     2,
   );
+  assert.equal(
+    await page.getByText("Layer 1 36 + adjusted Layer 2 29 = 65/100.").count(),
+    1,
+  );
+  assert.equal(
+    await page.getByText("12/20 · reported separately and excluded from 65/100.").count(),
+    1,
+  );
   const resultOrder = await page.evaluate(() => {
     const top = (selector) => document.querySelector(selector)?.getBoundingClientRect().top;
     return {
@@ -178,8 +186,12 @@ try {
   assert.doesNotMatch(html, /5\/10 · REVISE/);
   assert.match(html, /Score C7 · Out of scope and roadmap/);
   assert.match(html, /Applied \+1, capped at 5, to M1, M2, M3, M5, and M7/);
+  assert.match(html, /Layer 1 36 \+ adjusted Layer 2 29 = 65\/100/);
+  assert.match(html, /Writing.<\/strong> 12\/20; reported separately and excluded from 65\/100/);
+  assert.match(html, /Writing quality · unvalidated/);
   assert.match(html, /customer value or ROI gap/);
   assert.doesNotMatch(html, /customer_value_or_roi_gap/);
+  assert.doesNotMatch(html, /“No sufficient evidence was found for/);
 
   const jsonDownload = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download JSON" }).click();

@@ -160,6 +160,17 @@ def _reference_text(documents: list[ExtractedDocument]) -> str:
     return "\n\n".join(document.evidence_text for document in documents)
 
 
+def _fixture_excerpt(value: str, limit: int = 160) -> str:
+    normalized = re.sub(r"\s+", " ", value).strip()
+    if len(normalized) <= limit:
+        return normalized
+    clipped = normalized[: limit + 1]
+    if clipped[limit].isspace():
+        return clipped[:limit].rstrip()
+    whole_words = clipped.rsplit(" ", 1)[0].rstrip()
+    return whole_words or normalized[:limit]
+
+
 def _artifact_content(documents: list[ExtractedDocument], preflight: dict[str, Any]) -> list[dict[str, Any]]:
     manifest = [
         {
@@ -632,7 +643,7 @@ class PrdJudge:
 
     @staticmethod
     def _fixture_report(primary: ExtractedDocument) -> dict[str, Any]:
-        quote = primary.text.strip().splitlines()[-1][:160]
+        quote = _fixture_excerpt(primary.text.strip().splitlines()[-1])
         return {
             "artifact_type": "prd-lite",
             "classification_override": "",
@@ -687,7 +698,7 @@ class PrdJudge:
             "AI Agent Task Decomposability",
             "Falsifiable Bet and Decision Thresholds",
         ]
-        quote = primary.text.strip().splitlines()[-1][:160]
+        quote = _fixture_excerpt(primary.text.strip().splitlines()[-1])
         rows = []
         for index, name in enumerate(names, start=1):
             passed = index in {1, 3, 4, 8, 9}
@@ -716,7 +727,7 @@ class PrdJudge:
     @staticmethod
     def _fixture_prd_score(primary: ExtractedDocument) -> dict[str, Any]:
         evidence_source = primary.evidence_text.strip()
-        quote = evidence_source.splitlines()[-1][:160] if evidence_source else ""
+        quote = _fixture_excerpt(evidence_source.splitlines()[-1]) if evidence_source else ""
 
         def row(identifier: str, value: int) -> dict[str, Any]:
             return {

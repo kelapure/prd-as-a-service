@@ -28,6 +28,7 @@ from app.judge import (
     PrdJudge,
     RuntimeConfig,
     _artifact_content,
+    _fixture_excerpt,
     _judge_system_prompt,
     _score_system_prompt,
     _reference_text,
@@ -144,6 +145,18 @@ class ExtractionTests(unittest.TestCase):
             finalized, document.evidence_text, document.evidence_text
         )
         self.assertTrue(validation["ok"], validation.get("errors"))
+
+    def test_fixture_evidence_excerpt_does_not_truncate_mid_word(self) -> None:
+        source = (
+            "Claims representatives need measurable handling-time targets and "
+            "explicit supervisory review requirements. "
+        ) * 3
+        excerpt = _fixture_excerpt(source, limit=80)
+        self.assertLessEqual(len(excerpt), 80)
+        self.assertTrue(source.startswith(excerpt))
+        self.assertNotEqual(excerpt[-1], " ")
+        next_character = source[len(excerpt)]
+        self.assertTrue(next_character.isspace())
 
     def test_docx_extracts_headings_and_tables(self) -> None:
         source = Document()

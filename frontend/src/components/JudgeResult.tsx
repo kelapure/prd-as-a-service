@@ -14,6 +14,33 @@ interface JudgeResultProps {
   onReset: () => void;
 }
 
+interface EvidenceBlockProps {
+  status: string;
+  quote: string;
+  source?: string;
+  locator?: string | null;
+}
+
+function EvidenceBlock({ status, quote, source, locator }: EvidenceBlockProps) {
+  const citation = [source, locator].filter(Boolean).join(" · ");
+  if (status === "missing") {
+    return (
+      <div className="missing-evidence">
+        <p className="evidence-status">{status}</p>
+        <p>{quote}</p>
+        {citation && <cite>{citation}</cite>}
+      </div>
+    );
+  }
+  return (
+    <blockquote>
+      <p className="evidence-status">{status}</p>
+      <p>“{quote}”</p>
+      {citation && <cite>{citation}</cite>}
+    </blockquote>
+  );
+}
+
 export function JudgeResult({ result, onReset }: JudgeResultProps) {
   const { report, readiness_score: score, rubric } = result;
   const scoreDiagnostic = result.prd_score;
@@ -118,11 +145,13 @@ export function JudgeResult({ result, onReset }: JudgeResultProps) {
                     <details className="evidence-disclosure" open={index === 0}>
                       <summary>Inspect evidence</summary>
                       {finding.evidence.map((evidence, evidenceIndex) => (
-                        <blockquote key={`${evidence.source}-${evidenceIndex}`}>
-                          <p className="evidence-status">{evidence.status}</p>
-                          <p>“{evidence.quote}”</p>
-                          <cite>{evidence.source}{evidence.locator ? ` · ${evidence.locator}` : ""}</cite>
-                        </blockquote>
+                        <EvidenceBlock
+                          key={`${evidence.source}-${evidenceIndex}`}
+                          status={evidence.status}
+                          quote={evidence.quote}
+                          source={evidence.source}
+                          locator={evidence.locator}
+                        />
                       ))}
                     </details>
                   </article>
@@ -203,11 +232,13 @@ export function JudgeResult({ result, onReset }: JudgeResultProps) {
                           <p className="score-anchor">{criterion.anchor}</p>
                           {criterion.fix && <p><strong>One-level improvement.</strong> {criterion.fix}</p>}
                           {criterion.evidence.map((evidence, index) => (
-                            <blockquote key={`${criterion.id}-${index}`}>
-                              <p className="evidence-status">{evidence.status}</p>
-                              <p>“{evidence.quote}”</p>
-                              <cite>{evidence.source}{evidence.locator ? ` · ${evidence.locator}` : ""}</cite>
-                            </blockquote>
+                            <EvidenceBlock
+                              key={`${criterion.id}-${index}`}
+                              status={evidence.status}
+                              quote={evidence.quote}
+                              source={evidence.source}
+                              locator={evidence.locator}
+                            />
                           ))}
                         </div>
                       </details>
@@ -226,17 +257,35 @@ export function JudgeResult({ result, onReset }: JudgeResultProps) {
                           <p className="score-anchor">{criterion.anchor}</p>
                           {criterion.fix && <p><strong>One-level improvement.</strong> {criterion.fix}</p>}
                           {criterion.evidence.map((evidence, index) => (
-                            <blockquote key={`${criterion.id}-${index}`}>
-                              <p className="evidence-status">{evidence.status}</p>
-                              <p>“{evidence.quote}”</p>
-                              <cite>{evidence.source}{evidence.locator ? ` · ${evidence.locator}` : ""}</cite>
-                            </blockquote>
+                            <EvidenceBlock
+                              key={`${criterion.id}-${index}`}
+                              status={evidence.status}
+                              quote={evidence.quote}
+                              source={evidence.source}
+                              locator={evidence.locator}
+                            />
                           ))}
                         </div>
                       </details>
                     ))}
                   </div>
                   <dl className="score-method-facts">
+                    <div>
+                      <dt>Deterministic total</dt>
+                      <dd>
+                        Layer 1 {draftScore.totals.layer1} + adjusted Layer 2 {draftScore.totals.layer2_adjusted}
+                        {draftScore.totals.layer3 ? ` + Layer 3 ${draftScore.totals.layer3}` : ""}
+                        {" = "}{draftScore.totals.final_before_cap}
+                        {draftScore.totals.final !== draftScore.totals.final_before_cap
+                          ? `; capped to ${draftScore.totals.final}`
+                          : ""}
+                        /{draftScore.totals.denominator}.
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Writing</dt>
+                      <dd>{draftScore.totals.writing}/{draftScore.totals.writing_denominator} · reported separately and excluded from {draftScore.totals.final}/{draftScore.totals.denominator}.</dd>
+                    </div>
                     <div><dt>Length normalization</dt><dd>{draftScore.length_normalization.detail}</dd></div>
                     <div><dt>Hard caps</dt><dd>{draftScore.hard_caps.length ? draftScore.hard_caps.map((cap) => cap.cap).join("; ") : "None"}</dd></div>
                     <div><dt>Historical threshold</dt><dd>{draftScore.totals.historical_threshold}/{draftScore.totals.denominator} · calibration context only</dd></div>
@@ -265,7 +314,7 @@ export function JudgeResult({ result, onReset }: JudgeResultProps) {
             <details className="wide-disclosure">
               <summary>
                 <span><span className="eyebrow">Source accounting</span>Evidence ledger</span>
-                <span className="disclosure-meta"><strong>{report.evidence_ledger.length} sources</strong><span className="disclosure-prompt prompt-open">Open ledger ↓</span><span className="disclosure-prompt prompt-close">Close ledger ↑</span></span>
+                <span className="disclosure-meta"><strong>{report.evidence_ledger.length} source{report.evidence_ledger.length === 1 ? "" : "s"}</strong><span className="disclosure-prompt prompt-open">Open ledger ↓</span><span className="disclosure-prompt prompt-close">Close ledger ↑</span></span>
               </summary>
               <div className="ledger-list">
                 {report.evidence_ledger.map((row, index) => (
@@ -296,11 +345,12 @@ export function JudgeResult({ result, onReset }: JudgeResultProps) {
                     <div>
                       <p>{criterion.rationale}</p>
                       {criterion.evidence.map((evidence, index) => (
-                        <blockquote key={index}>
-                          <p className="evidence-status">{evidence.status}</p>
-                          <p>“{evidence.quote}”</p>
-                          {evidence.locator && <cite>{evidence.locator}</cite>}
-                        </blockquote>
+                        <EvidenceBlock
+                          key={index}
+                          status={evidence.status}
+                          quote={evidence.quote}
+                          locator={evidence.locator}
+                        />
                       ))}
                     </div>
                   </details>
