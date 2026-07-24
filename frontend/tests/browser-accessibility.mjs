@@ -183,6 +183,7 @@ try {
   assert.match(html, /Draft strength/);
   assert.match(html, /does not change the readiness verdict/i);
   assert.match(html, /5\/10 · Revise/);
+  assert.match(html, /PRD Judge · Public beta · Example result/);
   assert.doesNotMatch(html, /5\/10 · REVISE/);
   assert.match(html, /Score C7 · Out of scope and roadmap/);
   assert.match(html, /Applied \+1, capped at 5, to M1, M2, M3, M5, and M7/);

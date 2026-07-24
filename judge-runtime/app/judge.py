@@ -165,6 +165,9 @@ def _fixture_excerpt(value: str, limit: int = 160) -> str:
     if len(normalized) <= limit:
         return normalized
     clipped = normalized[: limit + 1]
+    sentence_end = max(clipped.rfind(mark) for mark in (".", "!", "?"))
+    if sentence_end >= limit // 2:
+        return clipped[: sentence_end + 1]
     if clipped[limit].isspace():
         return clipped[:limit].rstrip()
     whole_words = clipped.rsplit(" ", 1)[0].rstrip()

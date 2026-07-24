@@ -111,7 +111,7 @@ export function JudgeResult({ result, onReset }: JudgeResultProps) {
             )}
             {scoreDiagnostic.status === "complete" && draftScore?.fix_plan_ranked.length ? (
               <p className="path-bridge">
-                After the readiness actions, continue with the{" "}
+                {report.required_next_actions.length ? "After the readiness actions, continue" : "Continue"} with the{" "}
                 <a href="#draft-strength-title">three weakest draft dimensions</a>.
               </p>
             ) : null}

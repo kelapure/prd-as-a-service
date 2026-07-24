@@ -158,6 +158,17 @@ class ExtractionTests(unittest.TestCase):
         next_character = source[len(excerpt)]
         self.assertTrue(next_character.isspace())
 
+    def test_fixture_evidence_excerpt_prefers_a_complete_sentence(self) -> None:
+        source = (
+            "This sentence carries enough evidence to cite cleanly. "
+            "The next sentence would be cut after a dangling fragment."
+        )
+        excerpt = _fixture_excerpt(source, limit=72)
+        self.assertEqual(
+            excerpt,
+            "This sentence carries enough evidence to cite cleanly.",
+        )
+
     def test_docx_extracts_headings_and_tables(self) -> None:
         source = Document()
         source.add_heading("Decision thresholds", level=1)
