@@ -87,6 +87,8 @@ try {
   await page.goto(origin, { waitUntil: "networkidle" });
   assert.equal(await page.title(), "EvalGPT — Evidence-backed PRD judgment");
   assert.equal(await page.locator("h1").innerText(), "Know if your PRD is ready to build.");
+  assert.equal(await page.locator(".trust-strip").count(), 0);
+  assert.equal(await page.getByText(/public beta/i).count(), 0);
   assert.equal(await page.getByText("Readiness and draft strength answer different questions.").count(), 1);
   const inputMethod = page.getByRole("group", { name: "PRD input method" });
   assert.equal(await inputMethod.getByRole("button", { name: "Upload a file" }).getAttribute("aria-pressed"), "true");
@@ -182,12 +184,13 @@ try {
   await htmlFile.saveAs(htmlPath);
   const html = await readFile(htmlPath, "utf8");
   assert.match(html, /--color-ink:/, "HTML export must inline the canonical 8090 tokens");
+  assert.doesNotMatch(html, /public beta/i);
   assert.match(html, /Evidence ledger/);
   assert.match(html, /PRD Eval Rubric v2/);
   assert.match(html, /Draft strength/);
   assert.match(html, /does not change the readiness verdict/i);
   assert.match(html, /5\/10 · Revise/);
-  assert.match(html, /PRD Judge · Public beta · Example result/);
+  assert.match(html, /PRD Judge · Example result/);
   assert.doesNotMatch(html, /5\/10 · REVISE/);
   assert.match(html, /Score C7 · Out of scope and roadmap/);
   assert.match(html, /Applied \+1, capped at 5, to M1, M2, M3, M5, and M7/);

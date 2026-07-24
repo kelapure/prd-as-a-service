@@ -23,7 +23,7 @@
     "build": "vite build",
     "type-check": "tsc --noEmit",
     "test:browser": "npm run test:browser:public && npm run test:browser:enabled",
-    "test:browser:public": "npm run build && node tests/public-preview.mjs",
+    "test:browser:public": "VITE_PUBLIC_EVALUATIONS_ENABLED=false npm run build && node tests/public-preview.mjs",
     "test:browser:enabled": "VITE_PUBLIC_EVALUATIONS_ENABLED=true npm run build && node tests/browser-accessibility.mjs",
     "test:full-flow": "npm --prefix ../api-gateway run build && VITE_PUBLIC_EVALUATIONS_ENABLED=true VITE_API_BASE=http://127.0.0.1:8081 npm run build && node tests/full-flow.mjs",
     "postinstall": "vite build",

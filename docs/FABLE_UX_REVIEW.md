@@ -226,3 +226,18 @@ console or CSP errors. Fable recorded four nonblocking P2 opportunities: show a
 fixed step count from the beginning when score availability is known, consider
 a truthful elapsed-time cue during long phases, move keyboard focus into the
 progress region on submit, and measure the upcoming-step contrast before GA.
+
+## Beta-positioning removal review
+
+On 2026-07-24, Fable reviewed the exact zero-traffic desktop preview
+`no-beta-f215043-20260724` after the visible `Public beta` positioning and the
+four-cell commitment strip were removed. The review inspected the homepage,
+example result, HTML export, deployed bundles, and the oversized-upload error.
+It returned `PASS` and the exact statement `No blocking Fable findings.`
+
+Fable verified that no human-facing beta copy or trust-strip markup remains,
+that the hero-to-value-section transition has no orphaned gap or border, and
+that Judge primacy, PRD Score separation, privacy content, and export hierarchy
+remain intact. Machine-readable schema fields, run IDs, and pinned instrument
+version identifiers remain unchanged as provenance rather than positioning
+copy.
