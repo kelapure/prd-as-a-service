@@ -147,6 +147,11 @@ class ScoreLayer3(BaseModel):
     scores: list[ScoreCriterion]
 
 
+class ScoreIntegrationContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    customer_named_missing_system: bool
+
+
 class RawPrdScoreReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
     instrument: Literal["prd-score"] = "prd-score"
@@ -158,7 +163,7 @@ class RawPrdScoreReport(BaseModel):
     layer1: list[ScoreCriterion]
     layer2: list[ScoreCriterion]
     layer3: ScoreLayer3
-    integration_context: dict[str, bool]
+    integration_context: ScoreIntegrationContext
     writing_layer: list[ScoreCriterion]
     anchor_placement: str
 

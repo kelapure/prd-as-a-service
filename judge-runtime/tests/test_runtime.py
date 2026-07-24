@@ -501,6 +501,20 @@ class PromptIsolationTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             RawPrdScoreReport.model_validate(raw)
 
+    def test_prd_score_schema_requires_integration_context_key(self) -> None:
+        primary = extract_pasted_text(
+            "# PRD\n" + "A measurable workflow requirement. " * 10
+        )
+        raw = PrdJudge._fixture_prd_score(primary)
+        raw["integration_context"] = {}
+        with self.assertRaises(ValidationError):
+            RawPrdScoreReport.model_validate(raw)
+
+        raw = PrdJudge._fixture_prd_score(primary)
+        raw["integration_context"] = {"customer_named_missing_systems": True}
+        with self.assertRaises(ValidationError):
+            RawPrdScoreReport.model_validate(raw)
+
 
 class RuntimeApiTests(unittest.TestCase):
     @classmethod
