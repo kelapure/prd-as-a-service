@@ -73,3 +73,12 @@ private runtime path.
 This UX pass does not certify the fixture model as a production model and does
 not satisfy the frozen-suite, precision, recall, retention, or target-user
 comprehension release gates.
+
+## Scope
+
+The passes above reviewed frontend commits `7af185e` and `d5af393`, which
+predate the PRD Score integration. This record does not cover the later
+draft-strength result section, the Scoring draft strength progress phase, the
+updated homepage copy, or the PRD Score export content. Those additions still
+require their own fresh-context Fable review under cloud/RELEASE_GATES.md
+before launch.

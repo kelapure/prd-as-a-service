@@ -1,6 +1,6 @@
 # EvalGPT PRD Judge runtime
 
-The runtime is an internal, stateless service for the EvalGPT public beta. It loads an
+The runtime is an internal, stateless service for the EvalGPT public beta. It loads
 integrity-checked snapshots exported from the canonical `prd_judge` and `prd_score`
 agents, extracts PDF/DOCX/Markdown/text in memory, and runs PRD Judge, PRD Score, and
 the secondary PRD Eval Rubric v2 concurrently in isolated model contexts. It validates
@@ -52,9 +52,9 @@ still returns and `prd_score.status` is `unavailable`. Cloud Run should require 
 and the optional `INTERNAL_SERVICE_TOKEN` provides an additional gateway-to-runtime
 check.
 
-## Refreshing the canonical bundle
+## Refreshing the canonical bundles
 
-Run from this repository after the canonical judge change is committed:
+Run from this repository after the canonical judge or score change is committed:
 
 ```bash
 python3 ../salesfactory-agents/prd_judge/scripts/export_runtime_bundle.py \

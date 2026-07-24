@@ -6,7 +6,8 @@
 - `api-gateway/` — Fastify same-origin API and SSE proxy; public endpoint is
   `POST /api/prd-judge/evaluate`.
 - `judge-runtime/` — IAM-protected FastAPI runtime for extraction, judgment,
-  validation, deterministic scoring, and the secondary rubric diagnostic.
+  validation, deterministic scoring, the separate PRD Score draft-strength
+  diagnostic, and the secondary rubric diagnostic.
 - `tests/` — end-to-end smoke and canonical runtime-bundle conformance tests.
 - `cloud/` — deployment and release-gate runbooks.
 
