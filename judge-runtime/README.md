@@ -1,10 +1,12 @@
 # EvalGPT PRD Judge runtime
 
 The runtime is an internal, stateless service for the EvalGPT public beta. It loads an
-integrity-checked snapshot exported from the canonical `prd_judge` agent, extracts
-PDF/DOCX/Markdown/text in memory, runs PRD Judge and the secondary PRD Eval Rubric v2
-concurrently in separate model contexts, validates quotes against the supplied sources,
-and applies the canonical deterministic readiness score after the report is valid.
+integrity-checked snapshots exported from the canonical `prd_judge` and `prd_score`
+agents, extracts PDF/DOCX/Markdown/text in memory, and runs PRD Judge, PRD Score, and
+the secondary PRD Eval Rubric v2 concurrently in isolated model contexts. It validates
+quotes against the supplied sources and applies each instrument's deterministic
+calculation only after the corresponding report is valid. PRD Score never changes or
+mathematically combines with the Judge verdict or readiness score.
 
 Scanned-page renders and embedded figures are capped at 12 per document and are resized
 or re-encoded to bounded dimensions and bytes before they reach the model. An oversized
@@ -27,12 +29,28 @@ export PRD_JUDGE_MODEL=<validated-model-id>
 export PRD_JUDGE_ALLOWED_MODELS=<same-validated-model-id>
 export PRD_JUDGE_EXPECTED_SOURCE_COMMIT=<reviewed-canonical-commit>
 export PRD_JUDGE_EXPECTED_MANIFEST_SHA256=<reviewed-runtime-manifest>
+export PRD_SCORE_ENABLED=false
 uvicorn app.main:app --port 8092
 ```
 
+PRD Score is feature-gated separately because its checked-in release candidate is
+blocked until the family-separated validation metrics pass. After that gate passes,
+configure the exact approved pair:
+
+```bash
+export PRD_SCORE_ENABLED=true
+export PRD_SCORE_MODEL=<validated-score-model-id>
+export PRD_SCORE_ALLOWED_MODELS=<same-validated-score-model-id>
+export PRD_SCORE_EXPECTED_SOURCE_COMMIT=<reviewed-canonical-score-commit>
+export PRD_SCORE_EXPECTED_MANIFEST_SHA256=<reviewed-score-runtime-manifest>
+```
+
 There is no automatic fallback model. A missing or mismatched commit or manifest pin
-makes `/health` degrade and blocks evaluation. Cloud Run should require IAM, and the
-optional `INTERNAL_SERVICE_TOKEN` provides an additional gateway-to-runtime check.
+for any enabled instrument makes `/health` degrade and blocks evaluation. A
+run-specific PRD Score validation failure is fail-soft: the authoritative Judge report
+still returns and `prd_score.status` is `unavailable`. Cloud Run should require IAM,
+and the optional `INTERNAL_SERVICE_TOKEN` provides an additional gateway-to-runtime
+check.
 
 ## Refreshing the canonical bundle
 
@@ -41,7 +59,12 @@ Run from this repository after the canonical judge change is committed:
 ```bash
 python3 ../salesfactory-agents/prd_judge/scripts/export_runtime_bundle.py \
   --output judge-runtime/bundle/prd-judge-runtime.json
+
+python3 ../salesfactory-agents/prd_score/scripts/export_runtime_bundle.py \
+  --output judge-runtime/bundle/prd-score-runtime.json
 ```
 
-Commit the bundle with its consuming runtime change so every deployed result can be
-reproduced from the returned source commit and manifest hash.
+Commit both bundles with their consuming runtime change so every deployed result can
+be reproduced from the returned source commits and manifest hashes. Run both
+`tests/check_bundle_conformance.py` and `tests/check_score_bundle_conformance.py`
+against clean canonical worktrees before release.

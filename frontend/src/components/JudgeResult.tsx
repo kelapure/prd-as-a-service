@@ -1,31 +1,13 @@
 import { downloadHtml, downloadJson } from "../lib/exportResult";
-import type { JudgeEnvelope, Verdict } from "../types/judge";
+import {
+  humanize,
+  SCORE_NAMES,
+  scoreDisplay,
+  scoreFixParts,
+  VERDICT_LABELS,
+} from "../lib/presentation";
+import type { JudgeEnvelope } from "../types/judge";
 
-
-const VERDICT_LABELS: Record<Verdict, string> = {
-  GO: "Go",
-  REVISE: "Revise",
-  HOLD: "Hold",
-  WRONG_ARTIFACT: "Wrong artifact",
-  DISQUALIFY_UNTIL_ARCHITECTURE_AUDIT: "Architecture audit required",
-};
-
-function humanize(value: string): string {
-  const artifactLabels: Record<string, string> = {
-    "prd-lite": "PRD-Lite",
-    "full-prd": "Full PRD",
-    "mini-prd": "Mini-PRD",
-    "rfp-rfi-response": "RFP/RFI response",
-  };
-  if (artifactLabels[value]) return artifactLabels[value];
-  const acronyms = new Set(["ai", "prd", "rbac", "rfp", "rfi", "roi"]);
-  return value
-    .replaceAll("_", " ")
-    .replaceAll("-", " ")
-    .split(" ")
-    .map((word) => acronyms.has(word.toLowerCase()) ? word.toUpperCase() : word)
-    .join(" ");
-}
 
 interface JudgeResultProps {
   result: JudgeEnvelope;
@@ -34,6 +16,8 @@ interface JudgeResultProps {
 
 export function JudgeResult({ result, onReset }: JudgeResultProps) {
   const { report, readiness_score: score, rubric } = result;
+  const scoreDiagnostic = result.prd_score;
+  const draftScore = scoreDiagnostic.report;
   const blockers = report.findings.filter((finding) => finding.severity !== "P2" && !finding.acknowledged);
   const severityCounts = report.findings.reduce<Record<string, number>>(
     (counts, finding) => ({ ...counts, [finding.severity]: (counts[finding.severity] || 0) + 1 }),
@@ -98,6 +82,12 @@ export function JudgeResult({ result, onReset }: JudgeResultProps) {
             ) : (
               <p className="empty-state">No blocking action remains. Preserve the acknowledged gaps and validation evidence through handoff.</p>
             )}
+            {scoreDiagnostic.status === "complete" && draftScore?.fix_plan_ranked.length ? (
+              <p className="path-bridge">
+                After the readiness actions, continue with the{" "}
+                <a href="#draft-strength-title">three weakest draft dimensions</a>.
+              </p>
+            ) : null}
           </section>
 
           <section className="result-section" aria-labelledby="findings-title">
@@ -143,7 +133,145 @@ export function JudgeResult({ result, onReset }: JudgeResultProps) {
             )}
           </section>
 
-          <section className="result-section">
+          <section className="result-section draft-strength-section" aria-labelledby="draft-strength-title">
+            {scoreDiagnostic.status === "complete" && draftScore?.totals ? (
+              <>
+                <div className="draft-strength-header">
+                  <div>
+                    <p className="eyebrow">Secondary authoring diagnostic</p>
+                    <h3 id="draft-strength-title">Draft strength</h3>
+                    <p className="draft-score-disclaimer">
+                      This score does not change the {VERDICT_LABELS[report.verdict]} verdict.
+                    </p>
+                    <p className="draft-calibration-note">Core rubric calibrated on five PRDs · Writing layer unvalidated</p>
+                  </div>
+                  <p
+                    className="draft-score-number"
+                    aria-label={`Draft strength score ${draftScore.totals.final} out of ${draftScore.totals.denominator}`}
+                  >
+                    {draftScore.totals.final}<span>/{draftScore.totals.denominator}</span>
+                  </p>
+                </div>
+
+                <div className="draft-fix-panel">
+                  <p className="eyebrow">Improve after the Path to GO</p>
+                  <p className="draft-id-note">PRD Score dimension IDs are independent from the C1–C12 coverage checks later in this report.</p>
+                  <ol>
+                    {draftScore.fix_plan_ranked.map((fix, index) => {
+                      const parts = scoreFixParts(fix);
+                      return (
+                        <li key={fix}>
+                          <span>{String(index + 1).padStart(2, "0")}</span>
+                          <p>
+                            <strong>{parts.id ? `Score ${parts.id} · ${parts.name}` : parts.name}</strong>
+                            {" "}{parts.action}
+                          </p>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </div>
+
+                <details className="wide-disclosure draft-score-details">
+                  <summary>
+                    <span><span className="eyebrow">Anchored 0–5 dimensions</span>Inspect the draft score</span>
+                    <span className="disclosure-meta">
+                      <strong>{draftScore.totals.writing}/{draftScore.totals.writing_denominator} writing</strong>
+                      <span className="disclosure-prompt prompt-open">Open scorecard ↓</span>
+                      <span className="disclosure-prompt prompt-close">Close scorecard ↑</span>
+                    </span>
+                  </summary>
+                  <div className="score-caveat">
+                    <p><strong>Different instrument.</strong> PRD Score measures document strength; PRD Judge decides readiness.</p>
+                    <p>The core rubric was calibrated on five outcome-labeled PRDs. The writing layer remains unvalidated and is reported separately.</p>
+                    <p>{draftScore.anchor_placement}</p>
+                  </div>
+                  <div className="score-layer">
+                    <h4>Product and execution dimensions</h4>
+                    {[...draftScore.layer1, ...draftScore.layer2, ...draftScore.layer3.scores].map((criterion) => (
+                      <details className="score-row" key={criterion.id}>
+                        <summary>
+                          <span className="criterion-id">{criterion.id}</span>
+                          <span>{SCORE_NAMES[criterion.id] || criterion.id}</span>
+                          <strong>{scoreDisplay(criterion.score, criterion.adjusted_score ?? undefined)}</strong>
+                        </summary>
+                        <div>
+                          <p className="score-anchor">{criterion.anchor}</p>
+                          {criterion.fix && <p><strong>One-level improvement.</strong> {criterion.fix}</p>}
+                          {criterion.evidence.map((evidence, index) => (
+                            <blockquote key={`${criterion.id}-${index}`}>
+                              <p className="evidence-status">{evidence.status}</p>
+                              <p>“{evidence.quote}”</p>
+                              <cite>{evidence.source}{evidence.locator ? ` · ${evidence.locator}` : ""}</cite>
+                            </blockquote>
+                          ))}
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                  <div className="score-layer">
+                    <h4>Writing quality · unvalidated</h4>
+                    {draftScore.writing_layer.map((criterion) => (
+                      <details className="score-row" key={criterion.id}>
+                        <summary>
+                          <span className="criterion-id">{criterion.id}</span>
+                          <span>{SCORE_NAMES[criterion.id] || criterion.id}</span>
+                          <strong>{scoreDisplay(criterion.score, criterion.adjusted_score ?? undefined)}</strong>
+                        </summary>
+                        <div>
+                          <p className="score-anchor">{criterion.anchor}</p>
+                          {criterion.fix && <p><strong>One-level improvement.</strong> {criterion.fix}</p>}
+                          {criterion.evidence.map((evidence, index) => (
+                            <blockquote key={`${criterion.id}-${index}`}>
+                              <p className="evidence-status">{evidence.status}</p>
+                              <p>“{evidence.quote}”</p>
+                              <cite>{evidence.source}{evidence.locator ? ` · ${evidence.locator}` : ""}</cite>
+                            </blockquote>
+                          ))}
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                  <dl className="score-method-facts">
+                    <div><dt>Length normalization</dt><dd>{draftScore.length_normalization.detail}</dd></div>
+                    <div><dt>Hard caps</dt><dd>{draftScore.hard_caps.length ? draftScore.hard_caps.map((cap) => cap.cap).join("; ") : "None"}</dd></div>
+                    <div><dt>Historical threshold</dt><dd>{draftScore.totals.historical_threshold}/{draftScore.totals.denominator} · calibration context only</dd></div>
+                  </dl>
+                </details>
+              </>
+            ) : scoreDiagnostic.status === "not_scored" && draftScore ? (
+              <>
+                <p className="eyebrow">Secondary authoring diagnostic</p>
+                <h3 id="draft-strength-title">Draft strength was not scored</h3>
+                <p className="empty-state">{draftScore.artifact_gate.reason} No partial score was produced. The readiness judgment is complete and unaffected.</p>
+              </>
+            ) : (
+              <>
+                <p className="eyebrow">Secondary authoring diagnostic</p>
+                <h3 id="draft-strength-title">Draft strength unavailable</h3>
+                <p className="empty-state">The readiness judgment is complete and unaffected. The separate draft-strength diagnostic did not return a validated report.</p>
+              </>
+            )}
+          </section>
+
+          <section className="result-section evidence-ledger-section">
+            <details className="wide-disclosure">
+              <summary>
+                <span><span className="eyebrow">Source accounting</span>Evidence ledger</span>
+                <span className="disclosure-meta"><strong>{report.evidence_ledger.length} sources</strong><span className="disclosure-prompt prompt-open">Open ledger ↓</span><span className="disclosure-prompt prompt-close">Close ledger ↑</span></span>
+              </summary>
+              <div className="ledger-list">
+                {report.evidence_ledger.map((row, index) => (
+                  <div key={`${row.source}-${index}`}>
+                    <p><strong>{row.source}</strong><span>{row.status}</span></p>
+                    <p>{row.notes}</p>
+                  </div>
+                ))}
+              </div>
+            </details>
+          </section>
+
+          <section className="result-section rubric-diagnostic-section">
             <details className="wide-disclosure">
               <summary>
                 <span><span className="eyebrow">Secondary diagnostic</span>PRD Eval Rubric v2</span>
@@ -161,27 +289,14 @@ export function JudgeResult({ result, onReset }: JudgeResultProps) {
                     <div>
                       <p>{criterion.rationale}</p>
                       {criterion.evidence.map((evidence, index) => (
-                        <blockquote key={index}>“{evidence.quote}” {evidence.locator && <cite>· {evidence.locator}</cite>}</blockquote>
+                        <blockquote key={index}>
+                          <p className="evidence-status">{evidence.status}</p>
+                          <p>“{evidence.quote}”</p>
+                          {evidence.locator && <cite>{evidence.locator}</cite>}
+                        </blockquote>
                       ))}
                     </div>
                   </details>
-                ))}
-              </div>
-            </details>
-          </section>
-
-          <section className="result-section">
-            <details className="wide-disclosure">
-              <summary>
-                <span><span className="eyebrow">Source accounting</span>Evidence ledger</span>
-                <span className="disclosure-meta"><strong>{report.evidence_ledger.length} sources</strong><span className="disclosure-prompt prompt-open">Open ledger ↓</span><span className="disclosure-prompt prompt-close">Close ledger ↑</span></span>
-              </summary>
-              <div className="ledger-list">
-                {report.evidence_ledger.map((row, index) => (
-                  <div key={`${row.source}-${index}`}>
-                    <p><strong>{row.source}</strong><span>{row.status}</span></p>
-                    <p>{row.notes}</p>
-                  </div>
                 ))}
               </div>
             </details>
@@ -217,8 +332,12 @@ export function JudgeResult({ result, onReset }: JudgeResultProps) {
               <div><dt>Model</dt><dd>{result.versions.model}</dd></div>
               <div><dt>Rubric</dt><dd>{result.versions.rubric}</dd></div>
               <div><dt>Score</dt><dd>{result.versions.score_derivation}</dd></div>
+              <div><dt>PRD Score</dt><dd>{result.versions.prd_score}</dd></div>
+              <div><dt>PRD Score model</dt><dd>{result.versions.prd_score_model}</dd></div>
               <div><dt>Source commit</dt><dd className="version-hash">{result.versions.judge_source_commit}</dd></div>
               <div><dt>Judge manifest</dt><dd className="version-hash">{result.versions.judge_manifest_sha256}</dd></div>
+              <div><dt>PRD Score source</dt><dd className="version-hash">{result.versions.prd_score_source_commit}</dd></div>
+              <div><dt>PRD Score manifest</dt><dd className="version-hash">{result.versions.prd_score_manifest_sha256}</dd></div>
               {result.versions.rubric_sha256 && <div><dt>Rubric hash</dt><dd className="version-hash">{result.versions.rubric_sha256}</dd></div>}
               <div><dt>Evidence</dt><dd>{result.validation.used_quotes_verified ? "Verified" : "Unverified"}</dd></div>
               <div><dt>Storage</dt><dd>{result.run.ephemeral ? "Ephemeral" : "Unknown"}</dd></div>

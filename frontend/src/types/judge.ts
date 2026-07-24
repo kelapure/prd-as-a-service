@@ -10,6 +10,7 @@ export type ProgressPhase =
   | "extracting_evidence"
   | "applying_gates"
   | "forming_judgment"
+  | "scoring_draft"
   | "validating_report";
 
 export interface Evidence {
@@ -59,8 +60,79 @@ export interface RubricCriterion {
   }>;
 }
 
+export interface ScoreCriterion {
+  id: string;
+  score: number;
+  adjusted_score?: number | null;
+  anchor: string;
+  evidence: Array<{
+    status: "used" | "missing";
+    source: string;
+    quote: string;
+    locator?: string | null;
+  }>;
+  fix: string;
+}
+
+export interface PrdScoreReport {
+  instrument: "prd-score";
+  mode: "absolute";
+  status: "scored" | "not_scored";
+  rubric_version: string;
+  validation_status: string;
+  calculation_version: string;
+  artifact: string;
+  artifact_gate: {
+    pass: boolean;
+    reason: string;
+    incumbent_replacement: boolean;
+    ecosystem_diagrams_present: boolean;
+    model_room_requested: boolean;
+    model_room_present: boolean;
+    commercial_value_over_1m: boolean;
+    pricing_decomposition_present: boolean;
+  };
+  layer1: ScoreCriterion[];
+  layer2: ScoreCriterion[];
+  layer3: { in_scope: boolean; scores: ScoreCriterion[] };
+  integration_context: { customer_named_missing_system: boolean };
+  writing_layer: ScoreCriterion[];
+  anchor_placement: string;
+  length_normalization: {
+    applied: boolean;
+    line_count: number;
+    detail: string;
+  };
+  hard_caps: Array<{
+    cap: string;
+    maximum_final_score: number;
+    applied: boolean;
+  }>;
+  integration_subscore: {
+    value: number;
+    out_of: 10;
+    raw_value: number;
+    cap_applied: boolean;
+  } | null;
+  totals: {
+    layer1: number;
+    layer2_raw: number;
+    layer2_adjusted: number;
+    layer3: number;
+    final_before_cap: number;
+    final: number;
+    denominator: 100 | 115;
+    writing: number;
+    writing_denominator: 20;
+    historical_threshold: number;
+    historical_threshold_met: boolean;
+  } | null;
+  lowest_three: string[];
+  fix_plan_ranked: string[];
+}
+
 export interface JudgeEnvelope {
-  schema_version: "evalgpt-prd-judge/v1";
+  schema_version: "evalgpt-prd-judge/v2";
   public_beta: true;
   run: {
     id: string;
@@ -76,6 +148,11 @@ export interface JudgeEnvelope {
     rubric_sha256?: string;
     score_derivation: string;
     model: string;
+    prd_score: string;
+    prd_score_source_commit: string;
+    prd_score_manifest_sha256: string;
+    prd_score_calculation: string;
+    prd_score_model: string;
   };
   input: {
     primary_name: string;
@@ -104,10 +181,21 @@ export interface JudgeEnvelope {
     pass_count: number;
     fail_count: number;
   };
+  prd_score: {
+    status: "complete" | "not_scored" | "unavailable";
+    report: PrdScoreReport | null;
+    validation: {
+      ok: boolean;
+      warnings?: string[];
+      used_quotes_verified?: boolean;
+      arithmetic_verified?: boolean;
+    };
+  };
   validation: {
     ok: boolean;
     warnings: string[];
     used_quotes_verified: boolean;
+    prd_score_ok: boolean;
     model_fallback_used: boolean;
   };
 }

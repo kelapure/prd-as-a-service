@@ -9,8 +9,10 @@ import { chromium } from "playwright-core";
 const frontendRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const appRoot = resolve(frontendRoot, "..");
 const chrome = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const runtimeExecutable = process.env.JUDGE_RUNTIME_EXECUTABLE
+  || resolve(appRoot, "judge-runtime/.venv/bin/uvicorn");
 const children = [
-  spawn(resolve(appRoot, "judge-runtime/.venv/bin/uvicorn"), ["app.main:app", "--host", "127.0.0.1", "--port", "8093"], {
+  spawn(runtimeExecutable, ["app.main:app", "--host", "127.0.0.1", "--port", "8093"], {
     cwd: resolve(appRoot, "judge-runtime"),
     env: { ...process.env, JUDGE_RUNTIME_MODE: "fixture", LOG_LEVEL: "WARNING" },
     stdio: ["ignore", "pipe", "pipe"],
@@ -55,6 +57,11 @@ try {
   await page.locator("#judge-result").waitFor({ timeout: 15_000 });
   assert.equal(await page.locator(".verdict-label").innerText(), "Revise");
   assert.match(await page.locator(".score").innerText(), /^\d+\/10$/);
+  assert.equal(await page.locator(".draft-score-number").innerText(), "65/100");
+  assert.match(
+    await page.locator(".draft-score-disclaimer").innerText(),
+    /does not change the Revise verdict/,
+  );
   assert.equal(await page.evaluate(() => document.activeElement?.id), "judge-result");
   assert.equal(await page.locator(".form-error").count(), 0);
   process.stdout.write("Full browser paste-to-validated-result flow passed.\n");

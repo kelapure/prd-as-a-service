@@ -14,6 +14,8 @@
 
 - PRD Judge is the authoritative readiness decision. PRD Eval Rubric v2 is a
   secondary diagnostic and never overrides the verdict.
+- PRD Score is a separate draft-strength diagnostic. Never mathematically
+  combine it with readiness or use it to change the verdict.
 - The beta is anonymous and ephemeral. Do not add accounts, payment, saved
   history, persistent sharing, or a public developer API.
 - Do not put document content, extracted text, findings, or evidence in logs,
@@ -37,6 +39,8 @@ cd frontend && npm ci && npm run type-check && npm run test:browser
 # Cross-service, from repo root
 judge-runtime/.venv/bin/python tests/check_bundle_conformance.py \
   --canonical-root /path/to/clean/salesfactory-agents/prd_judge
+judge-runtime/.venv/bin/python tests/check_score_bundle_conformance.py \
+  --canonical-root /path/to/clean/salesfactory-agents/prd_score
 node tests/smoke.mjs
 ```
 

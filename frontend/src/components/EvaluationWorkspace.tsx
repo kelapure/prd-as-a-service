@@ -11,6 +11,7 @@ const PHASES: Array<{ id: ProgressPhase; label: string }> = [
   { id: "extracting_evidence", label: "Extracting evidence" },
   { id: "applying_gates", label: "Applying gates" },
   { id: "forming_judgment", label: "Forming judgment" },
+  { id: "scoring_draft", label: "Scoring draft strength" },
   { id: "validating_report", label: "Validating report" },
 ];
 
@@ -108,9 +109,9 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
     <section className="workspace section-shell" id="evaluate" aria-labelledby="evaluate-title">
       <div className="section-heading">
         <p className="eyebrow">Evaluate one PRD</p>
-        <h2 id="evaluate-title">Bring the document. Leave with a decision.</h2>
+        <h2 id="evaluate-title">Bring the document. Leave with a decision and an improvement path.</h2>
         <p>
-          Upload the primary PRD, then add discovery notes, architecture material, or other evidence only when it should inform the judgment.
+          Upload the primary PRD once. The Judge decides readiness while PRD Score independently measures draft strength against the same supplied evidence.
         </p>
       </div>
 

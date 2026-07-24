@@ -1,13 +1,14 @@
 # EvalGPT PRD Judge
 
-EvalGPT is a free, anonymous public-beta product for deciding whether a PRD is ready to build. It returns an evidence-backed PRD Judge verdict, a deterministic readiness score, a prioritized path to GO, and the secondary 12-criterion PRD Eval Rubric v2.
+EvalGPT is a free, anonymous public-beta product for deciding whether a PRD is ready to build. It returns an evidence-backed PRD Judge verdict, a deterministic readiness score, a prioritized path to GO, an independent PRD Score draft-strength diagnostic, and the secondary 12-criterion PRD Eval Rubric v2.
 
 Production remains at https://evalgpt.com. The public-beta implementation in this branch must not be promoted until the release gates in cloud/RELEASE_GATES.md pass.
 
 ## Product contract
 
 - Primary judgment: GO, REVISE, HOLD, WRONG_ARTIFACT, or DISQUALIFY_UNTIL_ARCHITECTURE_AUDIT.
-- Score: a deterministic projection from the validated report. The model never emits, sees, or averages the number.
+- Readiness score: a deterministic `/10` projection from the validated Judge report. The model never emits, sees, or averages the number.
+- Draft strength: PRD Score independently evaluates the same supplied evidence against its absolute-mode rubric and applies deterministic arithmetic to model-owned criterion ratings. It never changes the verdict or readiness score.
 - Evidence: every status=used quote is verified against the uploaded PRD or supplied evidence before a score is computed.
 - Secondary diagnostic: PRD Eval Rubric v2, C1-C12. It never overrides the judge verdict.
 - Privacy: the beta has no accounts, payment, saved history, persistent share links, or document storage. Inputs and results remain in process/browser memory for the active run only.
@@ -23,18 +24,20 @@ Production remains at https://evalgpt.com. The public-beta implementation in thi
             |
             | IAM identity token + optional internal token
             v
-    Python PRD Judge runtime (private Cloud Run)
+    Python PRD evaluation runtime (private Cloud Run)
             |
-            | exact pinned judge bundle + approved model
+            | exact pinned Judge and PRD Score bundles + approved models
             v
-    Validated report -> deterministic score -> independent C1-C12 diagnostic
+    Judge verdict + readiness /10
+    independent PRD Score draft strength /100 or /115
+    independent C1-C12 coverage diagnostic
 
 ### Components
 
 - frontend/ — 8090-branded responsive product experience, upload/paste flow, progressive result disclosure, and browser-side HTML/PDF/JSON exports.
 - api-gateway/ — content-free logging, upload limits, CORS, rate limits, daily kill switch, cancellation, health checks, and SSE proxying.
-- judge-runtime/ — in-memory PDF/DOCX/Markdown/text extraction, figure/page support, isolated judge/rubric model calls, canonical validator, and deterministic score.
-- judge-runtime/bundle/ — integrity-checked snapshot exported from salesfactory-agents/prd_judge with source commit and file hashes.
+- judge-runtime/ — in-memory PDF/DOCX/Markdown/text extraction, figure/page support, isolated Judge/rubric/PRD Score model calls, canonical validators, and deterministic calculations.
+- judge-runtime/bundle/ — integrity-checked snapshots exported from `salesfactory-agents/prd_judge` and `salesfactory-agents/prd_score`, each with a source commit and file hashes.
 - tests/ — contract fixtures and full local-stack smoke test.
 
 The retired /api/evalprd/*, authentication, Stripe, Firestore, and saved-evaluation routes are intentionally absent from the public beta.
@@ -59,20 +62,29 @@ Prerequisites: Node.js 20+, Python 3.12.
     npm install
     npm run dev
 
-Open http://localhost:3000. Fixture mode exercises the complete upload, streaming, validation, score, rubric, and export path without calling a model.
+Open http://localhost:3000. Fixture mode enables both instruments and exercises the complete upload, streaming, validation, readiness score, PRD Score, rubric, and export path without calling a model.
 
 ## Model-backed runtime
 
-Model-backed mode fails closed until the release-bakeoff winner is explicitly configured:
+Model-backed Judge mode fails closed until the release-bakeoff winner is explicitly configured. PRD Score remains disabled by default so an unvalidated score model cannot block or silently enter a production Judge release:
 
     export ANTHROPIC_API_KEY=...
     export PRD_JUDGE_MODEL=<validated-model-id>
     export PRD_JUDGE_ALLOWED_MODELS=<same-validated-model-id>
     export PRD_JUDGE_EXPECTED_SOURCE_COMMIT=<reviewed-canonical-commit>
     export PRD_JUDGE_EXPECTED_MANIFEST_SHA256=<reviewed-runtime-manifest>
+    export PRD_SCORE_ENABLED=false
     judge-runtime/.venv/bin/uvicorn app.main:app --port 8092
 
-If the configured model is absent from the allowlist, /health is degraded and evaluations do not run. The model identifier, judge version, source commit, bundle manifest, rubric version, and score function version are returned in every report.
+After the family-separated PRD Score release gate passes for an exact model/runtime pair, enable it explicitly:
+
+    export PRD_SCORE_ENABLED=true
+    export PRD_SCORE_MODEL=<validated-score-model-id>
+    export PRD_SCORE_ALLOWED_MODELS=<same-validated-score-model-id>
+    export PRD_SCORE_EXPECTED_SOURCE_COMMIT=<reviewed-canonical-score-commit>
+    export PRD_SCORE_EXPECTED_MANIFEST_SHA256=<reviewed-score-runtime-manifest>
+
+If an enabled model is absent from its allowlist or its bundle pins do not match, `/health` is degraded and evaluations do not run. If PRD Score is disabled or a score-only report fails validation at run time, the authoritative Judge result still completes and the UI labels draft strength unavailable. No model fallback is used. Every report returns both instrument versions and pins.
 
 ## Checks
 
@@ -104,6 +116,8 @@ If the configured model is absent from the allowlist, /health is degraded and ev
     # Exact canonical bundle conformance
     judge-runtime/.venv/bin/python tests/check_bundle_conformance.py \
       --canonical-root /path/to/clean/salesfactory-agents/prd_judge
+    judge-runtime/.venv/bin/python tests/check_score_bundle_conformance.py \
+      --canonical-root /path/to/clean/salesfactory-agents/prd_score
 
 ## Input and API limits
 
@@ -117,7 +131,7 @@ POST /api/prd-judge/evaluate accepts multipart input:
 - 250,000 pasted characters and 250,000 extracted characters per document;
 - at most 12 rendered pages or embedded figures per document, size-bounded before the model call; oversized or unreadable figures are skipped with a warning.
 
-The streamed response emits progress, complete, or error events. The final envelope is evalgpt-prd-judge/v1.
+The streamed response emits progress, complete, or error events. The final envelope is `evalgpt-prd-judge/v2`. The top-level `report`, `readiness_score`, `rubric`, and `prd_score` fields remain separate; consumers must not average, blend, or use PRD Score to rewrite the Judge verdict.
 
 ## Deployment
 

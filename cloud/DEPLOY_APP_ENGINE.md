@@ -39,6 +39,8 @@ Set a unique release identifier and the exact model that won the adjudicated bak
     export APPROVED_MODEL="<validated-model-id>"
     export APPROVED_JUDGE_COMMIT="675063d05c414af7e6982dfa4a6c194c399c2ab8"
     export APPROVED_JUDGE_MANIFEST="0720fd773155ba13b702e469607d37247ea00d2bb001ca47a82adf6fdd0b0c85"
+    # Remain false until the separate PRD Score release gate passes.
+    export PRD_SCORE_ENABLED="false"
 
 Create or identify a least-privilege runtime service account. Give it access only to the Anthropic API key secret.
 
@@ -51,7 +53,7 @@ Create or identify a least-privilege runtime service account. Give it access onl
       --service-account "prd-judge-runtime@$PROJECT_ID.iam.gserviceaccount.com" \
       --no-allow-unauthenticated \
       --set-secrets "ANTHROPIC_API_KEY=evalgpt-anthropic-api-key:latest" \
-      --set-env-vars "JUDGE_RUNTIME_MODE=model,PRD_JUDGE_MODEL=$APPROVED_MODEL,PRD_JUDGE_ALLOWED_MODELS=$APPROVED_MODEL,PRD_JUDGE_EXPECTED_SOURCE_COMMIT=$APPROVED_JUDGE_COMMIT,PRD_JUDGE_EXPECTED_MANIFEST_SHA256=$APPROVED_JUDGE_MANIFEST,PRD_JUDGE_MODEL_TIMEOUT_SECONDS=120,LOG_LEVEL=INFO" \
+      --set-env-vars "JUDGE_RUNTIME_MODE=model,PRD_JUDGE_MODEL=$APPROVED_MODEL,PRD_JUDGE_ALLOWED_MODELS=$APPROVED_MODEL,PRD_JUDGE_EXPECTED_SOURCE_COMMIT=$APPROVED_JUDGE_COMMIT,PRD_JUDGE_EXPECTED_MANIFEST_SHA256=$APPROVED_JUDGE_MANIFEST,PRD_SCORE_ENABLED=$PRD_SCORE_ENABLED,PRD_JUDGE_MODEL_TIMEOUT_SECONDS=120,LOG_LEVEL=INFO" \
       --memory 2Gi \
       --timeout 600 \
       --concurrency 8 \
@@ -60,6 +62,11 @@ Create or identify a least-privilege runtime service account. Give it access onl
 Capture the service URL:
 
     export RUNTIME_URL="$(gcloud run services describe prd-judge-runtime --region "$REGION" --project "$PROJECT_ID" --format='value(status.url)')"
+
+When the exact PRD Score candidate passes its release gate, set
+`PRD_SCORE_ENABLED=true` and add its approved model, allowlist, source commit,
+and manifest variables to the same deploy command. Do not reuse the Judge model
+identifier merely because it is already approved for the different instrument.
 
 Grant only the verified App Engine service account permission to invoke it:
 

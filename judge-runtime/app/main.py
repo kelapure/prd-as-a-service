@@ -11,7 +11,7 @@ from contextlib import suppress
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
-from .bundle import BUNDLE, RUBRIC_SHA256
+from .bundle import BUNDLE, RUBRIC_SHA256, SCORE_BUNDLE
 from .extraction import (
     MAX_PAGES,
     MAX_TOTAL_BYTES,
@@ -55,9 +55,11 @@ async def health(x_internal_service_token: str | None = Header(default=None)) ->
         config = RuntimeConfig.from_environment()
         configured = True
         model = config.model
+        prd_score_enabled = config.score_enabled
     except EvaluationError:
         configured = False
         model = "unconfigured"
+        prd_score_enabled = False
     return {
         "status": "ok" if configured else "degraded",
         "configured": configured,
@@ -67,6 +69,10 @@ async def health(x_internal_service_token: str | None = Header(default=None)) ->
         "rubric_version": RUBRIC_VERSION,
         "rubric_sha256": RUBRIC_SHA256,
         "score_version": SCORE_VERSION,
+        "prd_score_version": SCORE_BUNDLE.score_version,
+        "prd_score_source_commit": SCORE_BUNDLE.source_commit,
+        "prd_score_manifest_sha256": SCORE_BUNDLE.manifest_sha256,
+        "prd_score_enabled": prd_score_enabled,
         "model": model,
     }
 
@@ -130,7 +136,9 @@ async def evaluate(
                     envelope = await judge.evaluate(documents, progress)
                 finally:
                     await judge.close()
-                queue.put_nowait(("__complete__", envelope.model_dump_json()))
+                queue.put_nowait(
+                    ("__complete__", envelope.model_dump_json(by_alias=True))
+                )
             except (EvaluationError, InputError, ValueError) as exc:
                 logger.warning("Evaluation failed safely: %s", type(exc).__name__)
                 queue.put_nowait(("__error__", str(exc)))

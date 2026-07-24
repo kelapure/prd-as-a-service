@@ -60,7 +60,7 @@ export default function App() {
             <p className="eyebrow">PRD Judge · Public beta</p>
             <h1>Know if your PRD is ready to build.</h1>
             <p className="hero-lede">
-              Upload a PRD to get a verdict, a deterministic readiness score, and an evidence-backed path to GO. Every finding explains what failed, why it matters, where the evidence came from, and the smallest credible fix.
+              Upload a PRD to get a verdict, a deterministic readiness score, an evidence-backed path to GO, and a separate draft-strength diagnostic. Every finding explains what failed, why it matters, where the evidence came from, and the smallest credible fix.
             </p>
             <div className="hero-actions">
               <button className="button button-primary" type="button" onClick={() => scrollTo("evaluate")}>Evaluate a PRD</button>
@@ -87,15 +87,15 @@ export default function App() {
 
         <section className="value-section section-shell">
           <div className="section-heading narrow-heading">
-            <p className="eyebrow">Not another writing score</p>
-            <h2>A decision instrument for the moment before commitment.</h2>
-            <p>PRD Judge checks the artifact, deal shape, hard gates, and execution readiness before it comments on polish.</p>
+            <p className="eyebrow">Two instruments. One ordered result.</p>
+            <h2>Readiness and draft strength answer different questions.</h2>
+            <p>PRD Judge decides whether the product is ready to build. PRD Score separately shows how to strengthen the document without changing that verdict.</p>
           </div>
           <div className="value-grid">
             <article><span>01</span><h3>A decision, not an average.</h3><p>Go, Revise, Hold, Wrong artifact, or Architecture audit required.</p></article>
             <article><span>02</span><h3>A path to GO.</h3><p>Blockers are ordered by decision impact, not by how easy they are to rewrite.</p></article>
             <article><span>03</span><h3>Evidence you can inspect.</h3><p>Material findings cite supplied text or state exactly what evidence is missing.</p></article>
-            <article><span>04</span><h3>Rubric coverage, kept secondary.</h3><p>C1–C12 diagnoses coverage without overruling the judge.</p></article>
+            <article><span>04</span><h3>An improvement gradient, kept secondary.</h3><p>Anchored dimensions identify the weakest draft areas without overruling the judge.</p></article>
           </div>
         </section>
 
@@ -106,7 +106,7 @@ export default function App() {
           <div className="method-statement">
             <p className="eyebrow">Methodology</p>
             <h2>Verdict first. Hard gates before polish.</h2>
-            <p>Missing evidence stays missing. Blockers require support. The readiness score is derived deterministically from the verdict and validated findings; it is not a model-generated average or probability.</p>
+            <p>Missing evidence stays missing. Blockers require support. The readiness score is derived deterministically from the verdict and validated findings. Draft strength is calculated separately and is never blended into readiness.</p>
           </div>
           <div className="method-steps">
             <article><span>01</span><h3>Classify the artifact.</h3><p>Do not grade a sales deck or architecture note as though it were a PRD.</p></article>

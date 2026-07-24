@@ -2,12 +2,15 @@
 
 EvalGPT is the public-beta browser experience for PRD Judge. It gives an
 anonymous user a stage-aware readiness verdict, a deterministic score,
-evidence-backed findings, and a prioritized path to GO.
+evidence-backed findings, a prioritized path to GO, and a separate PRD Score
+draft-strength diagnostic.
 
 ## Product contract
 
 - PRD Judge is primary. The 12-criterion PRD Eval Rubric v2 is a secondary
   diagnostic and cannot override the judge verdict.
+- PRD Score is an independent authoring diagnostic. Do not average, blend,
+  rescale, or otherwise use it to alter the verdict or readiness score.
 - Public beta is free, anonymous, responsive, and ephemeral.
 - Do not add authentication, payment, saved history, persistent sharing, or a
   public developer API during beta.
@@ -28,11 +31,13 @@ tests/          Cross-service smoke and canonical-bundle conformance tests
 cloud/          GCP deployment and release-gate runbooks
 ```
 
-The trusted prompt, references, deterministic logic, validator, and score
-projection are copied into `judge-runtime/bundle/` by the canonical
-`salesfactory-agents/prd_judge` exporter. The runtime verifies every file hash
-and the manifest hash before serving traffic. Production also requires exact
-source-commit and manifest pins.
+The trusted prompts, references, deterministic logic, validators, and
+calculations are copied into `judge-runtime/bundle/` by the canonical
+`salesfactory-agents/prd_judge` and `salesfactory-agents/prd_score` exporters.
+The runtime verifies every file hash and manifest hash before serving traffic.
+Production also requires exact source-commit and manifest pins for every
+enabled instrument. Keep `PRD_SCORE_ENABLED=false` until its separate release
+gate passes.
 
 ## Local checks
 
@@ -62,6 +67,8 @@ npm audit --audit-level=high
 cd ..
 judge-runtime/.venv/bin/python tests/check_bundle_conformance.py \
   --canonical-root /path/to/clean/salesfactory-agents/prd_judge
+judge-runtime/.venv/bin/python tests/check_score_bundle_conformance.py \
+  --canonical-root /path/to/clean/salesfactory-agents/prd_score
 node tests/smoke.mjs
 ```
 
