@@ -261,7 +261,7 @@ export function JudgeResult({ result, onReset }: JudgeResultProps) {
                       <dt>Deterministic total</dt>
                       <dd>
                         Layer 1 {draftScore.totals.layer1} + adjusted Layer 2 {draftScore.totals.layer2_adjusted}
-                        {draftScore.totals.layer3 ? ` + Layer 3 ${draftScore.totals.layer3}` : ""}
+                        {draftScore.layer3.in_scope ? ` + Layer 3 ${draftScore.totals.layer3}` : ""}
                         {" = "}{draftScore.totals.final_before_cap}
                         {draftScore.totals.final !== draftScore.totals.final_before_cap
                           ? `; capped to ${draftScore.totals.final}`
