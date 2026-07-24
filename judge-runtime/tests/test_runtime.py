@@ -5,6 +5,7 @@ import json
 import io
 import os
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import fitz
@@ -30,10 +31,11 @@ from app.judge import (
     _artifact_content,
     _fixture_excerpt,
     _judge_system_prompt,
+    _parsed_model,
     _score_system_prompt,
     _reference_text,
 )
-from app.models import EXPECTED_SCORE_CRITERION_IDS, RawPrdScoreReport
+from app.models import EXPECTED_SCORE_CRITERION_IDS, JudgeReport, RawPrdScoreReport
 
 
 class BundleTests(unittest.TestCase):
@@ -102,6 +104,36 @@ class BundleTests(unittest.TestCase):
             allowed_models=frozenset({"candidate-model"}),
         )
         self.assertFalse(config.score_enabled)
+
+
+class StructuredOutputTests(unittest.TestCase):
+    def test_missing_parsed_output_fails_closed(self) -> None:
+        with self.assertRaisesRegex(EvaluationError, "required structured output"):
+            _parsed_model(SimpleNamespace(parsed_output=None), JudgeReport, "PRD Judge")
+
+    def test_judge_model_uses_schema_enforced_output(self) -> None:
+        document = extract_pasted_text(
+            "# PRD\n" + "A measurable workflow requirement. " * 10
+        )
+        expected = JudgeReport.model_validate(PrdJudge._fixture_report(document))
+        messages = SimpleNamespace()
+
+        async def parse(**kwargs):
+            messages.kwargs = kwargs
+            return SimpleNamespace(parsed_output=expected)
+
+        messages.parse = parse
+        judge = PrdJudge(
+            RuntimeConfig(
+                mode="fixture",
+                model="candidate-model",
+                allowed_models=frozenset({"candidate-model"}),
+            )
+        )
+        judge.client = SimpleNamespace(messages=messages)
+        result = asyncio.run(judge._run_judge_model([document], {}))
+        self.assertEqual(result["verdict"], "REVISE")
+        self.assertIs(messages.kwargs["output_format"], JudgeReport)
 
 
 class ExtractionTests(unittest.TestCase):
