@@ -1,203 +1,253 @@
-# Deploy the PRD Judge public beta
+# Deploy Workspace-restricted EvalGPT
 
-Live evaluation uses three services:
+EvalGPT has three services:
 
-1. private Cloud Run service: Python PRD Judge runtime;
-2. public Cloud Run service: Fastify streaming gateway;
+1. private Cloud Run service: Python PRD Judge and mandatory PRD Score runtime;
+2. public Cloud Run service: authenticated Fastify streaming gateway;
 3. App Engine default service: React frontend.
 
-The gateway must not run on App Engine Standard. App Engine buffers dynamic
-responses until the handler completes, which prevents real SSE progress from
-reaching the browser. Cloud Run preserves the incremental progress stream.
+The Cloud Run gateway stays publicly invokable so browsers can reach it, but every product route verifies a Google ID token. Only `/health` and `/api/health` are unauthenticated and content-free. Never make the private runtime public.
 
-Do not deploy from the old detached workspace. Use a clean branch/worktree. Live evaluation must stop if `cloud/RELEASE_GATES.md` is not satisfied.
+## 1. Verify live state and rollback targets
 
-## Fail-closed public information preview
+Use a clean worktree and verify the real project before changing it.
 
-The frontend can be promoted without changing the runtime, API service, routing, or secrets when the narrower public-preview gates pass. The build must leave `VITE_PUBLIC_EVALUATIONS_ENABLED` unset or set it to exactly `false`; any other value except the exact string `true` remains closed.
+```bash
+gcloud auth login
+gcloud auth application-default login
+gcloud config list
+gcloud projects describe "$PROJECT_ID"
+gcloud app describe --project "$PROJECT_ID"
+gcloud app versions list --project "$PROJECT_ID"
+gcloud app services list --project "$PROJECT_ID"
+gcloud app domain-mappings list --project "$PROJECT_ID"
+gcloud run services list --region "$REGION" --project "$PROJECT_ID"
 
-    cd frontend
-    rm -f .env.production.local
-    VITE_PUBLIC_EVALUATIONS_ENABLED=false npm run build
-    npm run test:browser:public
-    gcloud app deploy app.yaml \
-      --project "$PROJECT_ID" \
-      --version "$RELEASE_ID" \
-      --no-promote \
-      --quiet
+export APP_HOST="$(gcloud app describe \
+  --project "$PROJECT_ID" --format='value(defaultHostname)')"
+export GATEWAY_SA="evalgpt-api-gateway@$PROJECT_ID.iam.gserviceaccount.com"
+export OLD_FRONTEND="$(gcloud app versions list \
+  --service default --project "$PROJECT_ID" \
+  --filter='traffic_split>0' --format='value(version.id)' | head -1)"
+export OLD_GATEWAY_REVISION="$(gcloud run services describe evalgpt-api-gateway \
+  --region "$REGION" --project "$PROJECT_ID" \
+  --format='value(status.traffic[0].revisionName)')"
+```
 
-Inspect that exact version with Fable, confirm that no file input, text area, or evaluate action is present, and then canary only the App Engine default service at 10, 50, and 100 percent. Leave the API service traffic unchanged. This public information preview does not authorize document evaluation.
+Record those values in the release issue.
 
-## 1. Verify live state before changing it
+## 2. Create the internal Google OAuth client
 
-Never assume the historical project ID in older documents is still authoritative.
+In Google Cloud Console, configure the OAuth consent screen as **Internal** for the `8090.inc` organization. Create a **Web application** OAuth client for Google Identity Services.
 
-    gcloud auth login
-    gcloud auth application-default login
-    gcloud config list
-    gcloud projects describe "$PROJECT_ID"
-    gcloud app describe --project "$PROJECT_ID"
-    gcloud app services list --project "$PROJECT_ID"
-    gcloud app versions list --project "$PROJECT_ID"
-    gcloud app domain-mappings list --project "$PROJECT_ID"
-    gcloud run services list --region "$REGION" --project "$PROJECT_ID"
+Authorized JavaScript origins must include:
 
-Record the current frontend version and gateway revision as the rollback target.
-Capture the actual App Engine hostname instead of deriving it from a remembered
-project convention:
+- `https://evalgpt.com`
+- the exact App Engine preview origin for this release;
+- `http://localhost:3000` for local development.
 
-    export APP_HOST="$(gcloud app describe --project "$PROJECT_ID" --format='value(defaultHostname)')"
-    export GATEWAY_SA="evalgpt-api-gateway@$PROJECT_ID.iam.gserviceaccount.com"
-    test -n "$GATEWAY_SA" && test -n "$APP_HOST"
+Do not add `dfyautomation.io`, Gmail, wildcard domains, subdomains, or redirect URIs that are not used. The browser receives only the OAuth client ID; it does not use or ship a client secret.
 
-## 2. Build and deploy the private runtime
+```bash
+export GOOGLE_OAUTH_CLIENT_ID="<internal-web-client>.apps.googleusercontent.com"
+export RELEASE_ID="evalgpt-$(git rev-parse --short HEAD)"
+export FRONTEND_PREVIEW_URL="https://$RELEASE_ID-dot-$APP_HOST"
+```
 
-Set a unique release identifier and the exact model that won the adjudicated bakeoff.
+Add `FRONTEND_PREVIEW_URL` to the client's authorized JavaScript origins before deploying the preview.
 
-    export RELEASE_ID="prd-judge-beta-$(git rev-parse --short HEAD)"
-    export IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/evalgpt/prd-judge-runtime:$RELEASE_ID"
-    export APPROVED_MODEL="<validated-model-id>"
-    export APPROVED_JUDGE_COMMIT="675063d05c414af7e6982dfa4a6c194c399c2ab8"
-    export APPROVED_JUDGE_MANIFEST="0720fd773155ba13b702e469607d37247ea00d2bb001ca47a82adf6fdd0b0c85"
-    # Remain false until the separate PRD Score release gate passes.
-    export PRD_SCORE_ENABLED="false"
+## 3. Create the quota-only Firestore database
 
-Create or identify a least-privilege runtime service account. Give it access only to the Anthropic API key secret.
+EvalGPT uses Firestore Native in `us-central1` only for pseudonymous counters and concurrency leases.
 
-    gcloud builds submit judge-runtime --tag "$IMAGE" --project "$PROJECT_ID"
+```bash
+gcloud services enable firestore.googleapis.com \
+  --project "$PROJECT_ID"
 
-    gcloud run deploy prd-judge-runtime \
-      --image "$IMAGE" \
-      --region "$REGION" \
-      --project "$PROJECT_ID" \
-      --service-account "prd-judge-runtime@$PROJECT_ID.iam.gserviceaccount.com" \
-      --no-allow-unauthenticated \
-      --set-secrets "ANTHROPIC_API_KEY=evalgpt-anthropic-api-key:latest" \
-      --set-env-vars "JUDGE_RUNTIME_MODE=model,PRD_JUDGE_MODEL=$APPROVED_MODEL,PRD_JUDGE_ALLOWED_MODELS=$APPROVED_MODEL,PRD_JUDGE_EXPECTED_SOURCE_COMMIT=$APPROVED_JUDGE_COMMIT,PRD_JUDGE_EXPECTED_MANIFEST_SHA256=$APPROVED_JUDGE_MANIFEST,PRD_SCORE_ENABLED=$PRD_SCORE_ENABLED,PRD_JUDGE_MODEL_TIMEOUT_SECONDS=120,LOG_LEVEL=INFO" \
-      --memory 2Gi \
-      --timeout 600 \
-      --concurrency 8 \
-      --max-instances 10
+# Run once. If (default) already exists, inspect it instead of creating another database.
+gcloud firestore databases create \
+  --database='(default)' \
+  --location=us-central1 \
+  --type=firestore-native \
+  --project "$PROJECT_ID"
 
-Capture the service URL:
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:$GATEWAY_SA" \
+  --role=roles/datastore.user
 
-    export RUNTIME_URL="$(gcloud run services describe prd-judge-runtime --region "$REGION" --project "$PROJECT_ID" --format='value(status.url)')"
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=evalgpt_quota_users \
+  --enable-ttl \
+  --database='(default)' \
+  --project "$PROJECT_ID"
 
-When the exact PRD Score candidate passes its release gate, set
-`PRD_SCORE_ENABLED=true` and add its approved model, allowlist, source commit,
-and manifest variables to the same deploy command. Do not reuse the Judge model
-identifier merely because it is already approved for the different instrument.
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=evalgpt_quota \
+  --enable-ttl \
+  --database='(default)' \
+  --project "$PROJECT_ID"
+```
 
-Grant only the dedicated gateway service account permission to invoke it:
+Create a high-entropy HMAC secret. If the secret already exists, add a new version instead of recreating it.
 
-    gcloud run services add-iam-policy-binding prd-judge-runtime \
-      --region "$REGION" \
-      --project "$PROJECT_ID" \
-      --member "serviceAccount:$GATEWAY_SA" \
-      --role roles/run.invoker
+```bash
+openssl rand -base64 48 | gcloud secrets create evalgpt-quota-hmac-key \
+  --replication-policy=automatic \
+  --data-file=- \
+  --project "$PROJECT_ID"
 
-## 3. Configure the gateway without secrets in source
+gcloud secrets add-iam-policy-binding evalgpt-quota-hmac-key \
+  --member="serviceAccount:$GATEWAY_SA" \
+  --role=roles/secretmanager.secretAccessor \
+  --project "$PROJECT_ID"
+```
 
-Build and deploy the gateway as its own public Cloud Run service. The gateway
-has no model key; it uses its service account identity to invoke the private
-runtime.
+Do not inspect or log the secret. Rotating it starts a new pseudonymous quota namespace, so rotate only through an explicit capacity-reset procedure.
 
-    export FRONTEND_PREVIEW_URL="https://$RELEASE_ID-dot-$APP_HOST"
-    export GATEWAY_IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/evalgpt/api-gateway:$RELEASE_ID"
-    gcloud builds submit api-gateway --tag "$GATEWAY_IMAGE" --project "$PROJECT_ID"
-    gcloud run deploy evalgpt-api-gateway \
-      --image "$GATEWAY_IMAGE" \
-      --region "$REGION" \
-      --project "$PROJECT_ID" \
-      --service-account "$GATEWAY_SA" \
-      --allow-unauthenticated \
-      --timeout 600 \
-      --concurrency 8 \
-      --max-instances 10 \
-      --set-env-vars "ALLOWED_ORIGIN=https://evalgpt.com,$FRONTEND_PREVIEW_URL,TRUST_PROXY_HOPS=2,RATE_LIMIT_MAX=5,RATE_LIMIT_WINDOW_MS=3600000,DAILY_RUN_LIMIT=100,EVALUATIONS_ENABLED=true,EVALUATION_TIMEOUT_MS=570000,USE_GOOGLE_IDENTITY_TOKEN=true,PRD_JUDGE_RUNTIME_URL=$RUNTIME_URL,PRD_JUDGE_RUNTIME_AUDIENCE=$RUNTIME_URL"
+## 4. Verify the private Judge and PRD Score runtime
 
-    export GATEWAY_URL="$(gcloud run services describe evalgpt-api-gateway \
-      --region "$REGION" --project "$PROJECT_ID" --format='value(status.url)')"
+The runtime remains IAM-protected. Both instruments must be enabled and pinned independently.
 
-## 4. Build and test the exact release
+```bash
+export RUNTIME_URL="$(gcloud run services describe prd-judge-runtime \
+  --region "$REGION" --project "$PROJECT_ID" --format='value(status.url)')"
 
-    cd judge-runtime
-    JUDGE_RUNTIME_MODE=fixture .venv/bin/python -m pytest -q
-    cd ../api-gateway
-    npm ci
-    npm audit
-    npm run type-check
-    npm test
-    cd ../frontend
-    npm ci
-    npm audit
-    npm run type-check
-    npm run build
-    cd ..
-    node tests/smoke.mjs
+gcloud run services add-iam-policy-binding prd-judge-runtime \
+  --region "$REGION" \
+  --project "$PROJECT_ID" \
+  --member="serviceAccount:$GATEWAY_SA" \
+  --role=roles/run.invoker
+```
 
-Run the approved-model evaluation suite separately. Fixture mode proves integration, not judgment quality.
+Verify the runtime health response reports:
 
-## 5. Deploy preview versions without traffic
+- `configured: true`;
+- the approved Judge model, source commit, and manifest;
+- `prd_score_enabled: true`;
+- the approved PRD Score model, source commit, manifest, and calculation version.
 
-Bind the preview frontend build to the exact Cloud Run gateway revision. This
-file is ignored by Git but intentionally included in the preview build context:
+Do not continue if PRD Score is disabled or either model/bundle pin differs from the reviewed release.
 
-    printf 'VITE_API_BASE=%s\n' "$GATEWAY_URL" > frontend/.env.production.local
+## 5. Deploy the auth-capable gateway with enforcement off
 
-    gcloud app deploy frontend/app.yaml \
-      --project "$PROJECT_ID" \
-      --version "$RELEASE_ID" \
-      --no-promote \
-      --quiet
+This first revision supports `/api/access`, token verification, and Firestore quotas, while the existing frontend is still serving traffic.
 
-Open the version-specific frontend and gateway URLs. Verify /api/health returns status ok, the pinned judge commit/manifest, the exact approved model, the pinned PRD Score commit/manifest, the PRD Score model/calculation version, and the expected `prd_score_enabled` value.
+```bash
+export GATEWAY_IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/evalgpt/api-gateway:$RELEASE_ID"
+gcloud builds submit api-gateway \
+  --tag "$GATEWAY_IMAGE" \
+  --project "$PROJECT_ID"
 
-Complete the fresh-context Fable pixel review against this preview before traffic changes.
+gcloud run deploy evalgpt-api-gateway \
+  --image "$GATEWAY_IMAGE" \
+  --region "$REGION" \
+  --project "$PROJECT_ID" \
+  --service-account "$GATEWAY_SA" \
+  --allow-unauthenticated \
+  --timeout 600 \
+  --concurrency 8 \
+  --max-instances 10 \
+  --set-secrets "QUOTA_IDENTITY_HMAC_KEY=evalgpt-quota-hmac-key:latest" \
+  --set-env-vars "ALLOWED_ORIGIN=https://evalgpt.com,$FRONTEND_PREVIEW_URL,WORKSPACE_AUTH_REQUIRED=false,GOOGLE_OAUTH_CLIENT_ID=$GOOGLE_OAUTH_CLIENT_ID,GOOGLE_WORKSPACE_DOMAIN=8090.inc,USER_DAILY_RUN_LIMIT=3,USER_MONTHLY_RUN_LIMIT=10,GLOBAL_DAILY_RUN_LIMIT=50,GLOBAL_CONCURRENT_RUN_LIMIT=2,QUOTA_LEASE_MS=720000,QUOTA_TTL_MS=7776000000,ACCESS_RATE_LIMIT_MAX=60,ACCESS_RATE_LIMIT_WINDOW_MS=60000,EVALUATE_RATE_LIMIT_MAX=20,EVALUATE_RATE_LIMIT_WINDOW_MS=600000,TRUST_PROXY_HOPS=2,EVALUATIONS_ENABLED=true,EVALUATION_TIMEOUT_MS=570000,USE_GOOGLE_IDENTITY_TOKEN=true,PRD_JUDGE_RUNTIME_URL=$RUNTIME_URL,PRD_JUDGE_RUNTIME_AUDIENCE=$RUNTIME_URL"
 
-## 6. Canary and rollback
+export GATEWAY_URL="$(gcloud run services describe evalgpt-api-gateway \
+  --region "$REGION" --project "$PROJECT_ID" --format='value(status.url)')"
+```
 
-Record OLD_FRONTEND and OLD_GATEWAY_REVISION before splitting traffic. During
-canary, the new frontend calls the exact Cloud Run gateway using
-`VITE_API_BASE`; the old production frontend remains unchanged.
+At this stage, `/api/access` must work with an 8090 token, but the old frontend can still submit anonymously. Keep this transition short.
 
-Advance only while the release gates remain green:
+## 6. Build and deploy the authenticated frontend preview
 
-    # 10 percent
-    gcloud app services set-traffic default --splits "$OLD_FRONTEND=0.90,$RELEASE_ID=0.10" --split-by=random --migrate --project "$PROJECT_ID"
+```bash
+cd frontend
+rm -f .env.production.local
+cat > .env.production.local <<EOF
+VITE_PUBLIC_EVALUATIONS_ENABLED=true
+VITE_WORKSPACE_AUTH_REQUIRED=true
+VITE_GOOGLE_CLIENT_ID=$GOOGLE_OAUTH_CLIENT_ID
+VITE_API_BASE=$GATEWAY_URL
+EOF
 
-    # Then 50 percent, then 100 percent after the observation windows. These
-    # users exercise the exact new API URL embedded in the new frontend.
-    gcloud app services set-traffic default --splits "$OLD_FRONTEND=0.50,$RELEASE_ID=0.50" --split-by=random --migrate --project "$PROJECT_ID"
-    gcloud app services set-traffic default --splits "$RELEASE_ID=1" --migrate --project "$PROJECT_ID"
+npm ci
+npm audit
+npm run type-check
+npm run test:browser
 
-After the exact-pair canary reaches 100 percent and the observation window
-passes, retain the explicit `VITE_API_BASE=$GATEWAY_URL` build setting. Do not
-return the frontend to the App Engine `/api` service because that route buffers
-the stream.
+gcloud app deploy app.yaml \
+  --project "$PROJECT_ID" \
+  --version "$RELEASE_ID" \
+  --no-promote \
+  --quiet
+```
 
-Rollback is immediate:
+Against the exact preview:
 
-    gcloud app services set-traffic default --splits "$OLD_FRONTEND=1" --migrate --project "$PROJECT_ID"
-    gcloud run services update-traffic evalgpt-api-gateway \
-      --region "$REGION" --project "$PROJECT_ID" \
-      --to-revisions "$OLD_GATEWAY_REVISION=100"
+- an anonymous visitor sees only the 8090 sign-in gate;
+- a verified `@8090.inc` account sees the product and quota status;
+- Gmail, `dfyautomation.io`, missing-`hd`, aliases, and subdomains are denied;
+- ID tokens do not enter local or session storage;
+- selected documents survive token-expiry reauthentication;
+- Judge and PRD Score both execute and the result remains correctly ordered;
+- no PRD content, email, token, finding, evidence, or filename appears in logs or Firestore.
 
-Also set `EVALUATIONS_ENABLED=false` on the gateway or remove the Cloud Run invoker binding if a privacy, evidence, or false-GO incident requires a hard stop. `DAILY_RUN_LIMIT` is an abuse-control ceiling per gateway instance, not the emergency switch.
+Run the required fresh-context Fable review against the deployed preview. Resolve every P0/P1 and rerun. If Fable is unavailable, use Opus 5 at xhigh effort and keep release blocked on every P0/P1.
 
-## 7. Production verification
+## 7. Canary the authenticated frontend
 
-Verify:
+Advance only after each observation window remains healthy.
 
-- homepage metadata and public-beta label;
-- file and paste evaluation;
-- PDF/DOCX extraction warnings;
-- result hierarchy and exports;
-- mobile/narrow layout and keyboard navigation;
-- security headers from frontend/serve.json on served frontend responses;
-- no auth, payment, saved-history, or Firestore routes;
-- content-free logs;
-- /api/health;
-- completion rate, 5xx rate, p95 latency, model version, judge version, and cost per run.
+```bash
+gcloud app services set-traffic default \
+  --splits "$OLD_FRONTEND=0.90,$RELEASE_ID=0.10" \
+  --split-by=random --migrate --project "$PROJECT_ID"
 
-Do not claim certified or generally available until the frozen family-separated validation report exists for the exact deployed versions.
+gcloud app services set-traffic default \
+  --splits "$OLD_FRONTEND=0.50,$RELEASE_ID=0.50" \
+  --split-by=random --migrate --project "$PROJECT_ID"
+
+gcloud app services set-traffic default \
+  --splits "$RELEASE_ID=1" \
+  --migrate --project "$PROJECT_ID"
+```
+
+## 8. Cut over mandatory gateway authentication
+
+After the authenticated frontend reaches 100 percent, enable gateway enforcement in one cutover:
+
+```bash
+gcloud run services update evalgpt-api-gateway \
+  --region "$REGION" \
+  --project "$PROJECT_ID" \
+  --update-env-vars "WORKSPACE_AUTH_REQUIRED=true"
+```
+
+Verify immediately:
+
+```bash
+curl -i -X POST "$GATEWAY_URL/api/prd-judge/evaluate"
+# 401 with code=auth_required
+```
+
+Then verify with real browser sessions that:
+
+- an 8090 account succeeds;
+- an external Google account receives `403 workspace_not_allowed`;
+- quota counts remain consistent across multiple gateway revisions/instances;
+- the fourth daily and eleventh monthly user starts are rejected;
+- the fifty-first global daily start is rejected;
+- a third simultaneous evaluation receives `429 capacity_busy`;
+- Firestore outage returns `503 quota_store_unavailable`;
+- `/api/health` remains unauthenticated and content-free.
+
+## 9. Failure policy
+
+Never restore anonymous evaluation access. On authentication, quota, privacy, Judge, PRD Score, or model-capacity failure, stop evaluations:
+
+```bash
+gcloud run services update evalgpt-api-gateway \
+  --region "$REGION" \
+  --project "$PROJECT_ID" \
+  --update-env-vars "EVALUATIONS_ENABLED=false"
+```
+
+Frontend rollback is permitted only if the rollback version is also Workspace-gated. Runtime and gateway revision rollback must preserve mandatory authentication, Firestore quotas, and mandatory PRD Score.

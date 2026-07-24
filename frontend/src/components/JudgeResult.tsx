@@ -87,7 +87,7 @@ export function JudgeResult({ result, onReset }: JudgeResultProps) {
     (counts, finding) => ({ ...counts, [finding.severity]: (counts[finding.severity] || 0) + 1 }),
     { P0: 0, P1: 0, P2: 0 },
   );
-  const example = result.run.id === "example_public_beta";
+  const example = result.run.id === "example_result";
   const printReport = () => {
     const closed = Array.from(document.querySelectorAll<HTMLDetailsElement>("#judge-result details:not([open])"));
     closed.forEach((detail) => { detail.open = true; });
@@ -291,20 +291,11 @@ export function JudgeResult({ result, onReset }: JudgeResultProps) {
                   </dl>
                 </details>
               </>
-            ) : scoreDiagnostic.status === "not_scored" && draftScore ? (
+            ) : (
               <>
                 <p className="eyebrow">Secondary authoring diagnostic</p>
                 <h3 id="draft-strength-title">Draft strength was not scored</h3>
                 <p className="empty-state">{draftScore.artifact_gate.reason} No partial score was produced. The readiness judgment is complete and unaffected.</p>
-              </>
-            ) : (
-              <>
-                <p className="eyebrow">Secondary authoring diagnostic</p>
-                <h3 id="draft-strength-title">Draft strength unavailable</h3>
-                <p className="empty-state">
-                  {scoreDiagnostic.validation.warnings?.[0]
-                    || "The separate draft-strength diagnostic did not return a validated report; the readiness judgment is unaffected."}
-                </p>
               </>
             )}
           </section>

@@ -1,4 +1,6 @@
 import type { JudgeEnvelope, ProgressUpdate } from "../types/judge";
+import type { AccessFailure, AccessFailureCode, AccessQuota } from "../types/access";
+import { API_BASE } from "./api";
 
 
 export class EvaluationCancelledError extends Error {
@@ -8,9 +10,30 @@ export class EvaluationCancelledError extends Error {
   }
 }
 
-const localHostnames = new Set(["localhost", "127.0.0.1"]);
-const API_BASE = import.meta.env.VITE_API_BASE
-  || (localHostnames.has(window.location.hostname) ? "http://127.0.0.1:8080" : "");
+export class EvaluationApiError extends Error {
+  readonly code?: AccessFailureCode | string;
+  readonly status: number;
+  readonly retryAfterSeconds?: number;
+  readonly quota?: AccessQuota;
+
+  constructor(
+    message: string,
+    options: {
+      code?: AccessFailureCode | string;
+      status: number;
+      retryAfterSeconds?: number;
+      quota?: AccessQuota;
+    },
+  ) {
+    super(message);
+    this.name = "EvaluationApiError";
+    this.code = options.code;
+    this.status = options.status;
+    this.retryAfterSeconds = options.retryAfterSeconds;
+    this.quota = options.quota;
+  }
+}
+
 const TIMEOUT_MS = 10 * 60 * 1000;
 
 interface EvaluateInput {
@@ -26,9 +49,23 @@ interface StreamEvent {
 
 export function asJudgeEnvelope(payload: unknown): JudgeEnvelope {
   const envelope = payload as Partial<JudgeEnvelope> | null;
-  if (!envelope || envelope.schema_version !== "evalgpt-prd-judge/v2" || !envelope.prd_score?.status) {
+  if (!envelope || envelope.schema_version !== "evalgpt-prd-judge/v2") {
     throw new Error(
       "The evaluation service returned a report version this page does not support. Reload the page to get the current version, then evaluate again.",
+    );
+  }
+  const scoreStatus = envelope?.prd_score?.status;
+  const scoreReport = envelope?.prd_score?.report;
+  if (
+    (scoreStatus !== "complete" && scoreStatus !== "not_scored")
+    || !scoreReport
+    || (scoreStatus === "complete"
+      && (scoreReport.status !== "scored" || !scoreReport.totals))
+    || (scoreStatus === "not_scored"
+      && (scoreReport.status !== "not_scored" || scoreReport.totals !== null))
+  ) {
+    throw new Error(
+      "The evaluation service did not return the complete Judge and PRD Score report this page requires. Reload the page, then evaluate again.",
     );
   }
   return envelope as JudgeEnvelope;
@@ -49,6 +86,7 @@ export async function evaluatePrd(
   input: EvaluateInput,
   onProgress: (update: ProgressUpdate) => void,
   externalSignal?: AbortSignal,
+  googleIdToken?: string,
 ): Promise<JudgeEnvelope> {
   const form = new FormData();
   if (input.primaryFile) form.append("prd", input.primaryFile);
@@ -65,11 +103,23 @@ export async function evaluatePrd(
       method: "POST",
       body: form,
       signal: controller.signal,
-      headers: { Accept: "text/event-stream" },
+      headers: {
+        Accept: "text/event-stream",
+        ...(googleIdToken ? { Authorization: `Bearer ${googleIdToken}` } : {}),
+      },
     });
     if (!response.ok || !response.body) {
-      const payload = (await response.json().catch(() => ({}))) as { error?: string };
-      throw new Error(payload.error || `Evaluation request failed with HTTP ${response.status}`);
+      const payload = (await response.json().catch(() => ({}))) as AccessFailure;
+      const retryAfter = Number(response.headers.get("Retry-After"));
+      throw new EvaluationApiError(
+        payload.error || `Evaluation request failed with HTTP ${response.status}`,
+        {
+          code: payload.code,
+          status: response.status,
+          retryAfterSeconds: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
+          quota: payload.quota,
+        },
+      );
     }
 
     const reader = response.body.getReader();

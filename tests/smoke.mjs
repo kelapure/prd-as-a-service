@@ -27,6 +27,7 @@ const gateway = spawn("node", ["dist/server.js"], {
     PORT: "8080",
     PRD_JUDGE_RUNTIME_URL: "http://127.0.0.1:8092",
     ALLOWED_ORIGIN: "http://localhost:3000",
+    WORKSPACE_AUTH_REQUIRED: "false",
     LOG_LEVEL: "error",
   },
   stdio: ["ignore", "pipe", "pipe"],

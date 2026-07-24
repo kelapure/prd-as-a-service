@@ -133,7 +133,6 @@ export interface PrdScoreReport {
 
 export interface JudgeEnvelope {
   schema_version: "evalgpt-prd-judge/v2";
-  public_beta: true;
   run: {
     id: string;
     created_at_epoch_ms: number;
@@ -182,8 +181,8 @@ export interface JudgeEnvelope {
     fail_count: number;
   };
   prd_score: {
-    status: "complete" | "not_scored" | "unavailable";
-    report: PrdScoreReport | null;
+    status: "complete" | "not_scored";
+    report: PrdScoreReport;
     validation: {
       ok: boolean;
       warnings?: string[];

@@ -5,8 +5,7 @@
   "type": "module",
   "dependencies": {
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "serve": "^14.2.4"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/node": "^20.17.10",
@@ -15,6 +14,7 @@
     "@vitejs/plugin-react-swc": "^3.7.2",
     "axe-core": "^4.10.2",
     "playwright-core": "^1.55.0",
+    "serve": "^14.2.4",
     "typescript": "^5.7.2",
     "vite": "^6.0.3"
   },
@@ -22,11 +22,12 @@
     "dev": "vite",
     "build": "vite build",
     "type-check": "tsc --noEmit",
-    "test:browser": "npm run test:browser:public && npm run test:browser:enabled",
-    "test:browser:public": "VITE_PUBLIC_EVALUATIONS_ENABLED=false npm run build && node tests/public-preview.mjs",
-    "test:browser:enabled": "VITE_PUBLIC_EVALUATIONS_ENABLED=true npm run build && node tests/browser-accessibility.mjs",
-    "test:full-flow": "npm --prefix ../api-gateway run build && VITE_PUBLIC_EVALUATIONS_ENABLED=true VITE_API_BASE=http://127.0.0.1:8081 npm run build && node tests/full-flow.mjs",
+    "test:browser": "npm run test:browser:public && npm run test:browser:enabled && npm run test:browser:auth",
+    "test:browser:public": "VITE_PUBLIC_EVALUATIONS_ENABLED=false VITE_WORKSPACE_AUTH_REQUIRED=false npm run build && node tests/public-preview.mjs",
+    "test:browser:enabled": "VITE_PUBLIC_EVALUATIONS_ENABLED=true VITE_WORKSPACE_AUTH_REQUIRED=false npm run build && node tests/browser-accessibility.mjs",
+    "test:browser:auth": "VITE_PUBLIC_EVALUATIONS_ENABLED=true VITE_WORKSPACE_AUTH_REQUIRED=true VITE_GOOGLE_CLIENT_ID=test-client.apps.googleusercontent.com VITE_API_BASE=http://127.0.0.1:4177 npm run build && node tests/workspace-auth.mjs",
+    "test:full-flow": "npm --prefix ../api-gateway run build && VITE_PUBLIC_EVALUATIONS_ENABLED=true VITE_WORKSPACE_AUTH_REQUIRED=false VITE_API_BASE=http://127.0.0.1:8081 npm run build && node tests/full-flow.mjs",
     "postinstall": "vite build",
-    "start": "serve -s build -l $PORT -c ../serve.json"
+    "start": "node server.mjs"
   }
 }

@@ -102,8 +102,11 @@ class RubricDiagnostic(BaseModel):
         if ids != expected:
             raise ValueError(f"criteria must appear exactly once in C1-C12 order; got {ids}")
         passed = sum(row.status == "pass" for row in self.criteria)
-        if self.pass_count != passed or self.fail_count != 12 - passed:
-            raise ValueError("rubric pass/fail counts do not match the criteria")
+        # Counts are derived display metadata, not model judgment. Recompute them
+        # from the validated criterion statuses so an arithmetic slip cannot
+        # suppress the authoritative report.
+        self.pass_count = passed
+        self.fail_count = 12 - passed
         return self
 
 
@@ -192,14 +195,13 @@ class PrdScoreReport(RawPrdScoreReport):
 
 
 class PrdScoreDiagnostic(BaseModel):
-    status: Literal["complete", "not_scored", "unavailable"]
-    report: PrdScoreReport | None
+    status: Literal["complete", "not_scored"]
+    report: PrdScoreReport
     validation: dict[str, Any]
 
 
 class JudgeEnvelope(BaseModel):
     schema_version: Literal["evalgpt-prd-judge/v2"] = "evalgpt-prd-judge/v2"
-    public_beta: Literal[True] = True
     run: dict[str, Any]
     versions: dict[str, str]
     input: dict[str, Any]

@@ -1,8 +1,8 @@
 # EvalGPT PRD Judge
 
-EvalGPT is a public-beta product for deciding whether a PRD is ready to build. The public information preview explains the method and includes a synthetic example. Live, anonymous evaluation remains fail-closed until the exact judge, model, evidence, and privacy certification gates pass.
+EvalGPT is an internal 8090 product for deciding whether a PRD is ready to build. The entire experience requires a verified Google Workspace identity whose hosted-domain claim is exactly `8090.inc`.
 
-The frontend flag `VITE_PUBLIC_EVALUATIONS_ENABLED` defaults to `false`. In that state the browser contains no upload or paste controls and cannot submit a document. Enabling live evaluation is blocked by the full release gates in `cloud/RELEASE_GATES.md`.
+Google ID tokens live only in React memory. EvalGPT has no profiles, saved evaluations, payment, or persistent sharing. Firestore stores only HMAC-pseudonymous quota counters and short-lived concurrency leases; PRD files, extracted text, findings, evidence, filenames, email addresses, and tokens never enter application storage.
 
 ## Product contract
 
@@ -11,16 +11,18 @@ The frontend flag `VITE_PUBLIC_EVALUATIONS_ENABLED` defaults to `false`. In that
 - Draft strength: PRD Score independently evaluates the same supplied evidence against its absolute-mode rubric and applies deterministic arithmetic to model-owned criterion ratings. It never changes the verdict or readiness score.
 - Evidence: every status=used quote is verified against the uploaded PRD or supplied evidence before a score is computed.
 - Secondary diagnostic: PRD Eval Rubric v2, C1-C12. It never overrides the judge verdict.
-- Privacy: the beta has no accounts, payment, saved history, persistent share links, or document storage. Inputs and results remain in process/browser memory for the active run only.
+- Privacy: Workspace authentication adds access control, not an EvalGPT account. Inputs and results remain in process/browser memory for the active run only.
 - Model safety: one release-bakeoff winner is allowlisted. There is no automatic fallback to an unvalidated model.
 
 ## Architecture
 
     React/Vite frontend
             |
-            | multipart + streamed progress
+            | Google ID token + multipart + streamed progress
             v
     Fastify public API gateway (Cloud Run)
+            |
+            | verified hd=8090.inc + Firestore quota transaction
             |
             | IAM identity token + optional internal token
             v
@@ -34,13 +36,13 @@ The frontend flag `VITE_PUBLIC_EVALUATIONS_ENABLED` defaults to `false`. In that
 
 ### Components
 
-- frontend/ — 8090-branded responsive product experience, fail-closed public information preview, flag-gated upload/paste flow, progressive result disclosure, and browser-side HTML/PDF/JSON exports.
-- api-gateway/ — content-free logging, upload limits, CORS, rate limits, daily kill switch, cancellation, health checks, and SSE proxying.
+- frontend/ — 8090-branded Workspace sign-in gate, in-memory credential handling, quota and reauthentication states, progressive result disclosure, and browser-side HTML/PDF/JSON exports.
+- api-gateway/ — Google token validation before multipart parsing, Firestore-backed quotas, content-free logging, upload limits, route-specific IP rate limits, kill switch, cancellation, health checks, and SSE proxying.
 - judge-runtime/ — in-memory PDF/DOCX/Markdown/text extraction, figure/page support, isolated Judge/rubric/PRD Score model calls, canonical validators, and deterministic calculations.
 - judge-runtime/bundle/ — integrity-checked snapshots exported from `salesfactory-agents/prd_judge` and `salesfactory-agents/prd_score`, each with a source commit and file hashes.
 - tests/ — contract fixtures and full local-stack smoke test.
 
-The retired /api/evalprd/*, authentication, Stripe, Firestore, and saved-evaluation routes are intentionally absent from the public beta.
+The retired `/api/evalprd/*`, Stripe, profile, saved-evaluation, and document-history routes remain absent. `GET /api/access` is the only identity-facing product endpoint and returns the verified work email plus quota status.
 
 ## Local development
 
@@ -55,38 +57,34 @@ Prerequisites: Node.js 20+, Python 3.12.
     # Terminal 2: API gateway
     cd api-gateway
     npm install
-    PRD_JUDGE_RUNTIME_URL=http://127.0.0.1:8092 npm run dev
+    WORKSPACE_AUTH_REQUIRED=false \
+      PRD_JUDGE_RUNTIME_URL=http://127.0.0.1:8092 npm run dev
 
     # Terminal 3: frontend
     cd frontend
     npm install
-    VITE_PUBLIC_EVALUATIONS_ENABLED=true npm run dev
+    VITE_PUBLIC_EVALUATIONS_ENABLED=true \
+      VITE_WORKSPACE_AUTH_REQUIRED=false npm run dev
 
-Open http://localhost:3000. Fixture mode enables both instruments and exercises the complete upload, streaming, validation, readiness score, PRD Score, rubric, and export path without calling a model.
-
-Run `npm run dev` without the flag to inspect the fail-closed public information preview.
+Open http://localhost:3000. This explicitly disabled local-auth configuration is for fixture development only. Deployed previews and production must use `WORKSPACE_AUTH_REQUIRED=true`, `VITE_WORKSPACE_AUTH_REQUIRED=true`, the internal Google OAuth client ID, Firestore, and the quota HMAC secret.
 
 ## Model-backed runtime
 
-Model-backed Judge mode fails closed until the release-bakeoff winner is explicitly configured. PRD Score remains disabled by default so an unvalidated score model cannot block or silently enter a production Judge release:
+Model-backed Judge mode fails closed until the release-bakeoff winner is explicitly configured. PRD Score is a mandatory part of EvalGPT and must be enabled with its own pinned, approved model and bundle:
 
     export ANTHROPIC_API_KEY=...
     export PRD_JUDGE_MODEL=<validated-model-id>
     export PRD_JUDGE_ALLOWED_MODELS=<same-validated-model-id>
     export PRD_JUDGE_EXPECTED_SOURCE_COMMIT=<reviewed-canonical-commit>
     export PRD_JUDGE_EXPECTED_MANIFEST_SHA256=<reviewed-runtime-manifest>
-    export PRD_SCORE_ENABLED=false
-    judge-runtime/.venv/bin/uvicorn app.main:app --port 8092
-
-After the family-separated PRD Score release gate passes for an exact model/runtime pair, enable it explicitly:
-
     export PRD_SCORE_ENABLED=true
     export PRD_SCORE_MODEL=<validated-score-model-id>
     export PRD_SCORE_ALLOWED_MODELS=<same-validated-score-model-id>
     export PRD_SCORE_EXPECTED_SOURCE_COMMIT=<reviewed-canonical-score-commit>
     export PRD_SCORE_EXPECTED_MANIFEST_SHA256=<reviewed-score-runtime-manifest>
+    judge-runtime/.venv/bin/uvicorn app.main:app --port 8092
 
-If an enabled model is absent from its allowlist or its bundle pins do not match, `/health` is degraded and evaluations do not run. If PRD Score is disabled or a score-only report fails validation at run time, the authoritative Judge result still completes and the UI labels draft strength unavailable. Every Judge, rubric, and PRD Score call requires schema-enforced structured output; a nonconforming Judge or rubric response fails the run with a retryable error, and a nonconforming PRD Score response leaves draft strength unavailable. No model fallback is used. Every report returns both instrument versions and pins.
+If either model is absent from its allowlist, either bundle pin does not match, or PRD Score is disabled, the deployed release is not eligible for traffic. Every Judge, rubric, and PRD Score call requires schema-enforced structured output. The Judge remains authoritative and the instruments are never mathematically blended. No model fallback is used. Every report returns both instrument versions and pins.
 
 ## Checks
 
@@ -109,7 +107,6 @@ If an enabled model is absent from its allowlist or its bundle pins do not match
     npm audit
     npm run type-check
     npm run build
-    npm run test:browser:public
     npm run test:browser
     node tests/score-envelope-guard.mjs
     npm run test:full-flow
@@ -127,6 +124,7 @@ If an enabled model is absent from its allowlist or its bundle pins do not match
 
 POST /api/prd-judge/evaluate accepts multipart input:
 
+- `Authorization: Bearer <Google ID token>` from the configured OAuth client;
 - exactly one prd file or prd_text field;
 - up to five supporting_files;
 - PDF, DOCX, Markdown, and TXT only;
@@ -135,11 +133,13 @@ POST /api/prd-judge/evaluate accepts multipart input:
 - 250,000 pasted characters and 250,000 extracted characters per document;
 - at most 12 rendered pages or embedded figures per document, size-bounded before the model call; oversized or unreadable figures are skipped with a warning.
 
-The streamed response emits progress, complete, or error events. The final envelope is `evalgpt-prd-judge/v2`; the frontend fails closed and asks the user to reload if a complete event carries any other envelope version. The top-level `report`, `readiness_score`, `rubric`, and `prd_score` fields remain separate; consumers must not average, blend, or use PRD Score to rewrite the Judge verdict.
+The streamed response emits progress, complete, or error events. The final envelope is `evalgpt-prd-judge/v2`; the frontend fails closed and asks the user to reload if a complete event carries any other envelope version. A production completion must contain a validated PRD Score report with `status=complete` or `status=not_scored`; the runtime and frontend reject missing reports and the retired `unavailable` partial-result shape. The top-level `report`, `readiness_score`, `rubric`, and `prd_score` fields remain separate; consumers must not average, blend, or use PRD Score to rewrite the Judge verdict.
+
+`GET /api/access` requires the same bearer token and returns the verified work email plus daily and monthly quota windows. The gateway admits at most three starts per user per UTC day, ten per calendar month, fifty organization-wide per UTC day, and two concurrent evaluations. Every admitted start counts even if it is cancelled or fails downstream. Abandoned leases expire after twelve minutes.
 
 ## Deployment
 
-See `cloud/DEPLOY_APP_ENGINE.md` for the fail-closed public-frontend path and the private runtime, streaming Cloud Run gateway, and App Engine frontend deployment path. See `cloud/RELEASE_GATES.md` for model, evidence, Fable, accessibility, canary, monitoring, and rollback gates.
+See `cloud/DEPLOY_APP_ENGINE.md` for Google OAuth, Firestore, the private runtime, the streaming Cloud Run gateway, and the App Engine frontend deployment path. See `cloud/RELEASE_GATES.md` for authentication, quota, model, evidence, Fable, accessibility, canary, monitoring, and rollback gates.
 
 The gateway runs on Cloud Run because App Engine Standard buffers dynamic
 responses and cannot deliver the product's real SSE progress events. The

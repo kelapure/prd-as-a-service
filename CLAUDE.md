@@ -1,7 +1,7 @@
 # EvalGPT PRD Judge
 
-EvalGPT is the public-beta browser experience for PRD Judge. It gives an
-anonymous user a stage-aware readiness verdict, a deterministic score,
+EvalGPT is the 8090-internal browser experience for PRD Judge. It gives a
+verified `@8090.inc` Workspace user a stage-aware readiness verdict, a deterministic score,
 evidence-backed findings, a prioritized path to GO, and a separate PRD Score
 draft-strength diagnostic.
 
@@ -11,13 +11,12 @@ draft-strength diagnostic.
   diagnostic and cannot override the judge verdict.
 - PRD Score is an independent authoring diagnostic. Do not average, blend,
   rescale, or otherwise use it to alter the verdict or readiness score.
-- Public beta is free, anonymous, responsive, and ephemeral.
-- The frontend fails closed: `VITE_PUBLIC_EVALUATIONS_ENABLED` defaults to
-  `false`, and that public information preview has no upload, paste, or
-  evaluate controls. Do not enable live evaluation before the release gates in
-  `cloud/RELEASE_GATES.md` pass.
-- Do not add authentication, payment, saved history, persistent sharing, or a
-  public developer API during beta.
+- Google Workspace authentication is mandatory in every deployed environment.
+  Only a verified token with `hd=8090.inc` is allowed.
+- ID tokens stay in browser memory. Firestore may contain only HMAC-pseudonymous
+  quota counters and short-lived leases with the approved TTL.
+- Do not add payment, profiles, saved history, persistent sharing, or a public
+  developer API.
 - Do not write source documents, extracted text, findings, or evidence to
   application storage, logs, analytics, local storage, or error reporting.
 - Do not silently fall back to an unvalidated model. Fail closed with a
@@ -28,8 +27,8 @@ draft-strength diagnostic.
 ## Architecture
 
 ```text
-frontend/       React/Vite public-beta UI and in-browser HTML/PDF/JSON export
-api-gateway/    Fastify same-origin gateway, limits, kill switch, SSE proxy
+frontend/       React/Vite Workspace gate and in-browser HTML/PDF/JSON export
+api-gateway/    Fastify token validation, durable quotas, kill switch, SSE proxy
 judge-runtime/  FastAPI extraction, judge/score calls, validation, deterministic score
 tests/          Cross-service smoke and canonical-bundle conformance tests
 cloud/          GCP deployment and release-gate runbooks
@@ -39,9 +38,9 @@ The trusted prompts, references, deterministic logic, validators, and
 calculations are copied into `judge-runtime/bundle/` by the canonical
 `salesfactory-agents/prd_judge` and `salesfactory-agents/prd_score` exporters.
 The runtime verifies every file hash and manifest hash before serving traffic.
-Production also requires exact source-commit and manifest pins for every
-enabled instrument. Keep `PRD_SCORE_ENABLED=false` until its separate release
-gate passes.
+Production also requires exact source-commit and manifest pins for both
+instruments. PRD Score is mandatory for EvalGPT; keep the whole deployment
+closed until its separate release gate passes.
 
 ## Local checks
 

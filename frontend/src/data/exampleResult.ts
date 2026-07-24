@@ -139,9 +139,8 @@ const writingScores = [2, 4, 3, 3];
 
 export const EXAMPLE_RESULT: JudgeEnvelope = {
   schema_version: "evalgpt-prd-judge/v2",
-  public_beta: true,
   run: {
-    id: "example_public_beta",
+    id: "example_result",
     created_at_epoch_ms: Date.UTC(2026, 6, 21),
     elapsed_ms: 73420,
     ephemeral: true,

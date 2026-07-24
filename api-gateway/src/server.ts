@@ -2,11 +2,30 @@ import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import dotenv from "dotenv";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, {
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyRequest,
+} from "fastify";
 import { GoogleAuth, type IdTokenClient } from "google-auth-library";
 import type { ServerResponse } from "node:http";
 import { pathToFileURL } from "node:url";
 import { fetch, File, FormData, type Response } from "undici";
+
+import {
+  bearerToken,
+  createGoogleWorkspaceVerifier,
+  DEFAULT_WORKSPACE_DOMAIN,
+  WorkspaceAuthError,
+  type WorkspaceIdentity,
+  type WorkspaceTokenVerifier,
+} from "./auth.js";
+import {
+  FirestoreQuotaStore,
+  QuotaError,
+  quotaLimitsFromEnv,
+  type QuotaStore,
+} from "./quota.js";
 
 dotenv.config();
 
@@ -24,14 +43,24 @@ interface UploadedPart {
   data: Buffer;
 }
 
-interface BuildServerOptions {
+export interface BuildServerOptions {
   runtimeFetch?: typeof fetch;
   now?: () => Date;
+  authRequired?: boolean;
+  verifyIdentity?: WorkspaceTokenVerifier;
+  quotaStore?: QuotaStore;
 }
 
 interface DailyCounter {
   day: string;
   count: number;
+}
+
+interface StructuredFailure {
+  code: string;
+  error: string;
+  retryable: boolean;
+  quota?: unknown;
 }
 
 function extension(filename: string): string {
@@ -113,6 +142,27 @@ async function runtimeHealth(runtimeFetch: typeof fetch): Promise<Response> {
   });
 }
 
+function sendAuthFailure(reply: FastifyReply, error: WorkspaceAuthError) {
+  reply.header("WWW-Authenticate", 'Bearer realm="evalgpt"');
+  return reply.status(error.statusCode).send({
+    code: error.code,
+    error: error.message,
+    retryable: error.code === "token_expired",
+  } satisfies StructuredFailure);
+}
+
+function sendQuotaFailure(reply: FastifyReply, error: QuotaError) {
+  if (error.retryAfterSeconds) {
+    reply.header("Retry-After", String(error.retryAfterSeconds));
+  }
+  return reply.status(error.statusCode).send({
+    code: error.code,
+    error: error.message,
+    retryable: true,
+    ...(error.quota ? { quota: error.quota } : {}),
+  } satisfies StructuredFailure);
+}
+
 export async function buildServer(options: BuildServerOptions = {}): Promise<FastifyInstance> {
   const runtimeFetch = options.runtimeFetch || fetch;
   const now = options.now || (() => new Date());
@@ -123,9 +173,31 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   if (!allowedOrigins.length) throw new Error("ALLOWED_ORIGIN must contain at least one origin");
   const dailyLimit = Number(process.env.DAILY_RUN_LIMIT || 100);
   const evaluationsEnabled = process.env.EVALUATIONS_ENABLED !== "false";
+  const authRequired = options.authRequired ?? process.env.WORKSPACE_AUTH_REQUIRED !== "false";
   const requestTimeoutMs = Number(process.env.EVALUATION_TIMEOUT_MS || 150_000);
   const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS || 0);
   let daily: DailyCounter = { day: now().toISOString().slice(0, 10), count: 0 };
+  let verifyIdentity = options.verifyIdentity;
+  let quotaStore = options.quotaStore;
+
+  const googleClientId = process.env.GOOGLE_OAUTH_CLIENT_ID?.trim() || "";
+  const workspaceDomain = process.env.GOOGLE_WORKSPACE_DOMAIN?.trim() || DEFAULT_WORKSPACE_DOMAIN;
+  const quotaHmacKey = process.env.QUOTA_IDENTITY_HMAC_KEY || "";
+  if (!verifyIdentity && googleClientId) {
+    verifyIdentity = createGoogleWorkspaceVerifier(googleClientId, workspaceDomain);
+  }
+  if (!quotaStore && quotaHmacKey) {
+    quotaStore = new FirestoreQuotaStore({
+      hmacKey: quotaHmacKey,
+      limits: quotaLimitsFromEnv(),
+    });
+  }
+  if (authRequired && !verifyIdentity) {
+    throw new Error("GOOGLE_OAUTH_CLIENT_ID is required when Workspace authentication is enabled");
+  }
+  if (authRequired && !quotaStore) {
+    throw new Error("QUOTA_IDENTITY_HMAC_KEY is required when Workspace authentication is enabled");
+  }
 
   const server = Fastify({
     trustProxy: Number.isInteger(trustProxyHops) && trustProxyHops > 0 ? trustProxyHops : false,
@@ -153,8 +225,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     methods: ["GET", "POST", "OPTIONS"],
   });
   await server.register(rateLimit, {
-    max: Number(process.env.RATE_LIMIT_MAX || 5),
-    timeWindow: Number(process.env.RATE_LIMIT_WINDOW_MS || 60 * 60 * 1000),
+    global: false,
   });
   await server.register(multipart, {
     limits: {
@@ -164,6 +235,31 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
       parts: 8,
     },
   });
+
+  const identities = new WeakMap<FastifyRequest, WorkspaceIdentity>();
+  const requireWorkspace = async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!verifyIdentity) {
+      return reply.status(503).send({
+        code: "auth_unavailable",
+        error: "Google Workspace authentication is not configured.",
+        retryable: true,
+      } satisfies StructuredFailure);
+    }
+    try {
+      const identity = await verifyIdentity.verify(bearerToken(request.headers.authorization));
+      identities.set(request, identity);
+    } catch (error) {
+      if (error instanceof WorkspaceAuthError) return sendAuthFailure(reply, error);
+      request.log.warn(
+        { errorType: error instanceof Error ? error.name : "unknown" },
+        "Workspace token validation failed",
+      );
+      return sendAuthFailure(
+        reply,
+        new WorkspaceAuthError("auth_required", "The Google sign-in token is invalid.", 401),
+      );
+    }
+  };
 
   server.addHook("onSend", async (_request, reply, payload) => {
     reply.header("Cache-Control", "no-store");
@@ -177,19 +273,39 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     return payload;
   });
 
-  const healthHandler = async (_request: unknown, reply: any) => {
+  const healthHandler = async (_request: FastifyRequest, reply: FastifyReply) => {
+    let quotaStatus: "ok" | "disabled" | "unavailable" = authRequired ? "unavailable" : "disabled";
+    if (authRequired && quotaStore) {
+      try {
+        await quotaStore.health();
+        quotaStatus = "ok";
+      } catch {
+        quotaStatus = "unavailable";
+      }
+    }
     try {
       const response = await runtimeHealth(runtimeFetch);
       const runtime = (await response.json()) as Record<string, unknown>;
-      return reply.status(response.ok && runtime.configured ? 200 : 503).send({
-        status: response.ok && runtime.configured ? "ok" : "degraded",
+      const prdScoreReady = !authRequired || runtime.prd_score_enabled === true;
+      const healthy = response.ok
+        && runtime.configured
+        && prdScoreReady
+        && quotaStatus !== "unavailable";
+      return reply.status(healthy ? 200 : 503).send({
+        status: healthy ? "ok" : "degraded",
         gateway: "ok",
+        authentication: authRequired ? "required" : "disabled",
+        quotaStore: quotaStatus,
+        prdScoreRequired: authRequired,
         runtime,
       });
     } catch {
       return reply.status(503).send({
         status: "degraded",
         gateway: "ok",
+        authentication: authRequired ? "required" : "disabled",
+        quotaStore: quotaStatus,
+        prdScoreRequired: authRequired,
         runtime: { status: "unreachable" },
       });
     }
@@ -197,20 +313,82 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   server.get("/health", healthHandler);
   server.get("/api/health", healthHandler);
 
-  server.post("/api/prd-judge/evaluate", async (request, reply) => {
+  server.get("/api/access", {
+    config: {
+      rateLimit: {
+        max: Number(process.env.ACCESS_RATE_LIMIT_MAX || 60),
+        timeWindow: Number(process.env.ACCESS_RATE_LIMIT_WINDOW_MS || 60_000),
+      },
+    },
+    preHandler: requireWorkspace,
+  }, async (request, reply) => {
+    const identity = identities.get(request);
+    if (!identity) return;
+    if (!quotaStore) {
+      return sendQuotaFailure(
+        reply,
+        new QuotaError(
+          "quota_store_unavailable",
+          "Evaluation access is temporarily unavailable because quota enforcement could not be verified.",
+          { retryAfterSeconds: 60 },
+        ),
+      );
+    }
+    try {
+      return reply.send({
+        access: "allowed",
+        identity: { email: identity.email },
+        quota: await quotaStore.snapshot(identity.sub, now()),
+      });
+    } catch (error) {
+      if (error instanceof QuotaError) return sendQuotaFailure(reply, error);
+      request.log.warn(
+        { errorType: error instanceof Error ? error.name : "unknown" },
+        "Quota status lookup failed",
+      );
+      return sendQuotaFailure(
+        reply,
+        new QuotaError(
+          "quota_store_unavailable",
+          "Evaluation access is temporarily unavailable because quota enforcement could not be verified.",
+          { retryAfterSeconds: 60 },
+        ),
+      );
+    }
+  });
+
+  server.post("/api/prd-judge/evaluate", {
+    config: {
+      rateLimit: {
+        max: Number(process.env.EVALUATE_RATE_LIMIT_MAX || process.env.RATE_LIMIT_MAX || 20),
+        timeWindow: Number(
+          process.env.EVALUATE_RATE_LIMIT_WINDOW_MS
+          || process.env.RATE_LIMIT_WINDOW_MS
+          || 10 * 60 * 1000,
+        ),
+      },
+    },
+    ...(authRequired ? { preHandler: requireWorkspace } : {}),
+  }, async (request, reply) => {
+    const identity = identities.get(request);
+    if (authRequired && !identity) return;
     if (!evaluationsEnabled) {
       return reply.status(503).send({
-        error: "PRD Judge is temporarily unavailable while the public beta is paused.",
+        code: "evaluations_disabled",
+        error: "PRD Judge is temporarily unavailable.",
         retryable: true,
-      });
+      } satisfies StructuredFailure);
     }
-    const today = now().toISOString().slice(0, 10);
-    if (daily.day !== today) daily = { day: today, count: 0 };
-    if (daily.count >= dailyLimit) {
-      return reply.status(503).send({
-        error: "The public beta has reached its daily evaluation limit. Try again tomorrow.",
-        retryable: true,
-      });
+    if (!authRequired) {
+      const today = now().toISOString().slice(0, 10);
+      if (daily.day !== today) daily = { day: today, count: 0 };
+      if (daily.count >= dailyLimit) {
+        return reply.status(503).send({
+          code: "global_limit_reached",
+          error: "EvalGPT has reached today's evaluation limit. Try again tomorrow.",
+          retryable: true,
+        } satisfies StructuredFailure);
+      }
     }
 
     const uploads: UploadedPart[] = [];
@@ -275,6 +453,78 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
       return reply.status(413).send({ error: "Combined uploads exceed the 25 MB limit." });
     }
 
+    if (authRequired) {
+      try {
+        const health = await runtimeHealth(runtimeFetch);
+        const runtime = (await health.json()) as Record<string, unknown>;
+        if (!health.ok || runtime.configured !== true || runtime.prd_score_enabled !== true) {
+          return reply.status(503).send({
+            code: "approved_runtime_unavailable",
+            error: "The approved PRD Judge and PRD Score runtime is temporarily unavailable.",
+            retryable: true,
+          } satisfies StructuredFailure);
+        }
+      } catch (error) {
+        request.log.warn(
+          { errorType: error instanceof Error ? error.name : "unknown" },
+          "Approved evaluation runtime health check failed",
+        );
+        return reply.status(503).send({
+          code: "approved_runtime_unavailable",
+          error: "The approved PRD Judge and PRD Score runtime is temporarily unavailable.",
+          retryable: true,
+        } satisfies StructuredFailure);
+      }
+    }
+
+    let leaseId: string | undefined;
+    const releaseReservation = async () => {
+      if (!leaseId || !quotaStore) return;
+      const reservedLeaseId = leaseId;
+      leaseId = undefined;
+      try {
+        await quotaStore.release(reservedLeaseId, now());
+      } catch (error) {
+        request.log.error(
+          { errorType: error instanceof Error ? error.name : "unknown" },
+          "Evaluation lease release failed",
+        );
+      }
+    };
+
+    if (authRequired) {
+      if (!identity || !quotaStore) {
+        return sendQuotaFailure(
+          reply,
+          new QuotaError(
+            "quota_store_unavailable",
+            "Evaluation access is temporarily unavailable because quota enforcement could not be verified.",
+            { retryAfterSeconds: 60 },
+          ),
+        );
+      }
+      try {
+        const reservation = await quotaStore.reserve(identity.sub, now());
+        leaseId = reservation.leaseId;
+      } catch (error) {
+        if (error instanceof QuotaError) return sendQuotaFailure(reply, error);
+        request.log.warn(
+          { errorType: error instanceof Error ? error.name : "unknown" },
+          "Evaluation quota reservation failed",
+        );
+        return sendQuotaFailure(
+          reply,
+          new QuotaError(
+            "quota_store_unavailable",
+            "Evaluation access is temporarily unavailable because quota enforcement could not be verified.",
+            { retryAfterSeconds: 60 },
+          ),
+        );
+      }
+    } else {
+      daily.count += 1;
+    }
+
     const runtimeUrl = process.env.PRD_JUDGE_RUNTIME_URL || DEFAULT_RUNTIME_URL;
     const form = new FormData();
     if (pastedText.trim()) form.append("prd_text", pastedText);
@@ -302,6 +552,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
       });
     } catch (error) {
       clearTimeout(timeout);
+      await releaseReservation();
       request.log.warn({ errorType: error instanceof Error ? error.name : "unknown" }, "Judge runtime unavailable or timed out");
       return reply.status(503).send({
         error: "The approved PRD Judge model is temporarily unavailable or took too long to respond.",
@@ -312,13 +563,13 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
     if (!upstream.ok || !upstream.body) {
       clearTimeout(timeout);
       const payload = (await upstream.json().catch(() => ({}))) as { detail?: string };
+      await releaseReservation();
       return reply.status(upstream.status || 502).send({
         error: payload.detail || "The PRD Judge runtime rejected the evaluation.",
         retryable: upstream.status >= 500,
       });
     }
 
-    daily.count += 1;
     const requestOrigin = request.headers.origin;
     const responseOrigin = requestOrigin
       ? (allowedOrigins.includes(requestOrigin) ? requestOrigin : undefined)
@@ -396,6 +647,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
       }
     } finally {
       clearInterval(heartbeat);
+      await releaseReservation();
     }
   });
 

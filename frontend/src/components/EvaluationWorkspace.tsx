@@ -1,7 +1,13 @@
 import { useMemo, useRef, useState } from "react";
 
-import { EvaluationCancelledError, evaluatePrd } from "../lib/evaluate";
+import { useWorkspaceAuth } from "../contexts/WorkspaceAuthContext";
+import {
+  EvaluationApiError,
+  EvaluationCancelledError,
+  evaluatePrd,
+} from "../lib/evaluate";
 import type { JudgeEnvelope, ProgressPhase, ProgressUpdate } from "../types/judge";
+import { GoogleSignInButton } from "./GoogleSignInButton";
 
 
 const ACCEPTED = ".pdf,.docx,.md,.txt";
@@ -28,6 +34,7 @@ function validateFile(file: File): string | null {
 }
 
 export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
+  const auth = useWorkspaceAuth();
   const [mode, setMode] = useState<"file" | "paste">("file");
   const [primary, setPrimary] = useState<File | null>(null);
   const [pastedText, setPastedText] = useState("");
@@ -50,6 +57,13 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
     (phase) => phase.id !== "scoring_draft" || seenPhases.includes("scoring_draft"),
   );
   const activeIndex = progress ? visiblePhases.findIndex((phase) => phase.id === progress.phase) : -1;
+  const quotaExhausted = Boolean(
+    auth.access
+    && (auth.access.quota.daily.remaining === 0 || auth.access.quota.monthly.remaining === 0),
+  );
+  const authenticationReady = !auth.authRequired
+    || (auth.status === "authorized" && Boolean(auth.token) && Boolean(auth.access));
+  const submitDisabled = running || !authenticationReady || quotaExhausted || Boolean(auth.accessError);
 
   const trackProgress = (update: ProgressUpdate) => {
     setSeenPhases((phases) => (phases.includes(update.phase) ? phases : [...phases, update.phase]));
@@ -97,7 +111,9 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
         },
         trackProgress,
         controller.signal,
+        auth.token || undefined,
       );
+      await auth.refreshAccess();
       setPrimary(null);
       setPastedText("");
       setSupporting([]);
@@ -105,8 +121,18 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
     } catch (caught) {
       if (caught instanceof EvaluationCancelledError) {
         setNotice(caught.message);
+        await auth.refreshAccess();
+      } else if (caught instanceof EvaluationApiError) {
+        if (caught.status === 401 || caught.code === "token_expired" || caught.code === "auth_required") {
+          auth.markExpired();
+          setError("Your Google sign-in expired. Sign in again below; your selected documents are still here.");
+        } else {
+          setError(caught.message);
+          await auth.refreshAccess();
+        }
       } else {
         setError(caught instanceof Error ? caught.message : "The evaluation could not be completed.");
+        await auth.refreshAccess();
       }
     } finally {
       controllerRef.current = null;
@@ -123,9 +149,44 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
         <p>
           Upload the primary PRD once. The Judge decides readiness while PRD Score independently measures draft strength against the same supplied evidence.
         </p>
+        {auth.authRequired && auth.access && (
+          <p className="quota-summary" aria-live="polite">
+            <strong>
+              {auth.access.quota.daily.remaining} of {auth.access.quota.daily.limit} evaluations left today
+            </strong>
+            <span> · </span>
+            <span>
+              {auth.access.quota.monthly.remaining} of {auth.access.quota.monthly.limit} this month
+            </span>
+            <span> · daily counter resets 00:00 UTC</span>
+          </p>
+        )}
       </div>
 
       <form className="evaluation-form" onSubmit={submit} noValidate>
+        {auth.authRequired && auth.status !== "authorized" && (
+          <div className="reauth-panel" role="alert">
+            <p className="eyebrow">Workspace access</p>
+            <h3>
+              {auth.status === "denied"
+                ? "Use your @8090.inc account."
+                : "Your Google sign-in expired."}
+            </h3>
+            <p>
+              {auth.status === "denied"
+                ? "This account is not part of the permitted 8090 Workspace."
+                : "Your selected documents are still here. Sign in again to continue."}
+            </p>
+            <GoogleSignInButton />
+          </div>
+        )}
+        {auth.accessError && (
+          <div className="form-error" role="alert">
+            <strong>Quota status is temporarily unavailable.</strong>
+            <p>{auth.accessError} Evaluations stay disabled until quota enforcement is verified.</p>
+          </div>
+        )}
+
         <div className="mode-switch" role="group" aria-label="PRD input method">
           <button
             type="button"
@@ -224,7 +285,7 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
         </details>
 
         <div className="privacy-note">
-          <strong>No EvalGPT document storage.</strong> Files are processed for this run and are not written to application storage. Export the report before closing the page.
+          <strong>No EvalGPT document storage.</strong> Files are processed for this run and are not written to application storage. Only pseudonymous evaluation-start counters and short-lived capacity leases are retained.
         </div>
 
         {running && progress && (
@@ -255,15 +316,21 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
         )}
 
         <div className="form-actions">
-          <button className="button button-primary" type="submit" disabled={running}>
-            {running ? "Evaluation in progress" : "Evaluate this PRD"}
+          <button className="button button-primary" type="submit" disabled={submitDisabled}>
+            {running
+              ? "Evaluation in progress"
+              : quotaExhausted
+                ? "Evaluation limit reached"
+                : "Evaluate this PRD"}
           </button>
           {running && (
             <button className="button button-text" type="button" onClick={() => controllerRef.current?.abort()}>
               Cancel evaluation
             </button>
           )}
-          <span className="field-note">25 MB combined limit · No account required</span>
+          <span className="field-note">
+            25 MB combined limit{auth.authRequired ? " · 8090 Workspace access required" : ""}
+          </span>
         </div>
       </form>
     </section>

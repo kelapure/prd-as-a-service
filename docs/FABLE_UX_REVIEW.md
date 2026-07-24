@@ -1,5 +1,51 @@
 # Fable UX review record
 
+## 8090 Workspace access and quota review
+
+Prototype review: 2026-07-24
+Model: `claude-fable-5`, xhigh effort
+Status: `PLAN APPROVED`; final deployed-preview review `PASS`.
+
+Fable reviewed the proposed Google Workspace sign-in gate, signed-in identity
+treatment, quota summary, denial, expiry, exhausted-limit, capacity-busy, and
+quota-store-unavailable states before implementation. It required the
+following:
+
+- make the signed-out experience a focused doorway with only the EvalGPT mark,
+  one purpose statement, the official Google Identity Services button, and the
+  privacy statement;
+- use no One Tap or automatic account selection;
+- show the verified work email and a plain `Sign out` control rather than an
+  avatar, dropdown, or account dashboard;
+- keep quota status close to the evaluation workspace and subordinate to the
+  PRD task;
+- preserve selected files and pasted text when a token expires;
+- fail closed when access or quota enforcement cannot be verified;
+- allow only the exact `8090.inc` Workspace after server-side signature,
+  audience, issuer, expiration, hosted-domain, email-verification, and subject
+  checks; and
+- update the frontend CSP for the official Google Identity Services script and
+  frame.
+
+The review approved the exact gate copy and returned `PLAN APPROVED`.
+
+The fresh-context rerun inspected the exact zero-traffic App Engine preview
+`workspace-auth3-20260724`. Fable verified the focused sign-in doorway, real
+Google Identity Services button, authenticated workspace and quota treatment,
+keyboard flow, result hierarchy, mandatory PRD Score presentation, structured
+failure states, and document-preserving reauthentication. It returned `PASS`
+with no P0/P1 findings. Earlier blockers that could expose a prior account's
+result after sign-out and that showed the OAuth project name instead of EvalGPT
+were corrected before the passing rerun.
+
+The final hardening removed the legacy partial-result path: the runtime,
+gateway contract, frontend stream parser, result UI, and exports now require a
+complete PRD Score report. Browser regressions also verify that sign-out or an
+identity change clears any rendered result and that admitted streamed failures
+refresh the displayed quota immediately. Fable's final hardening rerun returned
+`FINAL FABLE APPROVAL: PASS`; its remaining non-blocking not-scored coverage
+and status/totals-coherence observations were also resolved before cutover.
+
 Initial review: 2026-07-23
 Final exact-preview rerun: 2026-07-24
 Model: `claude-fable-5`, xhigh effort
