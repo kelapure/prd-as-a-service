@@ -34,7 +34,7 @@ The frontend flag `VITE_PUBLIC_EVALUATIONS_ENABLED` defaults to `false`. In that
 
 ### Components
 
-- frontend/ — 8090-branded responsive product experience, upload/paste flow, progressive result disclosure, and browser-side HTML/PDF/JSON exports.
+- frontend/ — 8090-branded responsive product experience, fail-closed public information preview, flag-gated upload/paste flow, progressive result disclosure, and browser-side HTML/PDF/JSON exports.
 - api-gateway/ — content-free logging, upload limits, CORS, rate limits, daily kill switch, cancellation, health checks, and SSE proxying.
 - judge-runtime/ — in-memory PDF/DOCX/Markdown/text extraction, figure/page support, isolated Judge/rubric/PRD Score model calls, canonical validators, and deterministic calculations.
 - judge-runtime/bundle/ — integrity-checked snapshots exported from `salesfactory-agents/prd_judge` and `salesfactory-agents/prd_score`, each with a source commit and file hashes.
@@ -86,7 +86,7 @@ After the family-separated PRD Score release gate passes for an exact model/runt
     export PRD_SCORE_EXPECTED_SOURCE_COMMIT=<reviewed-canonical-score-commit>
     export PRD_SCORE_EXPECTED_MANIFEST_SHA256=<reviewed-score-runtime-manifest>
 
-If an enabled model is absent from its allowlist or its bundle pins do not match, `/health` is degraded and evaluations do not run. If PRD Score is disabled or a score-only report fails validation at run time, the authoritative Judge result still completes and the UI labels draft strength unavailable. No model fallback is used. Every report returns both instrument versions and pins.
+If an enabled model is absent from its allowlist or its bundle pins do not match, `/health` is degraded and evaluations do not run. If PRD Score is disabled or a score-only report fails validation at run time, the authoritative Judge result still completes and the UI labels draft strength unavailable. Every Judge, rubric, and PRD Score call requires schema-enforced structured output; a nonconforming Judge or rubric response fails the run with a retryable error, and a nonconforming PRD Score response leaves draft strength unavailable. No model fallback is used. Every report returns both instrument versions and pins.
 
 ## Checks
 

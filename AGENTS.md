@@ -22,6 +22,9 @@
 - Do not put document content, extracted text, findings, or evidence in logs,
   analytics, storage, browser local storage, or error reporting.
 - Do not automatically fall back to an unvalidated model.
+- The public frontend fails closed: leave `VITE_PUBLIC_EVALUATIONS_ENABLED`
+  unset or exactly `false` so public builds contain no document input until the
+  release gates in `cloud/RELEASE_GATES.md` pass.
 - Keep the runtime private and use the same-origin gateway as the only browser
   interface.
 

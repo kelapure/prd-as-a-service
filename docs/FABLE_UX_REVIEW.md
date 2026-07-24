@@ -201,3 +201,11 @@ backend integration commit `f92cbfc` on runtime revision
 `prd-judge-runtime-preview-00006-fcr`. This record does not certify the fixture
 model or waive the independent PRD Score release gate, frozen model suite,
 privacy verification, or target-user comprehension gate.
+
+The fail-closed public information preview, gated by
+`VITE_PUBLIC_EVALUATIONS_ENABLED`, landed after this record. Automated
+public-preview browser checks (`npm run test:browser:public`) verify the
+closed state, accessibility, and layout at desktop, tablet, and narrow-mobile
+widths, but the exact deployed preview still requires its own fresh-context
+Fable pass before promotion, per the preview gates in
+`cloud/RELEASE_GATES.md`.

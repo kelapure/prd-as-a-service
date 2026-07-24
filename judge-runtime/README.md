@@ -3,7 +3,12 @@
 The runtime is an internal, stateless service for the EvalGPT public beta. It loads
 integrity-checked snapshots exported from the canonical `prd_judge` and `prd_score`
 agents, extracts PDF/DOCX/Markdown/text in memory, and runs PRD Judge, PRD Score, and
-the secondary PRD Eval Rubric v2 concurrently in isolated model contexts. It validates
+the secondary PRD Eval Rubric v2 concurrently in isolated model contexts. Every Judge,
+rubric, and PRD Score model call, including the repair calls, requires schema-enforced
+structured output derived from the report models, and the rubric diagnostic must
+contain exactly the twelve criteria C1-C12. A Judge or rubric response that does not
+match the required structure fails the run with a retryable error; a nonconforming
+PRD Score response follows the fail-soft path described below. The runtime validates
 quotes against the supplied sources and applies each instrument's deterministic
 calculation only after the corresponding report is valid. PRD Score never changes or
 mathematically combines with the Judge verdict or readiness score.
