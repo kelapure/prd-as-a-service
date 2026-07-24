@@ -118,6 +118,23 @@ textarea { width: 100%; min-height: 280px; resize: vertical; border: 1px solid c
 .form-error p { margin: var(--space-1) 0 0; }
 .form-notice { margin-top: var(--space-6); border-left: 3px solid var(--info); padding: var(--space-4); background: color-mix(in srgb, var(--status-info) 8%, transparent); }
 
+.availability-section { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: clamp(var(--space-10), 8vw, 120px); max-width: none; background: var(--canvas-alt); border-bottom: 1px solid var(--border); }
+.availability-intro { max-width: 560px; margin-left: auto; }
+.availability-intro > p:not(.eyebrow) { color: var(--fg-2); font-size: 1.15rem; }
+.availability-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-8); }
+.availability-method-link { border-color: transparent; background: transparent; text-decoration: underline; text-underline-offset: 4px; }
+.availability-method-link:hover { background: var(--surface-sunk); }
+.availability-status { max-width: 640px; margin-right: auto; border-top: 1px solid var(--border-strong); }
+.availability-row { display: grid; grid-template-columns: 108px 1fr; gap: var(--space-5); padding: var(--space-5) 0; border-bottom: 1px solid var(--border); }
+.availability-state { align-self: start; border-left: 3px solid var(--border-strong); padding-left: var(--space-3); color: var(--fg-3); font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.06em; line-height: 1.5; text-transform: uppercase; }
+.availability-state.state-complete { border-left-color: var(--success); color: var(--fg-2); }
+.availability-state.state-progress { border-left-color: var(--info); color: var(--info); }
+.availability-state.state-required { border-left-color: var(--warning); color: var(--fg-2); }
+.availability-row p { margin: 0; }
+.availability-row strong, .availability-row p > span { display: block; }
+.availability-row strong { margin-bottom: var(--space-1); color: var(--fg-1); }
+.availability-row p > span { color: var(--fg-2); }
+
 .result-shell { max-width: 1320px; scroll-margin-top: 84px; }
 #top, #evaluate, #methodology, #privacy, #path-title { scroll-margin-top: 84px; }
 .result-actions { justify-content: flex-end; margin: var(--space-5) 0; }
@@ -259,8 +276,8 @@ blockquote cite { color: var(--fg-3); font-family: var(--font-mono); font-size: 
   .value-grid article:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
   .result-grid { grid-template-columns: 1fr; }
   .result-aside { position: static; grid-template-columns: repeat(2, 1fr); }
-  .method-section, .privacy-section { grid-template-columns: 1fr; gap: var(--space-8); }
-  .method-statement, .method-steps, .privacy-section > div:first-child, .privacy-copy { max-width: 900px; margin-inline: auto; }
+  .availability-section, .method-section, .privacy-section { grid-template-columns: 1fr; gap: var(--space-8); }
+  .availability-intro, .availability-status, .method-statement, .method-steps, .privacy-section > div:first-child, .privacy-copy { max-width: 900px; margin-inline: auto; }
 }
 
 @media (max-width: 720px) {
@@ -272,6 +289,10 @@ blockquote cite { color: var(--fg-3); font-family: var(--font-mono); font-size: 
   .hero { gap: var(--space-12); }
   .hero-actions, .form-actions { align-items: stretch; flex-direction: column; }
   .hero-actions .button, .form-actions .button { width: 100%; }
+  .availability-actions { align-items: stretch; flex-direction: column; }
+  .availability-actions .button { width: 100%; }
+  .availability-row { grid-template-columns: 1fr; gap: var(--space-2); }
+  .availability-state { width: fit-content; }
   .trust-strip { grid-template-columns: repeat(2, 1fr); }
   .trust-strip span:nth-child(2) { border-right: 0; }
   .trust-strip span:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
@@ -312,7 +333,7 @@ blockquote cite { color: var(--fg-3); font-family: var(--font-mono); font-size: 
 }
 
 @media print {
-  .site-header, .site-footer, .hero, .trust-strip, .value-section, .workspace, .method-section, .rubric-section, .privacy-section, .no-print { display: none !important; }
+  .site-header, .site-footer, .hero, .trust-strip, .value-section, .workspace, .availability-section, .method-section, .rubric-section, .privacy-section, .no-print { display: none !important; }
   body { background: white; }
   .result-shell { max-width: none; padding: 0; }
   .result-grid { grid-template-columns: 1fr; }

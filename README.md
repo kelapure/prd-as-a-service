@@ -1,8 +1,8 @@
 # EvalGPT PRD Judge
 
-EvalGPT is a free, anonymous public-beta product for deciding whether a PRD is ready to build. It returns an evidence-backed PRD Judge verdict, a deterministic readiness score, a prioritized path to GO, an independent PRD Score draft-strength diagnostic, and the secondary 12-criterion PRD Eval Rubric v2.
+EvalGPT is a public-beta product for deciding whether a PRD is ready to build. The public information preview explains the method and includes a synthetic example. Live, anonymous evaluation remains fail-closed until the exact judge, model, evidence, and privacy certification gates pass.
 
-Production remains at https://evalgpt.com. The public-beta implementation in this branch must not be promoted until the release gates in cloud/RELEASE_GATES.md pass.
+The frontend flag `VITE_PUBLIC_EVALUATIONS_ENABLED` defaults to `false`. In that state the browser contains no upload or paste controls and cannot submit a document. Enabling live evaluation is blocked by the full release gates in `cloud/RELEASE_GATES.md`.
 
 ## Product contract
 
@@ -60,9 +60,11 @@ Prerequisites: Node.js 20+, Python 3.12.
     # Terminal 3: frontend
     cd frontend
     npm install
-    npm run dev
+    VITE_PUBLIC_EVALUATIONS_ENABLED=true npm run dev
 
 Open http://localhost:3000. Fixture mode enables both instruments and exercises the complete upload, streaming, validation, readiness score, PRD Score, rubric, and export path without calling a model.
+
+Run `npm run dev` without the flag to inspect the fail-closed public information preview.
 
 ## Model-backed runtime
 
@@ -107,6 +109,7 @@ If an enabled model is absent from its allowlist or its bundle pins do not match
     npm audit
     npm run type-check
     npm run build
+    npm run test:browser:public
     npm run test:browser
     node tests/score-envelope-guard.mjs
     npm run test:full-flow
@@ -136,7 +139,7 @@ The streamed response emits progress, complete, or error events. The final envel
 
 ## Deployment
 
-See cloud/DEPLOY_APP_ENGINE.md for private Cloud Run plus App Engine deployment and cloud/RELEASE_GATES.md for model, evidence, Fable, accessibility, canary, monitoring, and rollback gates.
+See `cloud/DEPLOY_APP_ENGINE.md` for the fail-closed public-frontend path and the separate private Cloud Run plus App Engine live-evaluation path. See `cloud/RELEASE_GATES.md` for model, evidence, Fable, accessibility, canary, monitoring, and rollback gates.
 
 Both App Engine services use the supported Node.js 24 runtime. The frontend's
 production security headers live in `frontend/serve.json`, because App Engine
