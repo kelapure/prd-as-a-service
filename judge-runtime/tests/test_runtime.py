@@ -169,6 +169,14 @@ class ExtractionTests(unittest.TestCase):
             "This sentence carries enough evidence to cite cleanly.",
         )
 
+    def test_fixture_evidence_excerpt_never_exceeds_the_limit(self) -> None:
+        boundary_sentence = "a" * 80 + ". The rest of the paragraph keeps going."
+        unbroken_token = "b" * 120
+        for source in (boundary_sentence, unbroken_token):
+            excerpt = _fixture_excerpt(source, limit=80)
+            self.assertLessEqual(len(excerpt), 80)
+            self.assertTrue(source.startswith(excerpt))
+
     def test_docx_extracts_headings_and_tables(self) -> None:
         source = Document()
         source.add_heading("Decision thresholds", level=1)
@@ -418,6 +426,55 @@ class ConcurrentEvaluationTests(unittest.TestCase):
         self.assertIn("scoring_draft", phases)
         self.assertTrue(
             any("APIConnectionError" in message for message in logs.output),
+            logs.output,
+        )
+
+    def test_slow_score_model_degrades_to_unavailable_within_its_time_budget(self) -> None:
+        primary = self._primary()
+
+        async def scenario():
+            config = RuntimeConfig(
+                mode="model",
+                model="candidate-model",
+                allowed_models=frozenset({"candidate-model"}),
+                score_enabled=True,
+                score_model="candidate-model",
+                score_allowed_models=frozenset({"candidate-model"}),
+            )
+            with patch.dict(
+                os.environ,
+                {"ANTHROPIC_API_KEY": "test-key", "PRD_SCORE_TIMEOUT_SECONDS": "0.05"},
+            ):
+                judge = PrdJudge(config)
+
+            async def fake_judge(documents, preflight):
+                return PrdJudge._fixture_report(primary)
+
+            async def fake_rubric(documents, preflight):
+                return PrdJudge._fixture_rubric(primary)
+
+            async def stalled_score(documents, preflight):
+                await asyncio.Event().wait()
+
+            try:
+                with (
+                    patch.object(judge, "_run_judge_model", fake_judge),
+                    patch.object(judge, "_run_rubric_model", fake_rubric),
+                    patch.object(judge, "_run_score_model", stalled_score),
+                ):
+                    return await asyncio.wait_for(
+                        judge.evaluate([primary], lambda phase, message: None), timeout=10
+                    )
+            finally:
+                await judge.close()
+
+        with self.assertLogs("evalgpt.prd_score", level="WARNING") as logs:
+            envelope = asyncio.run(scenario())
+        self.assertEqual(envelope.report.verdict, "REVISE")
+        self.assertEqual(envelope.prd_score.status, "unavailable")
+        self.assertIsNone(envelope.prd_score.report)
+        self.assertTrue(
+            any("TimeoutError" in message for message in logs.output),
             logs.output,
         )
 

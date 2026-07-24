@@ -165,13 +165,14 @@ def _fixture_excerpt(value: str, limit: int = 160) -> str:
     if len(normalized) <= limit:
         return normalized
     clipped = normalized[: limit + 1]
-    sentence_end = max(clipped.rfind(mark) for mark in (".", "!", "?"))
+    head = clipped[:limit]
+    sentence_end = max(head.rfind(mark) for mark in (".", "!", "?"))
     if sentence_end >= limit // 2:
-        return clipped[: sentence_end + 1]
+        return head[: sentence_end + 1]
     if clipped[limit].isspace():
-        return clipped[:limit].rstrip()
-    whole_words = clipped.rsplit(" ", 1)[0].rstrip()
-    return whole_words or normalized[:limit]
+        return head.rstrip()
+    whole_words = head.rsplit(" ", 1)[0].rstrip()
+    return whole_words or head
 
 
 def _artifact_content(documents: list[ExtractedDocument], preflight: dict[str, Any]) -> list[dict[str, Any]]:
@@ -292,6 +293,7 @@ class PrdJudge:
     def __init__(self, config: RuntimeConfig | None = None) -> None:
         self.config = config or RuntimeConfig.from_environment()
         timeout_seconds = float(os.environ.get("PRD_JUDGE_MODEL_TIMEOUT_SECONDS", "120"))
+        self.score_timeout_seconds = float(os.environ.get("PRD_SCORE_TIMEOUT_SECONDS", "120"))
         self.client = AsyncAnthropic(timeout=timeout_seconds) if self.config.mode == "model" else None
 
     async def close(self) -> None:
@@ -350,7 +352,8 @@ class PrdJudge:
                         "arithmetic_verified": False,
                     },
                 )
-            try:
+
+            async def score_within_budget() -> PrdScoreDiagnostic:
                 if self.config.mode == "fixture":
                     score_data = self._fixture_prd_score(primary)
                 else:
@@ -371,6 +374,11 @@ class PrdJudge:
                     status=status,
                     report=score_report,
                     validation=score_validation,
+                )
+
+            try:
+                return await asyncio.wait_for(
+                    score_within_budget(), timeout=self.score_timeout_seconds
                 )
             except asyncio.CancelledError:
                 raise

@@ -6,7 +6,7 @@ import {
   scoreFixParts,
   VERDICT_LABELS,
 } from "../lib/presentation";
-import type { JudgeEnvelope } from "../types/judge";
+import type { JudgeEnvelope, ScoreCriterion } from "../types/judge";
 
 
 interface JudgeResultProps {
@@ -38,6 +38,31 @@ function EvidenceBlock({ status, quote, source, locator }: EvidenceBlockProps) {
       <p>“{quote}”</p>
       {citation && <cite>{citation}</cite>}
     </blockquote>
+  );
+}
+
+function ScoreRow({ criterion }: { criterion: ScoreCriterion }) {
+  return (
+    <details className="score-row">
+      <summary>
+        <span className="criterion-id">{criterion.id}</span>
+        <span>{SCORE_NAMES[criterion.id] || criterion.id}</span>
+        <strong>{scoreDisplay(criterion.score, criterion.adjusted_score ?? undefined)}</strong>
+      </summary>
+      <div>
+        <p className="score-anchor">{criterion.anchor}</p>
+        {criterion.fix && <p><strong>One-level improvement.</strong> {criterion.fix}</p>}
+        {criterion.evidence.map((evidence, index) => (
+          <EvidenceBlock
+            key={`${criterion.id}-${index}`}
+            status={evidence.status}
+            quote={evidence.quote}
+            source={evidence.source}
+            locator={evidence.locator}
+          />
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -222,51 +247,13 @@ export function JudgeResult({ result, onReset }: JudgeResultProps) {
                   <div className="score-layer">
                     <h4>Product and execution dimensions</h4>
                     {[...draftScore.layer1, ...draftScore.layer2, ...draftScore.layer3.scores].map((criterion) => (
-                      <details className="score-row" key={criterion.id}>
-                        <summary>
-                          <span className="criterion-id">{criterion.id}</span>
-                          <span>{SCORE_NAMES[criterion.id] || criterion.id}</span>
-                          <strong>{scoreDisplay(criterion.score, criterion.adjusted_score ?? undefined)}</strong>
-                        </summary>
-                        <div>
-                          <p className="score-anchor">{criterion.anchor}</p>
-                          {criterion.fix && <p><strong>One-level improvement.</strong> {criterion.fix}</p>}
-                          {criterion.evidence.map((evidence, index) => (
-                            <EvidenceBlock
-                              key={`${criterion.id}-${index}`}
-                              status={evidence.status}
-                              quote={evidence.quote}
-                              source={evidence.source}
-                              locator={evidence.locator}
-                            />
-                          ))}
-                        </div>
-                      </details>
+                      <ScoreRow key={criterion.id} criterion={criterion} />
                     ))}
                   </div>
                   <div className="score-layer">
                     <h4>Writing quality · unvalidated</h4>
                     {draftScore.writing_layer.map((criterion) => (
-                      <details className="score-row" key={criterion.id}>
-                        <summary>
-                          <span className="criterion-id">{criterion.id}</span>
-                          <span>{SCORE_NAMES[criterion.id] || criterion.id}</span>
-                          <strong>{scoreDisplay(criterion.score, criterion.adjusted_score ?? undefined)}</strong>
-                        </summary>
-                        <div>
-                          <p className="score-anchor">{criterion.anchor}</p>
-                          {criterion.fix && <p><strong>One-level improvement.</strong> {criterion.fix}</p>}
-                          {criterion.evidence.map((evidence, index) => (
-                            <EvidenceBlock
-                              key={`${criterion.id}-${index}`}
-                              status={evidence.status}
-                              quote={evidence.quote}
-                              source={evidence.source}
-                              locator={evidence.locator}
-                            />
-                          ))}
-                        </div>
-                      </details>
+                      <ScoreRow key={criterion.id} criterion={criterion} />
                     ))}
                   </div>
                   <dl className="score-method-facts">
