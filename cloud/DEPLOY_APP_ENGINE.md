@@ -3,8 +3,12 @@
 Live evaluation uses three services:
 
 1. private Cloud Run service: Python PRD Judge runtime;
-2. App Engine api service: same-origin Fastify gateway;
+2. public Cloud Run service: Fastify streaming gateway;
 3. App Engine default service: React frontend.
+
+The gateway must not run on App Engine Standard. App Engine buffers dynamic
+responses until the handler completes, which prevents real SSE progress from
+reaching the browser. Cloud Run preserves the incremental progress stream.
 
 Do not deploy from the old detached workspace. Use a clean branch/worktree. Live evaluation must stop if `cloud/RELEASE_GATES.md` is not satisfied.
 
@@ -38,13 +42,13 @@ Never assume the historical project ID in older documents is still authoritative
     gcloud app domain-mappings list --project "$PROJECT_ID"
     gcloud run services list --region "$REGION" --project "$PROJECT_ID"
 
-Record the current default/api versions and traffic splits as the rollback target.
-Capture the actual App Engine service account and hostname instead of deriving them
-from a remembered project convention:
+Record the current frontend version and gateway revision as the rollback target.
+Capture the actual App Engine hostname instead of deriving it from a remembered
+project convention:
 
-    export APP_ENGINE_SA="$(gcloud app describe --project "$PROJECT_ID" --format='value(serviceAccount)')"
     export APP_HOST="$(gcloud app describe --project "$PROJECT_ID" --format='value(defaultHostname)')"
-    test -n "$APP_ENGINE_SA" && test -n "$APP_HOST"
+    export GATEWAY_SA="evalgpt-api-gateway@$PROJECT_ID.iam.gserviceaccount.com"
+    test -n "$GATEWAY_SA" && test -n "$APP_HOST"
 
 ## 2. Build and deploy the private runtime
 
@@ -84,32 +88,36 @@ When the exact PRD Score candidate passes its release gate, set
 and manifest variables to the same deploy command. Do not reuse the Judge model
 identifier merely because it is already approved for the different instrument.
 
-Grant only the verified App Engine service account permission to invoke it:
+Grant only the dedicated gateway service account permission to invoke it:
 
     gcloud run services add-iam-policy-binding prd-judge-runtime \
       --region "$REGION" \
       --project "$PROJECT_ID" \
-      --member "serviceAccount:$APP_ENGINE_SA" \
+      --member "serviceAccount:$GATEWAY_SA" \
       --role roles/run.invoker
 
 ## 3. Configure the gateway without secrets in source
 
-Derive the version-specific preview origins. They are used only to bind the
-preview frontend to the exact preview gateway during Fable and canary review.
+Build and deploy the gateway as its own public Cloud Run service. The gateway
+has no model key; it uses its service account identity to invoke the private
+runtime.
 
     export FRONTEND_PREVIEW_URL="https://$RELEASE_ID-dot-$APP_HOST"
-    export API_PREVIEW_URL="https://$RELEASE_ID-dot-api-dot-$APP_HOST"
+    export GATEWAY_IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/evalgpt/api-gateway:$RELEASE_ID"
+    gcloud builds submit api-gateway --tag "$GATEWAY_IMAGE" --project "$PROJECT_ID"
+    gcloud run deploy evalgpt-api-gateway \
+      --image "$GATEWAY_IMAGE" \
+      --region "$REGION" \
+      --project "$PROJECT_ID" \
+      --service-account "$GATEWAY_SA" \
+      --allow-unauthenticated \
+      --timeout 600 \
+      --concurrency 8 \
+      --max-instances 10 \
+      --set-env-vars "ALLOWED_ORIGIN=https://evalgpt.com,$FRONTEND_PREVIEW_URL,TRUST_PROXY_HOPS=2,RATE_LIMIT_MAX=5,RATE_LIMIT_WINDOW_MS=3600000,DAILY_RUN_LIMIT=100,EVALUATIONS_ENABLED=true,EVALUATION_TIMEOUT_MS=570000,USE_GOOGLE_IDENTITY_TOKEN=true,PRD_JUDGE_RUNTIME_URL=$RUNTIME_URL,PRD_JUDGE_RUNTIME_AUDIENCE=$RUNTIME_URL"
 
-Copy api-gateway/app.yaml to the git-ignored api-gateway/app.local.yaml and add
-the runtime URL. Set `ALLOWED_ORIGIN` to both the production and exact preview
-frontend origins:
-
-    env_variables:
-      PRD_JUDGE_RUNTIME_URL: "<RUNTIME_URL>"
-      PRD_JUDGE_RUNTIME_AUDIENCE: "<RUNTIME_URL>"
-      ALLOWED_ORIGIN: "https://evalgpt.com,<FRONTEND_PREVIEW_URL>"
-
-Keep the other environment variables from the tracked file. The gateway obtains an IAM identity token from the App Engine service account. It does not need the model API key.
+    export GATEWAY_URL="$(gcloud run services describe evalgpt-api-gateway \
+      --region "$REGION" --project "$PROJECT_ID" --format='value(status.url)')"
 
 ## 4. Build and test the exact release
 
@@ -132,16 +140,10 @@ Run the approved-model evaluation suite separately. Fixture mode proves integrat
 
 ## 5. Deploy preview versions without traffic
 
-    gcloud app deploy api-gateway/app.local.yaml \
-      --project "$PROJECT_ID" \
-      --version "$RELEASE_ID" \
-      --no-promote \
-      --quiet
+Bind the preview frontend build to the exact Cloud Run gateway revision. This
+file is ignored by Git but intentionally included in the preview build context:
 
-Bind the preview frontend build to the exact API version. This file is ignored
-by Git but intentionally included in the preview build context:
-
-    printf 'VITE_API_BASE=%s\n' "$API_PREVIEW_URL" > frontend/.env.production.local
+    printf 'VITE_API_BASE=%s\n' "$GATEWAY_URL" > frontend/.env.production.local
 
     gcloud app deploy frontend/app.yaml \
       --project "$PROJECT_ID" \
@@ -149,18 +151,15 @@ by Git but intentionally included in the preview build context:
       --no-promote \
       --quiet
 
-    gcloud app deploy cloud/dispatch.yaml --project "$PROJECT_ID" --quiet
-
-Open the version-specific frontend and API URLs. Verify /api/health returns status ok, the pinned judge commit/manifest, the exact approved model, the pinned PRD Score commit/manifest, the PRD Score model/calculation version, and the expected `prd_score_enabled` value.
+Open the version-specific frontend and gateway URLs. Verify /api/health returns status ok, the pinned judge commit/manifest, the exact approved model, the pinned PRD Score commit/manifest, the PRD Score model/calculation version, and the expected `prd_score_enabled` value.
 
 Complete the fresh-context Fable pixel review against this preview before traffic changes.
 
 ## 6. Canary and rollback
 
-Record OLD_FRONTEND and OLD_API before splitting traffic. During canary, the new
-frontend calls the exact new API version using `VITE_API_BASE`; old production
-pages continue using the old API service at 100 percent. This prevents an old UI
-from ever reaching the breaking public-beta API contract.
+Record OLD_FRONTEND and OLD_GATEWAY_REVISION before splitting traffic. During
+canary, the new frontend calls the exact Cloud Run gateway using
+`VITE_API_BASE`; the old production frontend remains unchanged.
 
 Advance only while the release gates remain green:
 
@@ -173,20 +172,16 @@ Advance only while the release gates remain green:
     gcloud app services set-traffic default --splits "$RELEASE_ID=1" --migrate --project "$PROJECT_ID"
 
 After the exact-pair canary reaches 100 percent and the observation window
-passes, point the API service at the already-canary-tested gateway version.
-Then remove the preview API override and deploy one final frontend version. That
-final build returns the browser to the required same-origin `/api` gateway:
-
-    gcloud app services set-traffic api --splits "$RELEASE_ID=1" --migrate --project "$PROJECT_ID"
-    rm -f frontend/.env.production.local
-    export FINAL_FRONTEND_VERSION="$RELEASE_ID-final"
-    gcloud app deploy frontend/app.yaml --project "$PROJECT_ID" --version "$FINAL_FRONTEND_VERSION" --no-promote --quiet
-    gcloud app services set-traffic default --splits "$FINAL_FRONTEND_VERSION=1" --migrate --project "$PROJECT_ID"
+passes, retain the explicit `VITE_API_BASE=$GATEWAY_URL` build setting. Do not
+return the frontend to the App Engine `/api` service because that route buffers
+the stream.
 
 Rollback is immediate:
 
     gcloud app services set-traffic default --splits "$OLD_FRONTEND=1" --migrate --project "$PROJECT_ID"
-    gcloud app services set-traffic api --splits "$OLD_API=1" --migrate --project "$PROJECT_ID"
+    gcloud run services update-traffic evalgpt-api-gateway \
+      --region "$REGION" --project "$PROJECT_ID" \
+      --to-revisions "$OLD_GATEWAY_REVISION=100"
 
 Also set `EVALUATIONS_ENABLED=false` on the gateway or remove the Cloud Run invoker binding if a privacy, evidence, or false-GO incident requires a hard stop. `DAILY_RUN_LIMIT` is an abuse-control ceiling per gateway instance, not the emergency switch.
 

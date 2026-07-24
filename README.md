@@ -20,7 +20,7 @@ The frontend flag `VITE_PUBLIC_EVALUATIONS_ENABLED` defaults to `false`. In that
             |
             | multipart + streamed progress
             v
-    Fastify same-origin API gateway (App Engine)
+    Fastify public API gateway (Cloud Run)
             |
             | IAM identity token + optional internal token
             v
@@ -52,7 +52,7 @@ Prerequisites: Node.js 20+, Python 3.12.
     .venv/bin/pip install -r requirements-dev.txt
     JUDGE_RUNTIME_MODE=fixture .venv/bin/uvicorn app.main:app --port 8092
 
-    # Terminal 2: same-origin gateway
+    # Terminal 2: API gateway
     cd api-gateway
     npm install
     PRD_JUDGE_RUNTIME_URL=http://127.0.0.1:8092 npm run dev
@@ -139,11 +139,13 @@ The streamed response emits progress, complete, or error events. The final envel
 
 ## Deployment
 
-See `cloud/DEPLOY_APP_ENGINE.md` for the fail-closed public-frontend path and the separate private Cloud Run plus App Engine live-evaluation path. See `cloud/RELEASE_GATES.md` for model, evidence, Fable, accessibility, canary, monitoring, and rollback gates.
+See `cloud/DEPLOY_APP_ENGINE.md` for the fail-closed public-frontend path and the private runtime, streaming Cloud Run gateway, and App Engine frontend deployment path. See `cloud/RELEASE_GATES.md` for model, evidence, Fable, accessibility, canary, monitoring, and rollback gates.
 
-Both App Engine services use the supported Node.js 24 runtime. The frontend's
-production security headers live in `frontend/serve.json`, because App Engine
-does not allow `http_headers` on the dynamic Node.js script handler.
+The gateway runs on Cloud Run because App Engine Standard buffers dynamic
+responses and cannot deliver the product's real SSE progress events. The
+App Engine frontend uses the supported Node.js 24 runtime. Its production
+security headers live in `frontend/serve.json`, because App Engine does not
+allow `http_headers` on the dynamic Node.js script handler.
 
 The Fable review record, including the fresh-context passes against the version-specific deployed preview, is in docs/FABLE_UX_REVIEW.md. That UX pass does not clear the non-UX certification gates in cloud/RELEASE_GATES.md.
 

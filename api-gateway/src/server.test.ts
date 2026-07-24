@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import type { AddressInfo } from "node:net";
 import test from "node:test";
 import type { IdTokenClient } from "google-auth-library";
-import { Response } from "undici";
+import { fetch, FormData, Response } from "undici";
 
 import { buildServer, idTokenClientForAudience } from "./server.js";
 
@@ -187,5 +188,74 @@ test("the emergency kill switch rejects an evaluation before reading content", a
   } finally {
     if (previous === undefined) delete process.env.EVALUATIONS_ENABLED;
     else process.env.EVALUATIONS_ENABLED = previous;
+  }
+});
+
+
+test("evaluation progress reaches a real HTTP client before the runtime completes", async () => {
+  const encoder = new TextEncoder();
+  let runtimeEventReleased = false;
+  const runtimeFetch: typeof fetch = async (url) => {
+    if (String(url).endsWith("/health")) {
+      return new Response(JSON.stringify({ status: "ok", configured: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        setTimeout(() => {
+          runtimeEventReleased = true;
+          controller.enqueue(
+            encoder.encode(
+              'event: progress\ndata: {"phase":"extracting_evidence","message":"Extracting supplied evidence"}\n\n',
+            ),
+          );
+        }, 250);
+        setTimeout(() => {
+          controller.enqueue(
+            encoder.encode(
+              'event: error\ndata: {"code":"test_complete","message":"Test stream complete","retryable":false}\n\n',
+            ),
+          );
+          controller.close();
+        }, 500);
+      },
+    });
+    return new Response(stream, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    });
+  };
+  const server = await buildServer({ runtimeFetch });
+  await server.listen({ host: "127.0.0.1", port: 0 });
+  try {
+    const { port } = server.server.address() as AddressInfo;
+    const form = new FormData();
+    form.append(
+      "prd_text",
+      "A sufficiently long synthetic PRD body used only to prove that progress streams incrementally.",
+    );
+    const response = await fetch(`http://127.0.0.1:${port}/api/prd-judge/evaluate`, {
+      method: "POST",
+      body: form,
+      headers: { Accept: "text/event-stream" },
+    });
+    assert.equal(response.status, 200);
+    assert.ok(response.body);
+    const reader = response.body!.getReader();
+    const first = await reader.read();
+    assert.equal(first.done, false);
+    assert.match(Buffer.from(first.value).toString("utf8"), /Upload received securely/);
+    assert.equal(
+      runtimeEventReleased,
+      false,
+      "the gateway's progress event must arrive before the delayed runtime event",
+    );
+    while (!(await reader.read()).done) {
+      // Drain the deliberately delayed test stream before closing the server.
+    }
+  } finally {
+    await server.close();
   }
 });
