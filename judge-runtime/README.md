@@ -50,7 +50,8 @@ for any enabled instrument makes `/health` degrade and blocks evaluation. A
 run-specific PRD Score validation failure is fail-soft: the authoritative Judge report
 still returns and `prd_score.status` is `unavailable`. Cloud Run should require IAM,
 and the optional `INTERNAL_SERVICE_TOKEN` provides an additional gateway-to-runtime
-check.
+check. `/health` exposes the exact score bundle, model, calculation version, and
+enabled state without including document content.
 
 ## Refreshing the canonical bundles
 

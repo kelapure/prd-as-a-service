@@ -11,7 +11,7 @@ from contextlib import suppress
 from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
-from .bundle import BUNDLE, RUBRIC_SHA256, SCORE_BUNDLE
+from .bundle import BUNDLE, RUBRIC_SHA256, SCORE_BUNDLE, SCORE_TOOLS
 from .extraction import (
     MAX_PAGES,
     MAX_TOTAL_BYTES,
@@ -56,10 +56,12 @@ async def health(x_internal_service_token: str | None = Header(default=None)) ->
         configured = True
         model = config.model
         prd_score_enabled = config.score_enabled
+        prd_score_model = config.score_model
     except EvaluationError:
         configured = False
         model = "unconfigured"
         prd_score_enabled = False
+        prd_score_model = "unconfigured"
     return {
         "status": "ok" if configured else "degraded",
         "configured": configured,
@@ -73,6 +75,8 @@ async def health(x_internal_service_token: str | None = Header(default=None)) ->
         "prd_score_source_commit": SCORE_BUNDLE.source_commit,
         "prd_score_manifest_sha256": SCORE_BUNDLE.manifest_sha256,
         "prd_score_enabled": prd_score_enabled,
+        "prd_score_model": prd_score_model,
+        "prd_score_calculation": SCORE_TOOLS.calculation_version,
         "model": model,
     }
 

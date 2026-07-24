@@ -52,7 +52,7 @@ Every checkbox is blocking unless marked post-beta. Evidence belongs in the rele
 
 ## Reliability and rollout
 
-- [ ] /api/health reports the exact deployed Judge model, the Judge and PRD Score bundle versions, source commits, and manifests, the rubric and Judge calculation versions, and whether PRD Score is enabled; every report envelope pins the PRD Score model and calculation version.
+- [ ] /api/health reports the exact deployed Judge and PRD Score models, bundle versions, source commits, manifests, rubric version, calculation versions, and whether PRD Score is enabled.
 - [ ] Valid-run completion is at least 98 percent.
 - [ ] 5xx responses remain below 2 percent.
 - [ ] p95 completion remains below 120 seconds for a representative 30-page PRD.

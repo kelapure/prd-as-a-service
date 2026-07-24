@@ -11,7 +11,12 @@ const runtime = spawn(
   ["app.main:app", "--host", "127.0.0.1", "--port", "8092"],
   {
     cwd: resolve(root, "judge-runtime"),
-    env: { ...process.env, JUDGE_RUNTIME_MODE: "fixture", LOG_LEVEL: "WARNING" },
+    env: {
+      ...process.env,
+      JUDGE_RUNTIME_MODE: "fixture",
+      PRD_SCORE_ENABLED: "true",
+      LOG_LEVEL: "WARNING",
+    },
     stdio: ["ignore", "pipe", "pipe"],
   },
 );

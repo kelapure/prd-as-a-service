@@ -135,7 +135,7 @@ by Git but intentionally included in the preview build context:
 
     gcloud app deploy cloud/dispatch.yaml --project "$PROJECT_ID" --quiet
 
-Open the version-specific frontend and API URLs. Verify /api/health returns status ok, the pinned judge commit/manifest, the exact approved model, the pinned PRD Score commit/manifest, and the expected `prd_score_enabled` value.
+Open the version-specific frontend and API URLs. Verify /api/health returns status ok, the pinned judge commit/manifest, the exact approved model, the pinned PRD Score commit/manifest, the PRD Score model/calculation version, and the expected `prd_score_enabled` value.
 
 Complete the fresh-context Fable pixel review against this preview before traffic changes.
 

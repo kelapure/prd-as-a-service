@@ -103,6 +103,7 @@ class ReadinessScore(BaseModel):
 
 
 class ScoreEvidence(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     status: Literal["used", "missing"]
     source: str
     quote: str
@@ -110,7 +111,7 @@ class ScoreEvidence(BaseModel):
 
 
 class ScoreCriterion(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
     id: str
     score: int = Field(ge=0, le=5)
     adjusted_score: int | None = Field(default=None, ge=0, le=5)
@@ -137,16 +138,17 @@ class ScoreArtifactGate(BaseModel):
     commercial_value_over_1m: bool
     pricing_decomposition_present: bool
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
 
 class ScoreLayer3(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     in_scope: bool
     scores: list[ScoreCriterion]
 
 
 class RawPrdScoreReport(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
     instrument: Literal["prd-score"] = "prd-score"
     mode: Literal["absolute"] = "absolute"
     rubric_version: str

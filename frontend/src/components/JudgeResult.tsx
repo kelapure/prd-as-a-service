@@ -153,24 +153,28 @@ export function JudgeResult({ result, onReset }: JudgeResultProps) {
                   </p>
                 </div>
 
-                <div className="draft-fix-panel">
-                  <p className="eyebrow">Improve after the Path to GO</p>
-                  <p className="draft-id-note">PRD Score dimension IDs are independent from the C1–C12 coverage checks later in this report.</p>
-                  <ol>
-                    {draftScore.fix_plan_ranked.map((fix, index) => {
-                      const parts = scoreFixParts(fix);
-                      return (
-                        <li key={fix}>
-                          <span>{String(index + 1).padStart(2, "0")}</span>
-                          <p>
-                            <strong>{parts.id ? `Score ${parts.id} · ${parts.name}` : parts.name}</strong>
-                            {" "}{parts.action}
-                          </p>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                </div>
+                {draftScore.fix_plan_ranked.length ? (
+                  <div className="draft-fix-panel">
+                    <p className="eyebrow">Improve after the Path to GO</p>
+                    <p className="draft-id-note">PRD Score dimension IDs are independent from the C1–C12 coverage checks later in this report.</p>
+                    <ol>
+                      {draftScore.fix_plan_ranked.map((fix, index) => {
+                        const parts = scoreFixParts(fix);
+                        return (
+                          <li key={fix}>
+                            <span>{String(index + 1).padStart(2, "0")}</span>
+                            <p>
+                              <strong>{parts.id ? `Score ${parts.id} · ${parts.name}` : parts.name}</strong>
+                              {" "}{parts.action}
+                            </p>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </div>
+                ) : (
+                  <p className="empty-state">No one-level draft fix is required for the three lowest dimensions.</p>
+                )}
 
                 <details className="wide-disclosure draft-score-details">
                   <summary>

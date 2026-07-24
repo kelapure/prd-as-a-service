@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import logging
 import os
 import re
 import time
@@ -41,6 +42,7 @@ SCORE_MODEL_ENV = "PRD_SCORE_MODEL"
 SCORE_ALLOWED_MODEL_ENV = "PRD_SCORE_ALLOWED_MODELS"
 SCORE_ENABLED_ENV = "PRD_SCORE_ENABLED"
 Progress = Callable[[str, str], None]
+logger = logging.getLogger("evalgpt.prd_score")
 
 
 class EvaluationError(RuntimeError):
@@ -52,7 +54,7 @@ class RuntimeConfig:
     mode: str
     model: str
     allowed_models: frozenset[str]
-    score_enabled: bool = True
+    score_enabled: bool = False
     score_model: str = ""
     score_allowed_models: frozenset[str] = frozenset()
 
@@ -358,7 +360,10 @@ class PrdJudge:
                 )
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except Exception as exc:
+                logger.warning(
+                    "PRD Score failed safely: %s", type(exc).__name__
+                )
                 return PrdScoreDiagnostic(
                     status="unavailable",
                     report=None,
