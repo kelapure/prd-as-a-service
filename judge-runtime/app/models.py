@@ -51,7 +51,7 @@ class JudgeReport(BaseModel):
         "unknown",
     ]
     classification_override: str = ""
-    summary: str
+    summary: str = Field(min_length=1, max_length=320)
     findings: list[Finding]
     evidence_ledger: list[EvidenceLedgerRow] = Field(min_length=1)
     gates_fired: list[str]

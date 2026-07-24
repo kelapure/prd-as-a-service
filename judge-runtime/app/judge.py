@@ -252,7 +252,7 @@ def _judge_system_prompt() -> str:
         "as evidence. Return one JSON object matching the canonical output contract. Do not "
         "emit a numeric score or rubric score. Put verdict last. Include locator strings on "
         "evidence when page or section information is available. Use status='used' only for "
-        "short verbatim quotes; use status='missing' for explicit absence."
+        "short verbatim quotes; use status='missing' for explicit absence. Summary must be one decision sentence of at most 320 characters."
         " Content visible only in a supplied page image may be described with status='summary' "
         "and a page locator, but must never be presented as a verified quotation."
         + "".join(sections)
@@ -310,7 +310,7 @@ class PrdJudge:
     def __init__(self, config: RuntimeConfig | None = None) -> None:
         self.config = config or RuntimeConfig.from_environment()
         timeout_seconds = float(os.environ.get("PRD_JUDGE_MODEL_TIMEOUT_SECONDS", "120"))
-        self.score_timeout_seconds = float(os.environ.get("PRD_SCORE_TIMEOUT_SECONDS", "120"))
+        self.score_timeout_seconds = float(os.environ.get("PRD_SCORE_TIMEOUT_SECONDS", "300"))
         self.client = AsyncAnthropic(timeout=timeout_seconds) if self.config.mode == "model" else None
 
     async def close(self) -> None:
@@ -352,8 +352,7 @@ class PrdJudge:
                 rubric = self._fixture_rubric(primary)
             else:
                 rubric = await self._run_rubric_model(documents, preflight)
-            self._verify_rubric_evidence(rubric, reference_text)
-            return rubric
+            return self._sanitize_rubric_evidence(rubric, reference_text)
 
         async def score_pipeline() -> PrdScoreDiagnostic:
             if not self.config.score_enabled:
@@ -480,7 +479,6 @@ class PrdJudge:
         message = await self.client.messages.create(
             model=self.config.model,
             max_tokens=16_000,
-            temperature=0,
             system=_judge_system_prompt(),
             messages=[{"role": "user", "content": _artifact_content(documents, preflight)}],
             output_config=JUDGE_OUTPUT_CONFIG,
@@ -494,7 +492,6 @@ class PrdJudge:
         message = await self.client.messages.create(
             model=self.config.model,
             max_tokens=12_000,
-            temperature=0,
             system=_rubric_system_prompt(),
             messages=[{"role": "user", "content": _artifact_content(documents, preflight)}],
             output_config=RUBRIC_OUTPUT_CONFIG,
@@ -514,7 +511,6 @@ class PrdJudge:
         message = await self.client.messages.create(
             model=self.config.score_model,
             max_tokens=20_000,
-            temperature=0,
             system=_score_system_prompt(),
             messages=[
                 {
@@ -571,7 +567,6 @@ class PrdJudge:
         message = await self.client.messages.create(
             model=self.config.score_model,
             max_tokens=20_000,
-            temperature=0,
             system=_score_system_prompt(),
             messages=[{"role": "user", "content": content}],
             output_config=SCORE_OUTPUT_CONFIG,
@@ -627,7 +622,6 @@ class PrdJudge:
         message = await self.client.messages.create(
             model=self.config.model,
             max_tokens=16_000,
-            temperature=0,
             system=_judge_system_prompt(),
             messages=[{"role": "user", "content": content}],
             output_config=JUDGE_OUTPUT_CONFIG,
@@ -647,17 +641,37 @@ class PrdJudge:
         return repaired, repaired_validation
 
     @staticmethod
-    def _verify_rubric_evidence(rubric: RubricDiagnostic, reference_text: str) -> None:
+    def _sanitize_rubric_evidence(
+        rubric: RubricDiagnostic, reference_text: str
+    ) -> RubricDiagnostic:
         normalized = re.sub(r"\s+", " ", reference_text).strip().lower()
-        for criterion in rubric.criteria:
-            for evidence in criterion.evidence:
-                if evidence.status != "used":
+        sanitized = rubric.model_dump(mode="json")
+        changed = False
+        for criterion in sanitized["criteria"]:
+            criterion_changed = False
+            for evidence in criterion["evidence"]:
+                if evidence["status"] != "used":
                     continue
-                quote = re.sub(r"\s+", " ", evidence.quote).strip().lower()
+                quote = re.sub(r"\s+", " ", evidence["quote"]).strip().lower()
                 if not quote or quote not in normalized:
-                    raise EvaluationError(
-                        f"Rubric {criterion.id} cites a used quote that is not present in the source"
-                    )
+                    evidence["status"] = "missing"
+                    evidence["quote"] = ""
+                    criterion_changed = True
+                    changed = True
+            if criterion_changed:
+                criterion["status"] = "fail"
+                criterion["structural_deferral"] = False
+        if not changed:
+            return rubric
+
+        sanitized["pass_count"] = sum(
+            criterion["status"] == "pass" for criterion in sanitized["criteria"]
+        )
+        sanitized["fail_count"] = 12 - sanitized["pass_count"]
+        logger.warning(
+            "Downgraded unsupported rubric evidence to missing without exposing source content"
+        )
+        return RubricDiagnostic.model_validate(sanitized)
 
     @staticmethod
     def _fixture_report(primary: ExtractedDocument) -> dict[str, Any]:

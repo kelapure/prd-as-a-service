@@ -105,6 +105,19 @@ class BundleTests(unittest.TestCase):
         )
         self.assertFalse(config.score_enabled)
 
+    def test_prd_score_default_timeout_allows_real_model_completion(self) -> None:
+        config = RuntimeConfig(
+            mode="fixture",
+            model="fixture",
+            allowed_models=frozenset({"fixture"}),
+            score_enabled=True,
+            score_model="fixture",
+            score_allowed_models=frozenset({"fixture"}),
+        )
+        with patch.dict(os.environ, {}, clear=True):
+            judge = PrdJudge(config)
+        self.assertEqual(judge.score_timeout_seconds, 300.0)
+
 
 def _model_message(payload: object) -> SimpleNamespace:
     text = payload if isinstance(payload, str) else json.dumps(payload)
@@ -139,6 +152,7 @@ class StructuredOutputTests(unittest.TestCase):
         judge.client = SimpleNamespace(messages=messages)
         result = asyncio.run(judge._run_judge_model([document], {}))
         self.assertEqual(result["verdict"], "REVISE")
+        self.assertNotIn("temperature", messages.kwargs)
         self.assertEqual(
             messages.kwargs["output_config"],
             {"format": {"type": "json_schema", "schema": transform_schema(JudgeReport)}},
@@ -710,6 +724,25 @@ class ConcurrentEvaluationTests(unittest.TestCase):
 
         with self.assertRaisesRegex(EvaluationError, "Rubric v2"):
             asyncio.run(scenario())
+
+    def test_unsupported_rubric_quote_is_downgraded_without_failing_run(self) -> None:
+        primary = self._primary()
+        rubric = PrdJudge._fixture_rubric(primary)
+        rubric.criteria[0].evidence[0].status = "used"
+        rubric.criteria[0].evidence[0].quote = "fabricated quotation"
+
+        sanitized = PrdJudge._sanitize_rubric_evidence(
+            rubric, primary.evidence_text
+        )
+
+        self.assertEqual(sanitized.criteria[0].status, "fail")
+        self.assertEqual(sanitized.criteria[0].evidence[0].status, "missing")
+        self.assertEqual(sanitized.criteria[0].evidence[0].quote, "")
+        self.assertEqual(
+            sanitized.pass_count,
+            sum(row.status == "pass" for row in sanitized.criteria),
+        )
+        self.assertEqual(sanitized.fail_count, 12 - sanitized.pass_count)
 
 
 class PromptIsolationTests(unittest.TestCase):
