@@ -209,3 +209,20 @@ closed state, accessibility, and layout at desktop, tablet, and narrow-mobile
 widths, but the exact deployed preview still requires its own fresh-context
 Fable pass before promotion, per the preview gates in
 `cloud/RELEASE_GATES.md`.
+
+## Live progress transport review
+
+On 2026-07-24, Fable reviewed the exact zero-traffic desktop preview
+`stream-273d455-20260724` after the evaluation gateway moved from
+non-streaming App Engine Standard to Cloud Run. The review inspected the
+deployed preview, the live phase-05 browser capture, the SSE client and
+gateway source, cancellation, CSP, and the separation between Judge readiness
+and PRD Score draft strength. It returned `PASS` and the exact statement
+`No blocking Fable findings.`
+
+The reviewed live browser run received real, model-backed phase events without
+client-side simulation and reached `Scoring draft strength` in 351 ms with no
+console or CSP errors. Fable recorded four nonblocking P2 opportunities: show a
+fixed step count from the beginning when score availability is known, consider
+a truthful elapsed-time cue during long phases, move keyboard focus into the
+progress region on submit, and measure the upcoming-step contrast before GA.
