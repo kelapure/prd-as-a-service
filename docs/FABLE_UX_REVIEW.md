@@ -169,12 +169,20 @@ the HTML export instead of rendering an empty ordered list, watch the shared
 artifacts in stitched screenshots as live layout defects. None is a P0 or P1
 finding.
 
+A later review-driven frontend commit `a0bc696` landed after that rerun. It
+makes the page fail closed with reload guidance when a complete event carries
+any envelope other than `evalgpt-prd-judge/v2` with a `prd_score` block, and it
+keeps an in-scope Layer 3 zero visible in the deterministic-total breakdown on
+the page and in the HTML export.
+
 ## Scope
 
 The Fable record now covers the PRD Judge public-beta interface and the complete
 PRD Score integration through frontend commit `2775dbb`, including the
 reviewed frontend preview and browser exports, plus backend integration commit
-`f92cbfc` on runtime revision `prd-judge-runtime-preview-00006-fcr`. This record
+`f92cbfc` on runtime revision `prd-judge-runtime-preview-00006-fcr`. The later
+frontend hardening commit `a0bc696` (the v2 envelope ingestion guard and the
+in-scope Layer 3 zero display) postdates the 2026-07-24 rerun. This record
 does not certify the fixture model or waive the independent PRD Score release
 gate, frozen model suite, privacy verification, or target-user comprehension
 gate.

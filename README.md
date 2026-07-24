@@ -131,7 +131,7 @@ POST /api/prd-judge/evaluate accepts multipart input:
 - 250,000 pasted characters and 250,000 extracted characters per document;
 - at most 12 rendered pages or embedded figures per document, size-bounded before the model call; oversized or unreadable figures are skipped with a warning.
 
-The streamed response emits progress, complete, or error events. The final envelope is `evalgpt-prd-judge/v2`. The top-level `report`, `readiness_score`, `rubric`, and `prd_score` fields remain separate; consumers must not average, blend, or use PRD Score to rewrite the Judge verdict.
+The streamed response emits progress, complete, or error events. The final envelope is `evalgpt-prd-judge/v2`; the frontend fails closed and asks the user to reload if a complete event carries any other envelope version. The top-level `report`, `readiness_score`, `rubric`, and `prd_score` fields remain separate; consumers must not average, blend, or use PRD Score to rewrite the Judge verdict.
 
 ## Deployment
 
