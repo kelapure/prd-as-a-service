@@ -116,7 +116,7 @@ class BundleTests(unittest.TestCase):
         )
         with patch.dict(os.environ, {}, clear=True):
             judge = PrdJudge(config)
-        self.assertEqual(judge.score_timeout_seconds, 300.0)
+        self.assertEqual(judge.score_timeout_seconds, 330.0)
 
     def test_model_client_default_timeout_matches_production(self) -> None:
         config = RuntimeConfig(
@@ -160,6 +160,55 @@ class StructuredOutputTests(unittest.TestCase):
         result = asyncio.run(judge._run_judge_model([document], {}))
         self.assertEqual(result["verdict"], "REVISE")
         self.assertIs(messages.kwargs["output_format"], JudgeReport)
+
+    def test_score_semantic_gaps_reach_the_repair_flow(self) -> None:
+        primary = extract_pasted_text(
+            "# PRD\n" + "A measurable workflow requirement. " * 10
+        )
+        invalid = PrdJudge._fixture_prd_score(primary)
+        invalid["layer1"][0]["anchor"] = "wrong anchor row"
+        raw = RawPrdScoreReport.model_validate(invalid)
+        valid = RawPrdScoreReport.model_validate(
+            PrdJudge._fixture_prd_score(primary)
+        )
+        messages = SimpleNamespace()
+        calls: list[dict] = []
+
+        async def parse(**kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(parsed_output=valid)
+
+        messages.parse = parse
+
+        async def scenario():
+            judge = PrdJudge(
+                RuntimeConfig(
+                    mode="fixture",
+                    model="candidate-model",
+                    allowed_models=frozenset({"candidate-model"}),
+                )
+            )
+            judge.config = RuntimeConfig(
+                mode="model",
+                model="candidate-model",
+                allowed_models=frozenset({"candidate-model"}),
+                score_enabled=True,
+                score_model="candidate-model",
+                score_allowed_models=frozenset({"candidate-model"}),
+            )
+            judge.client = SimpleNamespace(messages=messages)
+            return await judge._validate_score_or_repair(
+                raw.model_dump(mode="json", by_alias=True),
+                [primary],
+                {},
+                _reference_text([primary]),
+                primary.line_count_text or primary.evidence_text,
+            )
+
+        report, validation = asyncio.run(scenario())
+        self.assertEqual(len(calls), 1)
+        self.assertTrue(validation["ok"], validation.get("errors"))
+        self.assertEqual(report.status, "scored")
 
 
 class ExtractionTests(unittest.TestCase):

@@ -293,7 +293,7 @@ class PrdJudge:
     def __init__(self, config: RuntimeConfig | None = None) -> None:
         self.config = config or RuntimeConfig.from_environment()
         timeout_seconds = float(os.environ.get("PRD_JUDGE_MODEL_TIMEOUT_SECONDS", "240"))
-        self.score_timeout_seconds = float(os.environ.get("PRD_SCORE_TIMEOUT_SECONDS", "300"))
+        self.score_timeout_seconds = float(os.environ.get("PRD_SCORE_TIMEOUT_SECONDS", "330"))
         self.client = AsyncAnthropic(timeout=timeout_seconds) if self.config.mode == "model" else None
 
     async def close(self) -> None:
