@@ -11,6 +11,7 @@ const PHASES: Array<{ id: ProgressPhase; label: string }> = [
   { id: "extracting_evidence", label: "Extracting evidence" },
   { id: "applying_gates", label: "Applying gates" },
   { id: "forming_judgment", label: "Forming judgment" },
+  { id: "scoring_draft", label: "Scoring draft strength" },
   { id: "validating_report", label: "Validating report" },
 ];
 
@@ -32,6 +33,7 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
   const [pastedText, setPastedText] = useState("");
   const [supporting, setSupporting] = useState<File[]>([]);
   const [progress, setProgress] = useState<ProgressUpdate | null>(null);
+  const [seenPhases, setSeenPhases] = useState<ProgressPhase[]>([]);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -44,7 +46,15 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
     ),
     [mode, pastedText, primary, supporting],
   );
-  const activeIndex = progress ? PHASES.findIndex((phase) => phase.id === progress.phase) : -1;
+  const visiblePhases = PHASES.filter(
+    (phase) => phase.id !== "scoring_draft" || seenPhases.includes("scoring_draft"),
+  );
+  const activeIndex = progress ? visiblePhases.findIndex((phase) => phase.id === progress.phase) : -1;
+
+  const trackProgress = (update: ProgressUpdate) => {
+    setSeenPhases((phases) => (phases.includes(update.phase) ? phases : [...phases, update.phase]));
+    setProgress(update);
+  };
 
   const choosePrimary = (file: File | null) => {
     setError("");
@@ -76,6 +86,7 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
     const controller = new AbortController();
     controllerRef.current = controller;
     setRunning(true);
+    setSeenPhases(["uploading"]);
     setProgress({ phase: "uploading", message: "Preparing an ephemeral evaluation" });
     try {
       const result = await evaluatePrd(
@@ -84,7 +95,7 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
           pastedText: mode === "paste" ? pastedText : undefined,
           supportingFiles: supporting,
         },
-        setProgress,
+        trackProgress,
         controller.signal,
       );
       setPrimary(null);
@@ -108,9 +119,9 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
     <section className="workspace section-shell" id="evaluate" aria-labelledby="evaluate-title">
       <div className="section-heading">
         <p className="eyebrow">Evaluate one PRD</p>
-        <h2 id="evaluate-title">Bring the document. Leave with a decision.</h2>
+        <h2 id="evaluate-title">Bring the document. Leave with a decision and an improvement path.</h2>
         <p>
-          Upload the primary PRD, then add discovery notes, architecture material, or other evidence only when it should inform the judgment.
+          Upload the primary PRD once. The Judge decides readiness while PRD Score independently measures draft strength against the same supplied evidence.
         </p>
       </div>
 
@@ -196,7 +207,7 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
           <div className="progress-panel" role="status" aria-live="polite">
             <p className="progress-message">{progress.message}</p>
             <ol className="phase-list">
-              {PHASES.map((phase, index) => (
+              {visiblePhases.map((phase, index) => (
                 <li
                   key={phase.id}
                   className={index < activeIndex ? "is-complete" : index === activeIndex ? "is-current" : ""}

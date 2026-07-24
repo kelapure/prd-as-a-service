@@ -83,13 +83,18 @@ try {
   await page.goto(origin, { waitUntil: "networkidle" });
   assert.equal(await page.title(), "EvalGPT — Evidence-backed PRD judgment");
   assert.equal(await page.locator("h1").innerText(), "Know if your PRD is ready to build.");
+  assert.equal(await page.getByText("Readiness and draft strength answer different questions.").count(), 1);
   const inputMethod = page.getByRole("group", { name: "PRD input method" });
   assert.equal(await inputMethod.getByRole("button", { name: "Upload a file" }).getAttribute("aria-pressed"), "true");
   await inputMethod.getByRole("button", { name: "Paste text" }).click();
   assert.equal(await inputMethod.getByRole("button", { name: "Paste text" }).getAttribute("aria-pressed"), "true");
   assert.equal(await page.locator("footer").getByRole("button", { name: "Example result" }).count(), 1);
   await audit(page, "desktop homepage");
-  await page.screenshot({ path: resolve(evidenceDir, "local-home-desktop.png"), fullPage: true });
+  await page.screenshot({
+    path: resolve(evidenceDir, "local-home-desktop.png"),
+    fullPage: true,
+    style: ".site-header{position:absolute!important}.skip-link{display:none!important}",
+  });
 
   await page.getByRole("button", { name: "View an example result" }).click();
   await page.locator("#judge-result").waitFor();
@@ -97,10 +102,70 @@ try {
   assert.equal(await page.locator(".verdict-label").innerText(), "Revise");
   assert.equal(await page.locator("#path-title").innerText(), "Path to GO");
   assert.equal(await page.locator("#judge-result .score").getAttribute("aria-label"), "Readiness score 5 out of 10");
+  assert.equal(await page.locator("#draft-strength-title").innerText(), "Draft strength");
+  assert.equal(
+    await page.locator(".draft-score-number").getAttribute("aria-label"),
+    "Draft strength score 65 out of 100",
+  );
+  assert.equal(
+    await page.getByText("This score does not change the Revise verdict.").count(),
+    1,
+  );
+  assert.equal(
+    await page.getByText("Core rubric calibrated on five PRDs · Writing layer unvalidated").count(),
+    1,
+  );
+  assert.equal(
+    await page.getByText(/Score C7 · Out of scope and roadmap/).count(),
+    1,
+  );
+  assert.equal(
+    await page.getByText(/dimension IDs are independent from the C1–C12 coverage checks/).count(),
+    1,
+  );
+  await page.getByText("Inspect the draft score").click();
+  assert.equal(
+    await page.getByText("Applied +1, capped at 5, to M1, M2, M3, M5, and M7.").count(),
+    1,
+  );
+  assert.equal(
+    await page.getByText("3→4/5 · normalized").count(),
+    2,
+  );
+  assert.equal(
+    await page.getByText("Layer 1 36 + adjusted Layer 2 29 = 65/100.").count(),
+    1,
+  );
+  assert.equal(
+    await page.getByText("12/20 · reported separately and excluded from 65/100.").count(),
+    1,
+  );
+  const resultOrder = await page.evaluate(() => {
+    const top = (selector) => document.querySelector(selector)?.getBoundingClientRect().top;
+    return {
+      verdict: top(".verdict-panel"),
+      path: top(".path-section"),
+      draft: top(".draft-strength-section"),
+      ledger: top(".evidence-ledger-section"),
+      rubric: top(".rubric-diagnostic-section"),
+    };
+  });
+  assert.ok(resultOrder.verdict < resultOrder.path);
+  assert.ok(resultOrder.path < resultOrder.draft);
+  assert.ok(resultOrder.draft < resultOrder.ledger);
+  assert.ok(resultOrder.ledger < resultOrder.rubric);
   assert.equal(await page.getByText("Findings by severity").count(), 1);
+  assert.equal(
+    await page.locator(".rubric-diagnostic-section .evidence-status").filter({ hasText: "missing" }).count(),
+    5,
+    "rubric placeholders must be labeled missing rather than styled as source quotations",
+  );
   await audit(page, "desktop result");
   await page.screenshot({ path: resolve(evidenceDir, "local-result-desktop-viewport.png") });
-  await page.locator("#judge-result").screenshot({ path: resolve(evidenceDir, "local-result-desktop.png") });
+  await page.locator("#judge-result").screenshot({
+    path: resolve(evidenceDir, "local-result-desktop.png"),
+    style: ".site-header,.skip-link{display:none!important}",
+  });
   await page.getByRole("link", { name: "See the complete decision sequence" }).click();
   const pathTop = await page.locator("#path-title").evaluate((element) => element.getBoundingClientRect().top);
   const headerBottom = await page.locator(".site-header").evaluate((element) => element.getBoundingClientRect().bottom);
@@ -115,13 +180,26 @@ try {
   assert.match(html, /--color-ink:/, "HTML export must inline the canonical 8090 tokens");
   assert.match(html, /Evidence ledger/);
   assert.match(html, /PRD Eval Rubric v2/);
+  assert.match(html, /Draft strength/);
+  assert.match(html, /does not change the readiness verdict/i);
+  assert.match(html, /5\/10 · Revise/);
+  assert.match(html, /PRD Judge · Public beta · Example result/);
+  assert.doesNotMatch(html, /5\/10 · REVISE/);
+  assert.match(html, /Score C7 · Out of scope and roadmap/);
+  assert.match(html, /Applied \+1, capped at 5, to M1, M2, M3, M5, and M7/);
+  assert.match(html, /Layer 1 36 \+ adjusted Layer 2 29 = 65\/100/);
+  assert.match(html, /Writing.<\/strong> 12\/20; reported separately and excluded from 65\/100/);
+  assert.match(html, /Writing quality · unvalidated/);
+  assert.match(html, /customer value or ROI gap/);
+  assert.doesNotMatch(html, /customer_value_or_roi_gap/);
+  assert.doesNotMatch(html, /“No sufficient evidence was found for/);
 
   const jsonDownload = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download JSON" }).click();
   const jsonFile = await jsonDownload;
   const jsonPath = resolve(evidenceDir, "exported-report.json");
   await jsonFile.saveAs(jsonPath);
-  assert.equal(JSON.parse(await readFile(jsonPath, "utf8")).schema_version, "evalgpt-prd-judge/v1");
+  assert.equal(JSON.parse(await readFile(jsonPath, "utf8")).schema_version, "evalgpt-prd-judge/v2");
 
   await page.evaluate(() => {
     window.print = () => {
@@ -160,7 +238,11 @@ try {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, `${viewport.name} result overflows horizontally`);
     await audit(page, `${viewport.name} result`);
     await page.screenshot({ path: resolve(evidenceDir, `local-result-${viewport.name}-viewport.png`) });
-    await page.screenshot({ path: resolve(evidenceDir, `local-result-${viewport.name}.png`), fullPage: true });
+    await page.screenshot({
+      path: resolve(evidenceDir, `local-result-${viewport.name}.png`),
+      fullPage: true,
+      style: ".site-header{position:absolute!important}.skip-link{display:none!important}",
+    });
   }
   assert.deepEqual(errors, [], `browser page errors: ${errors.join("; ")}`);
   process.stdout.write(`Browser and accessibility checks passed. Evidence: ${evidenceDir}\n`);

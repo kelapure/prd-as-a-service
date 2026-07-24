@@ -14,6 +14,21 @@ Every checkbox is blocking unless marked post-beta. Evidence belongs in the rele
 - [ ] Historical source-status, negation, intent, verdict-consistency, and fabricated-evidence regressions pass.
 - [ ] The public example uses synthetic or explicitly licensed material.
 
+## PRD Score draft-strength diagnostic
+
+- [ ] `PRD_SCORE_ENABLED` remains false until every item in this section passes.
+- [ ] The runtime bundle source commit and manifest match the reviewed canonical `prd_score` commit.
+- [ ] The production PRD Score model is allowlisted and pinned with no automatic fallback.
+- [ ] The family-separated score suite includes at least 20 artifacts and 20 distinct artifact families.
+- [ ] PRD Score schema and deterministic arithmetic pass 100 percent of release outputs.
+- [ ] Unsupported PRD Score evidence quotations: zero.
+- [ ] Repeat-score groups include at least five families and maximum per-criterion drift is no more than one anchor point.
+- [ ] At least 80 percent of five or more controlled revision pairs improve monotonically.
+- [ ] At least 80 percent of five or more human reviews rate the prioritized fixes useful.
+- [ ] The UI and exports disclose the mode, denominator, writing-layer status, sample size, and historical 70 threshold.
+- [ ] Short-document length normalization counts lines from the authored text for pasted, `.md`, and `.txt` artifacts. PDF and DOCX uploads fall back to extracted-text line counts, and the score suite verifies that basis on at least one PDF and one DOCX artifact.
+- [ ] PRD Score remains visibly secondary and does not alter, average with, or override Judge readiness.
+
 ## Product, privacy, and security
 
 - [ ] Auth, Stripe, Firestore, saved history, and persistent sharing routes are unreachable.
@@ -38,7 +53,7 @@ Every checkbox is blocking unless marked post-beta. Evidence belongs in the rele
 
 ## Reliability and rollout
 
-- [ ] /api/health reports the exact deployed judge, model, rubric, and score versions.
+- [ ] /api/health reports the exact deployed Judge and PRD Score models, bundle versions, source commits, manifests, rubric version, calculation versions, and whether PRD Score is enabled.
 - [ ] Valid-run completion is at least 98 percent.
 - [ ] 5xx responses remain below 2 percent.
 - [ ] p95 completion remains below 120 seconds for a representative 30-page PRD.

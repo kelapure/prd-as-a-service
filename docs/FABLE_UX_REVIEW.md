@@ -1,8 +1,11 @@
 # Fable UX review record
 
-Date: 2026-07-23
+Initial review: 2026-07-23
+Final exact-preview rerun: 2026-07-24
 Model: `claude-fable-5`, xhigh effort
-Status: local and deployed-preview reviews passed. The overall public-beta release remains blocked by the non-UX certification gates.
+Status: local, deployed-preview, and exact-final-preview reviews passed with no
+blocking Fable findings. Public-beta launch remains blocked by the independent
+model, validation, privacy, and target-user gates.
 
 ## Pass 1: prototype and information architecture
 
@@ -73,3 +76,128 @@ private runtime path.
 This UX pass does not certify the fixture model as a production model and does
 not satisfy the frozen-suite, precision, recall, retention, or target-user
 comprehension release gates.
+
+## PRD Score integration review
+
+Fable separately reviewed the PRD Score integration in fresh contexts. This
+review covered the updated homepage and upload flow, the result hierarchy, the
+new `Scoring draft strength` phase, browser exports, and the following realistic
+result states:
+
+- complete Judge and PRD Score results;
+- no Judge findings;
+- PRD Score unavailable while the Judge result remains valid;
+- PRD Score not scored because its own artifact gate failed;
+- an extremely long finding;
+- loading, cancellation, and retryable error states.
+
+The prototype review found and blocked:
+
+1. colliding score and rubric criterion IDs without visible names;
+2. the evidence ledger appearing after the C1-C12 diagnostic;
+3. adjusted scores without visible normalization math and repetitive example
+   evidence;
+4. raw gate IDs in the HTML export;
+5. the instrument-independence note hidden behind a collapsed disclosure; and
+6. evaluator commentary represented as supplied quotations.
+
+Those issues were resolved with `Score C7 · Out of scope and roadmap`-style
+labels, an always-visible namespace note, the required evidence-ledger order,
+raw-to-adjusted arrows and method facts, humanized export labels, and
+dimension-specific source quotations. The final prototype review returned
+`PASS` and the exact statement `No blocking Fable findings.`
+
+The final deployed review used the zero-traffic preview:
+
+- Frontend:
+  `prd-score-2b8a847-20260724-dot-dompe-dev-439304.uc.r.appspot.com`
+- API:
+  `prd-score-2b8a847-20260724-dot-api-dot-dompe-dev-439304.uc.r.appspot.com`
+- Runtime revision: `prd-judge-runtime-preview-00006-fcr`
+- Viewports: 1440-pixel desktop, 834-pixel tablet, and 375-to-390-pixel mobile
+- Canonical PRD Score source:
+  `20225956d8659f77fb15e0ee7be53b105f9f2944`
+- Canonical PRD Score manifest:
+  `8c5977936e58c422e555e0f9e0b1554734902f39bd5aead0dc8bc967453ad236`
+
+Fable verified:
+
+- the Judge remains the dominant N/10 readiness decision;
+- PRD Score is a separate N/100 draft-strength diagnostic and never changes
+  readiness;
+- the C1-C12 rubric is a third, subordinate coverage diagnostic;
+- Layer 1 `36` plus adjusted Layer 2 `29` equals `65/100`;
+- writing `12/20` is separately labeled and excluded from `65/100`;
+- the UI and HTML export separate writing rows and render missing evidence
+  without quotation marks;
+- one-source grammar, example-export labeling, no-findings copy, and
+  whole-sentence fixture quotations are correct; and
+- the responsive, long-finding, loading, error, no-findings, unavailable, and
+  not-scored states remain credible.
+
+A final exact-frontend review followed the no-mistakes fixes in frontend
+commit `2775dbb`. It confirmed that the loading stepper now derives its columns
+from visible phases, the shared score-row component preserves the reviewed
+hierarchy at every viewport, and the independent PRD Score timeout cannot
+consume the Judge deadline. The deployed pass returned `PASS` and the exact
+statement `No blocking Fable findings.` It left two product-polish opportunities
+that do not block stakeholder review: render `summary` evidence as an explicitly
+unquoted paraphrase, and include human-readable PRD Score dimension names in the
+JSON envelope. Sticky-header and skip-link artifacts were limited to stitched
+capture mechanics rather than the live interface.
+
+The later backend-only correctness commit `f92cbfc` changed authored-line
+counting for short-document normalization, deduplicated fail-soft score
+construction, and asserted criterion IDs against the bundled validator. It did
+not change frontend code. Runtime revision
+`prd-judge-runtime-preview-00006-fcr` was deployed to the same zero-traffic
+preview, and the complete browser capture passed again with unchanged fixture
+math, hierarchy, exports, and edge states.
+
+On 2026-07-24, a fresh-context Fable rerun reviewed that exact deployment,
+including the live preview, health provenance, desktop/tablet/mobile captures,
+HTML and JSON exports, and the no-findings, unavailable, not-scored,
+long-finding, loading, and error states. It returned `PASS` and the exact
+statement `No blocking Fable findings.` Fable confirmed that the Judge remains
+dominant, all three instruments remain distinguishable, the deterministic score
+math and evidence treatments are consistent, and the preview is ready for
+stakeholder review.
+
+Fable left three nonblocking observations: mirror the UI's no-actions message in
+the HTML export instead of rendering an empty ordered list, watch the shared
+`C`-prefix namespace in target-user testing, and avoid treating sticky-header
+artifacts in stitched screenshots as live layout defects. None is a P0 or P1
+finding.
+
+A later review-driven frontend commit `a0bc696` landed after that rerun. It
+makes the page fail closed with reload guidance when a complete event carries
+any envelope other than `evalgpt-prd-judge/v2` with a `prd_score` block, and it
+keeps an in-scope Layer 3 zero visible in the deterministic-total breakdown on
+the page and in the HTML export. The browser regression check
+`frontend/tests/score-envelope-guard.mjs` pins both behaviors against the built
+frontend and captures its screenshot and export evidence; run it with
+`node tests/score-envelope-guard.mjs` from `frontend/` after a build.
+
+Those post-review changes were deployed as the zero-traffic App Engine preview
+`prd-score-2b8a847-20260724`. A second fresh-context Fable rerun inspected that
+exact app head, the live fixture evaluation, the v2-envelope error state, the
+Layer 3 zero UI and HTML export, all responsive and edge-state captures, and the
+health provenance. It returned `PASS` and the exact statement
+`No blocking Fable findings.` No P0 or P1 finding remains.
+
+The second rerun left three nonblocking observations: the controlled Layer 3
+capture uses an empty score list even though the runtime requires P1-P3 rows
+when Layer 3 is in scope, some full-height capture artifacts show fixed-position
+header fragments, and the explicitly marked example export uses placeholder
+version values. These are test-fixture or capture-polish observations rather
+than live-product blockers.
+
+## Scope
+
+The Fable record now covers the PRD Judge public-beta interface and the complete
+PRD Score integration through validated app head `2b8a847`, including frontend
+hardening commit `a0bc696`, the reviewed preview and browser exports, and
+backend integration commit `f92cbfc` on runtime revision
+`prd-judge-runtime-preview-00006-fcr`. This record does not certify the fixture
+model or waive the independent PRD Score release gate, frozen model suite,
+privacy verification, or target-user comprehension gate.

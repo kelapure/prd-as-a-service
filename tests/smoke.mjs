@@ -4,12 +4,19 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const root = resolve(new URL("..", import.meta.url).pathname);
+const runtimeExecutable = process.env.JUDGE_RUNTIME_EXECUTABLE
+  || resolve(root, "judge-runtime/.venv/bin/uvicorn");
 const runtime = spawn(
-  resolve(root, "judge-runtime/.venv/bin/uvicorn"),
+  runtimeExecutable,
   ["app.main:app", "--host", "127.0.0.1", "--port", "8092"],
   {
     cwd: resolve(root, "judge-runtime"),
-    env: { ...process.env, JUDGE_RUNTIME_MODE: "fixture", LOG_LEVEL: "WARNING" },
+    env: {
+      ...process.env,
+      JUDGE_RUNTIME_MODE: "fixture",
+      PRD_SCORE_ENABLED: "true",
+      LOG_LEVEL: "WARNING",
+    },
     stdio: ["ignore", "pipe", "pipe"],
   },
 );
@@ -57,9 +64,11 @@ try {
   const stream = await response.text();
   assert.match(stream, /event: progress/);
   assert.match(stream, /event: complete/);
-  assert.match(stream, /"schema_version":"evalgpt-prd-judge\/v1"/);
+  assert.match(stream, /"schema_version":"evalgpt-prd-judge\/v2"/);
   assert.match(stream, /"ephemeral":true/);
   assert.match(stream, /"used_quotes_verified":true/);
+  assert.match(stream, /"prd_score":\{"status":"complete"/);
+  assert.match(stream, /"instrument":"prd-score"/);
 
   for (const path of ["/api/auth/session", "/api/payments/create-checkout", "/api/evaluations"]) {
     const removed = await fetch("http://127.0.0.1:8080" + path);

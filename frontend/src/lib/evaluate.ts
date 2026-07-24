@@ -24,6 +24,16 @@ interface StreamEvent {
   data: unknown;
 }
 
+export function asJudgeEnvelope(payload: unknown): JudgeEnvelope {
+  const envelope = payload as Partial<JudgeEnvelope> | null;
+  if (!envelope || envelope.schema_version !== "evalgpt-prd-judge/v2" || !envelope.prd_score?.status) {
+    throw new Error(
+      "The evaluation service returned a report version this page does not support. Reload the page to get the current version, then evaluate again.",
+    );
+  }
+  return envelope as JudgeEnvelope;
+}
+
 export function parseSseBlock(block: string): StreamEvent | null {
   let event = "message";
   const data: string[] = [];
@@ -75,7 +85,7 @@ export async function evaluatePrd(
         const parsed = parseSseBlock(block);
         if (!parsed) continue;
         if (parsed.event === "progress") onProgress(parsed.data as ProgressUpdate);
-        if (parsed.event === "complete") result = parsed.data as JudgeEnvelope;
+        if (parsed.event === "complete") result = asJudgeEnvelope(parsed.data);
         if (parsed.event === "error") {
           const error = parsed.data as { message?: string };
           throw new Error(error.message || "The evaluation did not return a validated report.");
