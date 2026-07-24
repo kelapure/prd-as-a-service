@@ -107,10 +107,10 @@ dimension-specific source quotations. The final prototype review returned
 The final deployed review used the zero-traffic preview:
 
 - Frontend:
-  `prd-score-7505106-20260723-dot-dompe-dev-439304.uc.r.appspot.com`
+  `prd-score-2775dbb-20260723-dot-dompe-dev-439304.uc.r.appspot.com`
 - API:
-  `prd-score-7505106-20260723-dot-api-dot-dompe-dev-439304.uc.r.appspot.com`
-- Runtime revision: `prd-judge-runtime-preview-00004-pxv`
+  `prd-score-2775dbb-20260723-dot-api-dot-dompe-dev-439304.uc.r.appspot.com`
+- Runtime revision: `prd-judge-runtime-preview-00005-5tg`
 - Viewports: 1440-pixel desktop, 834-pixel tablet, and 375-to-390-pixel mobile
 - Canonical PRD Score source:
   `20225956d8659f77fb15e0ee7be53b105f9f2944`
@@ -132,17 +132,21 @@ Fable verified:
 - the responsive, long-finding, loading, error, no-findings, unavailable, and
   not-scored states remain credible.
 
-The final deployed pass returned `PASS` and the exact statement
-`No blocking Fable findings.` It left only nonblocking polish: treat a future
-`summary` evidence status like a paraphrase rather than a quotation, consider a
-more distinct eyebrow for the C1-C12 coverage diagnostic, avoid sticky-header
-stitching artifacts in stakeholder screenshots, and align the export footer's
-readiness-derivation label with the UI.
+A final exact-build review followed the no-mistakes fixes in frontend commit
+`2775dbb`. It confirmed that the loading stepper now derives its columns from
+visible phases, the shared score-row component preserves the reviewed hierarchy
+at every viewport, and the independent PRD Score timeout cannot consume the
+Judge deadline. The deployed pass returned `PASS` and the exact statement
+`No blocking Fable findings.` It left two product-polish opportunities that do
+not block stakeholder review: render `summary` evidence as an explicitly
+unquoted paraphrase, and include human-readable PRD Score dimension names in the
+JSON envelope. Sticky-header and skip-link artifacts were limited to stitched
+capture mechanics rather than the live interface.
 
 ## Scope
 
 The Fable record now covers the PRD Judge public-beta interface and the complete
-PRD Score integration through frontend commit `7505106`, including the exact
+PRD Score integration through frontend commit `2775dbb`, including the exact
 deployed preview and browser exports. It does not certify the fixture model or
 waive the independent PRD Score release gate, frozen model suite, privacy
 verification, or target-user comprehension gate.
