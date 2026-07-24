@@ -51,7 +51,7 @@ class JudgeReport(BaseModel):
         "unknown",
     ]
     classification_override: str = ""
-    summary: str
+    summary: str = Field(min_length=1, max_length=320)
     findings: list[Finding]
     evidence_ledger: list[EvidenceLedgerRow] = Field(min_length=1)
     gates_fired: list[str]
@@ -132,14 +132,6 @@ class ScoreCriterion(BaseModel):
     evidence: list[ScoreEvidence] = Field(min_length=1)
     fix: str
 
-    @model_validator(mode="after")
-    def require_fix_below_four(self) -> "ScoreCriterion":
-        if self.score < 4 and not self.fix.strip():
-            raise ValueError("fix is required for every score below 4")
-        if not self.anchor.strip().startswith(f"{self.score}:"):
-            raise ValueError("anchor must quote the matched numeric anchor row")
-        return self
-
 
 class ScoreArtifactGate(BaseModel):
     passed: bool = Field(alias="pass")
@@ -186,25 +178,6 @@ class RawPrdScoreReport(BaseModel):
     integration_context: ScoreIntegrationContext
     writing_layer: list[ScoreCriterion]
     anchor_placement: str
-
-    @model_validator(mode="after")
-    def validate_criterion_sets(self) -> "RawPrdScoreReport":
-        if not self.artifact_gate.passed:
-            if self.layer1 or self.layer2 or self.layer3.scores or self.writing_layer:
-                raise ValueError("a failed artifact gate cannot emit partial scores")
-            return self
-        for field, identifiers in EXPECTED_SCORE_CRITERION_IDS.items():
-            actual = [row.id for row in getattr(self, field)]
-            if actual != identifiers:
-                raise ValueError(f"{field} must contain {identifiers} in order")
-        expected_layer3 = (
-            [f"P{number}" for number in range(1, 4)]
-            if self.layer3.in_scope
-            else []
-        )
-        if [row.id for row in self.layer3.scores] != expected_layer3:
-            raise ValueError("layer3 scores do not match layer3.in_scope")
-        return self
 
 
 class PrdScoreReport(RawPrdScoreReport):

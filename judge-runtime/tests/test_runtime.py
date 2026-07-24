@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import fitz
 import httpx
-from anthropic import APIConnectionError, transform_schema
+from anthropic import APIConnectionError
 from fastapi.testclient import TestClient
 from docx import Document
 from PIL import Image
@@ -31,7 +31,7 @@ from app.judge import (
     _artifact_content,
     _fixture_excerpt,
     _judge_system_prompt,
-    _structured_object,
+    _parsed_model,
     _score_system_prompt,
     _reference_text,
 )
@@ -105,30 +105,50 @@ class BundleTests(unittest.TestCase):
         )
         self.assertFalse(config.score_enabled)
 
+    def test_prd_score_default_timeout_allows_real_model_completion(self) -> None:
+        config = RuntimeConfig(
+            mode="fixture",
+            model="fixture",
+            allowed_models=frozenset({"fixture"}),
+            score_enabled=True,
+            score_model="fixture",
+            score_allowed_models=frozenset({"fixture"}),
+        )
+        with patch.dict(os.environ, {}, clear=True):
+            judge = PrdJudge(config)
+        self.assertEqual(judge.score_timeout_seconds, 330.0)
 
-def _model_message(payload: object) -> SimpleNamespace:
-    text = payload if isinstance(payload, str) else json.dumps(payload)
-    return SimpleNamespace(content=[SimpleNamespace(type="text", text=text)])
+    def test_model_client_default_timeout_matches_production(self) -> None:
+        config = RuntimeConfig(
+            mode="model",
+            model="candidate-model",
+            allowed_models=frozenset({"candidate-model"}),
+        )
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}, clear=True),
+            patch("app.judge.AsyncAnthropic") as client,
+        ):
+            PrdJudge(config)
+        client.assert_called_once_with(timeout=240.0)
 
 
 class StructuredOutputTests(unittest.TestCase):
-    def test_unstructured_output_fails_closed(self) -> None:
-        for text in ("I cannot evaluate this document.", "[]", ""):
-            with self.assertRaisesRegex(EvaluationError, "required structured output"):
-                _structured_object(_model_message(text), "PRD Judge")
+    def test_missing_parsed_output_fails_closed(self) -> None:
+        with self.assertRaisesRegex(EvaluationError, "required structured output"):
+            _parsed_model(SimpleNamespace(parsed_output=None), JudgeReport, "PRD Judge")
 
     def test_judge_model_uses_schema_enforced_output(self) -> None:
         document = extract_pasted_text(
             "# PRD\n" + "A measurable workflow requirement. " * 10
         )
-        expected = PrdJudge._fixture_report(document)
+        expected = JudgeReport.model_validate(PrdJudge._fixture_report(document))
         messages = SimpleNamespace()
 
-        async def create(**kwargs):
+        async def parse(**kwargs):
             messages.kwargs = kwargs
-            return _model_message(expected)
+            return SimpleNamespace(parsed_output=expected)
 
-        messages.create = create
+        messages.parse = parse
         judge = PrdJudge(
             RuntimeConfig(
                 mode="fixture",
@@ -139,49 +159,36 @@ class StructuredOutputTests(unittest.TestCase):
         judge.client = SimpleNamespace(messages=messages)
         result = asyncio.run(judge._run_judge_model([document], {}))
         self.assertEqual(result["verdict"], "REVISE")
-        self.assertEqual(
-            messages.kwargs["output_config"],
-            {"format": {"type": "json_schema", "schema": transform_schema(JudgeReport)}},
-        )
+        self.assertIs(messages.kwargs["output_format"], JudgeReport)
 
-    def test_invalid_rubric_output_raises_a_curated_error(self) -> None:
-        document = extract_pasted_text(
-            "# PRD\n" + "A measurable workflow requirement. " * 10
-        )
-        corrupted = PrdJudge._fixture_rubric(document).model_dump(mode="json")
-        corrupted["pass_count"] = 0
-
-        async def create(**kwargs):
-            return _model_message(corrupted)
-
-        judge = PrdJudge(
-            RuntimeConfig(
-                mode="fixture",
-                model="candidate-model",
-                allowed_models=frozenset({"candidate-model"}),
-            )
-        )
-        judge.client = SimpleNamespace(messages=SimpleNamespace(create=create))
-        with self.assertRaises(EvaluationError) as raised:
-            asyncio.run(judge._run_rubric_model([document], {}))
-        self.assertIn("valid rubric diagnostic", str(raised.exception))
-        self.assertNotIn("input_value", str(raised.exception))
-
-    def test_invalid_score_output_reaches_the_repair_flow(self) -> None:
+    def test_score_semantic_gaps_reach_the_repair_flow(self) -> None:
         primary = extract_pasted_text(
             "# PRD\n" + "A measurable workflow requirement. " * 10
         )
         invalid = PrdJudge._fixture_prd_score(primary)
         invalid["layer1"][0]["anchor"] = "wrong anchor row"
-        valid = PrdJudge._fixture_prd_score(primary)
+        raw = RawPrdScoreReport.model_validate(invalid)
+        valid = RawPrdScoreReport.model_validate(
+            PrdJudge._fixture_prd_score(primary)
+        )
+        messages = SimpleNamespace()
         calls: list[dict] = []
 
-        async def create(**kwargs):
+        async def parse(**kwargs):
             calls.append(kwargs)
-            return _model_message(invalid if len(calls) == 1 else valid)
+            return SimpleNamespace(parsed_output=valid)
+
+        messages.parse = parse
 
         async def scenario():
-            config = RuntimeConfig(
+            judge = PrdJudge(
+                RuntimeConfig(
+                    mode="fixture",
+                    model="candidate-model",
+                    allowed_models=frozenset({"candidate-model"}),
+                )
+            )
+            judge.config = RuntimeConfig(
                 mode="model",
                 model="candidate-model",
                 allowed_models=frozenset({"candidate-model"}),
@@ -189,25 +196,17 @@ class StructuredOutputTests(unittest.TestCase):
                 score_model="candidate-model",
                 score_allowed_models=frozenset({"candidate-model"}),
             )
-            with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}):
-                judge = PrdJudge(config)
-            real_client = judge.client
-            try:
-                judge.client = SimpleNamespace(messages=SimpleNamespace(create=create))
-                score_data = await judge._run_score_model([primary], {})
-                return await judge._validate_score_or_repair(
-                    score_data,
-                    [primary],
-                    {},
-                    _reference_text([primary]),
-                    primary.line_count_text or primary.evidence_text,
-                )
-            finally:
-                await real_client.close()
+            judge.client = SimpleNamespace(messages=messages)
+            return await judge._validate_score_or_repair(
+                raw.model_dump(mode="json", by_alias=True),
+                [primary],
+                {},
+                _reference_text([primary]),
+                primary.line_count_text or primary.evidence_text,
+            )
 
         report, validation = asyncio.run(scenario())
-        self.assertEqual(len(calls), 2)
-        self.assertIn("CANDIDATE", calls[1]["messages"][0]["content"][-1]["text"])
+        self.assertEqual(len(calls), 1)
         self.assertTrue(validation["ok"], validation.get("errors"))
         self.assertEqual(report.status, "scored")
 
@@ -710,6 +709,25 @@ class ConcurrentEvaluationTests(unittest.TestCase):
 
         with self.assertRaisesRegex(EvaluationError, "Rubric v2"):
             asyncio.run(scenario())
+
+    def test_unsupported_rubric_quote_is_downgraded_without_failing_run(self) -> None:
+        primary = self._primary()
+        rubric = PrdJudge._fixture_rubric(primary)
+        rubric.criteria[0].evidence[0].status = "used"
+        rubric.criteria[0].evidence[0].quote = "fabricated quotation"
+
+        sanitized = PrdJudge._sanitize_rubric_evidence(
+            rubric, primary.evidence_text
+        )
+
+        self.assertEqual(sanitized.criteria[0].status, "fail")
+        self.assertEqual(sanitized.criteria[0].evidence[0].status, "missing")
+        self.assertEqual(sanitized.criteria[0].evidence[0].quote, "")
+        self.assertEqual(
+            sanitized.pass_count,
+            sum(row.status == "pass" for row in sanitized.criteria),
+        )
+        self.assertEqual(sanitized.fail_count, 12 - sanitized.pass_count)
 
 
 class PromptIsolationTests(unittest.TestCase):
