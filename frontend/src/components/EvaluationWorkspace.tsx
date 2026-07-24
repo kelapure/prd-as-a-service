@@ -81,7 +81,7 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
     if (mode === "paste" && pastedText.trim().length < 50) {
       return setError("Paste at least 50 characters of PRD content.");
     }
-    if (totalBytes > MAX_BYTES) return setError("Combined uploads exceed the 25 MB beta limit.");
+    if (totalBytes > MAX_BYTES) return setError("Combined uploads exceed the 25 MB limit.");
 
     const controller = new AbortController();
     controllerRef.current = controller;
