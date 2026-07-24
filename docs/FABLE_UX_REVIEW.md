@@ -110,9 +110,9 @@ dimension-specific source quotations. The final prototype review returned
 The final deployed review used the zero-traffic preview:
 
 - Frontend:
-  `prd-score-2775dbb-20260723-dot-dompe-dev-439304.uc.r.appspot.com`
+  `prd-score-2b8a847-20260724-dot-dompe-dev-439304.uc.r.appspot.com`
 - API:
-  `prd-score-2775dbb-20260723-dot-api-dot-dompe-dev-439304.uc.r.appspot.com`
+  `prd-score-2b8a847-20260724-dot-api-dot-dompe-dev-439304.uc.r.appspot.com`
 - Runtime revision: `prd-judge-runtime-preview-00006-fcr`
 - Viewports: 1440-pixel desktop, 834-pixel tablet, and 375-to-390-pixel mobile
 - Canonical PRD Score source:
@@ -178,14 +178,26 @@ the page and in the HTML export. The browser regression check
 frontend and captures its screenshot and export evidence; run it with
 `node tests/score-envelope-guard.mjs` from `frontend/` after a build.
 
+Those post-review changes were deployed as the zero-traffic App Engine preview
+`prd-score-2b8a847-20260724`. A second fresh-context Fable rerun inspected that
+exact app head, the live fixture evaluation, the v2-envelope error state, the
+Layer 3 zero UI and HTML export, all responsive and edge-state captures, and the
+health provenance. It returned `PASS` and the exact statement
+`No blocking Fable findings.` No P0 or P1 finding remains.
+
+The second rerun left three nonblocking observations: the controlled Layer 3
+capture uses an empty score list even though the runtime requires P1-P3 rows
+when Layer 3 is in scope, some full-height capture artifacts show fixed-position
+header fragments, and the explicitly marked example export uses placeholder
+version values. These are test-fixture or capture-polish observations rather
+than live-product blockers.
+
 ## Scope
 
 The Fable record now covers the PRD Judge public-beta interface and the complete
-PRD Score integration through frontend commit `2775dbb`, including the
-reviewed frontend preview and browser exports, plus backend integration commit
-`f92cbfc` on runtime revision `prd-judge-runtime-preview-00006-fcr`. The later
-frontend hardening commit `a0bc696` (the v2 envelope ingestion guard and the
-in-scope Layer 3 zero display) postdates the 2026-07-24 rerun. This record
-does not certify the fixture model or waive the independent PRD Score release
-gate, frozen model suite, privacy verification, or target-user comprehension
-gate.
+PRD Score integration through validated app head `2b8a847`, including frontend
+hardening commit `a0bc696`, the reviewed preview and browser exports, and
+backend integration commit `f92cbfc` on runtime revision
+`prd-judge-runtime-preview-00006-fcr`. This record does not certify the fixture
+model or waive the independent PRD Score release gate, frozen model suite,
+privacy verification, or target-user comprehension gate.
