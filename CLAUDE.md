@@ -26,7 +26,7 @@ draft-strength diagnostic.
 ```text
 frontend/       React/Vite public-beta UI and in-browser HTML/PDF/JSON export
 api-gateway/    Fastify same-origin gateway, limits, kill switch, SSE proxy
-judge-runtime/  FastAPI extraction, judge call, validation, deterministic score
+judge-runtime/  FastAPI extraction, judge/score calls, validation, deterministic score
 tests/          Cross-service smoke and canonical-bundle conformance tests
 cloud/          GCP deployment and release-gate runbooks
 ```
