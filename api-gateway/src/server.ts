@@ -4,6 +4,7 @@ import rateLimit from "@fastify/rate-limit";
 import dotenv from "dotenv";
 import Fastify, { type FastifyInstance } from "fastify";
 import { GoogleAuth, type IdTokenClient } from "google-auth-library";
+import type { ServerResponse } from "node:http";
 import { pathToFileURL } from "node:url";
 import { fetch, File, FormData, type Response } from "undici";
 
@@ -14,6 +15,7 @@ const MAX_SUPPORTING_FILES = 5;
 const ALLOWED_EXTENSIONS = new Set([".pdf", ".docx", ".md", ".txt"]);
 const DEFAULT_ALLOWED_ORIGIN = "http://localhost:3000";
 const DEFAULT_RUNTIME_URL = "http://127.0.0.1:8092";
+const HEARTBEAT_INTERVAL_MS = 10_000;
 
 interface UploadedPart {
   fieldname: "prd" | "supporting_files";
@@ -43,6 +45,34 @@ function safeFilename(filename: string): string {
 
 function sse(event: string, payload: Record<string, unknown>): string {
   return `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
+}
+
+async function writeStreamChunk(response: ServerResponse, chunk: string | Buffer): Promise<boolean> {
+  if (response.destroyed || response.writableEnded) return false;
+  if (response.write(chunk)) return true;
+
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      response.off("close", onClose);
+      response.off("drain", onDrain);
+      response.off("error", onError);
+    };
+    const onClose = () => {
+      cleanup();
+      resolve(false);
+    };
+    const onDrain = () => {
+      cleanup();
+      resolve(true);
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    response.once("close", onClose);
+    response.once("drain", onDrain);
+    response.once("error", onError);
+  });
 }
 
 const googleAuth = new GoogleAuth();
@@ -305,7 +335,24 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
       "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
       "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
     });
-    reply.raw.write(sse("progress", { phase: "uploading", message: "Upload received securely" }));
+    reply.raw.socket?.setNoDelay(true);
+    reply.raw.flushHeaders();
+    await writeStreamChunk(
+      reply.raw,
+      sse("progress", { phase: "uploading", message: "Upload received securely" }),
+    );
+
+    let heartbeatInFlight = false;
+    const heartbeat = setInterval(() => {
+      if (heartbeatInFlight || reply.raw.destroyed || reply.raw.writableEnded) return;
+      heartbeatInFlight = true;
+      void writeStreamChunk(reply.raw, ": heartbeat\n\n")
+        .catch(() => undefined)
+        .finally(() => {
+          heartbeatInFlight = false;
+        });
+    }, HEARTBEAT_INTERVAL_MS);
+    heartbeat.unref();
 
     try {
       const reader = upstream.body.getReader();
@@ -319,7 +366,7 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         sawComplete ||= markerText.includes("event: complete");
         sawError ||= markerText.includes("event: error");
         eventTail = markerText.slice(-64);
-        reply.raw.write(Buffer.from(value));
+        if (!await writeStreamChunk(reply.raw, Buffer.from(value))) break;
       }
       if (!reply.raw.destroyed) reply.raw.end();
       clearTimeout(timeout);
@@ -347,6 +394,8 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         );
         reply.raw.end();
       }
+    } finally {
+      clearInterval(heartbeat);
     }
   });
 
