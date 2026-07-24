@@ -74,11 +74,75 @@ This UX pass does not certify the fixture model as a production model and does
 not satisfy the frozen-suite, precision, recall, retention, or target-user
 comprehension release gates.
 
+## PRD Score integration review
+
+Fable separately reviewed the PRD Score integration in fresh contexts. This
+review covered the updated homepage and upload flow, the result hierarchy, the
+new `Scoring draft strength` phase, browser exports, and the following realistic
+result states:
+
+- complete Judge and PRD Score results;
+- no Judge findings;
+- PRD Score unavailable while the Judge result remains valid;
+- PRD Score not scored because its own artifact gate failed;
+- an extremely long finding;
+- loading, cancellation, and retryable error states.
+
+The prototype review found and blocked:
+
+1. colliding score and rubric criterion IDs without visible names;
+2. the evidence ledger appearing after the C1-C12 diagnostic;
+3. adjusted scores without visible normalization math and repetitive example
+   evidence;
+4. raw gate IDs in the HTML export;
+5. the instrument-independence note hidden behind a collapsed disclosure; and
+6. evaluator commentary represented as supplied quotations.
+
+Those issues were resolved with `Score C7 · Out of scope and roadmap`-style
+labels, an always-visible namespace note, the required evidence-ledger order,
+raw-to-adjusted arrows and method facts, humanized export labels, and
+dimension-specific source quotations. The final prototype review returned
+`PASS` and the exact statement `No blocking Fable findings.`
+
+The final deployed review used the zero-traffic preview:
+
+- Frontend:
+  `prd-score-7505106-20260723-dot-dompe-dev-439304.uc.r.appspot.com`
+- API:
+  `prd-score-7505106-20260723-dot-api-dot-dompe-dev-439304.uc.r.appspot.com`
+- Runtime revision: `prd-judge-runtime-preview-00004-pxv`
+- Viewports: 1440-pixel desktop, 834-pixel tablet, and 375-to-390-pixel mobile
+- Canonical PRD Score source:
+  `20225956d8659f77fb15e0ee7be53b105f9f2944`
+- Canonical PRD Score manifest:
+  `8c5977936e58c422e555e0f9e0b1554734902f39bd5aead0dc8bc967453ad236`
+
+Fable verified:
+
+- the Judge remains the dominant N/10 readiness decision;
+- PRD Score is a separate N/100 draft-strength diagnostic and never changes
+  readiness;
+- the C1-C12 rubric is a third, subordinate coverage diagnostic;
+- Layer 1 `36` plus adjusted Layer 2 `29` equals `65/100`;
+- writing `12/20` is separately labeled and excluded from `65/100`;
+- the UI and HTML export separate writing rows and render missing evidence
+  without quotation marks;
+- one-source grammar, example-export labeling, no-findings copy, and
+  whole-sentence fixture quotations are correct; and
+- the responsive, long-finding, loading, error, no-findings, unavailable, and
+  not-scored states remain credible.
+
+The final deployed pass returned `PASS` and the exact statement
+`No blocking Fable findings.` It left only nonblocking polish: treat a future
+`summary` evidence status like a paraphrase rather than a quotation, consider a
+more distinct eyebrow for the C1-C12 coverage diagnostic, avoid sticky-header
+stitching artifacts in stakeholder screenshots, and align the export footer's
+readiness-derivation label with the UI.
+
 ## Scope
 
-The passes above reviewed frontend commits `7af185e` and `d5af393`, which
-predate the PRD Score integration. This record does not cover the later
-draft-strength result section, the Scoring draft strength progress phase, the
-updated homepage copy, or the PRD Score export content. Those additions still
-require their own fresh-context Fable review under cloud/RELEASE_GATES.md
-before launch.
+The Fable record now covers the PRD Judge public-beta interface and the complete
+PRD Score integration through frontend commit `7505106`, including the exact
+deployed preview and browser exports. It does not certify the fixture model or
+waive the independent PRD Score release gate, frozen model suite, privacy
+verification, or target-user comprehension gate.
