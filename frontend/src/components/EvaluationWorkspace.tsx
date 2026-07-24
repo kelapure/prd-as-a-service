@@ -149,7 +149,18 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
 
         {mode === "file" ? (
           <div className="upload-field">
-            <label className="drop-field" htmlFor="primary-prd">
+            <label
+              className="drop-field"
+              htmlFor="primary-prd"
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "copy";
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                if (!running) choosePrimary(event.dataTransfer.files?.[0] || null);
+              }}
+            >
               <span className="drop-title">{primary ? primary.name : "Choose the PRD"}</span>
               <span>{primary ? `${(primary.size / 1024 / 1024).toFixed(2)} MB` : "PDF, DOCX, Markdown, or TXT"}</span>
               <span className="button button-secondary">Browse files</span>
@@ -180,17 +191,30 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
         )}
 
         <details className="supporting-disclosure">
-          <summary>Add supporting evidence <span>Optional · up to five files</span></summary>
+          <summary>
+            <span>Add supporting evidence</span>
+            <span className="supporting-summary-meta">
+              <span>Optional · up to five files</span>
+              <span className="supporting-prompt supporting-prompt-open">Open</span>
+              <span className="supporting-prompt supporting-prompt-close">Close</span>
+            </span>
+          </summary>
           <div className="supporting-body">
-            <label htmlFor="supporting-files">Discovery notes, business cases, architecture audits, or source material</label>
             <input
               id="supporting-files"
+              className="visually-hidden"
               type="file"
               accept={ACCEPTED}
               multiple
               onChange={(event) => chooseSupporting(event.target.files)}
               disabled={running}
             />
+            <label className="supporting-picker button button-secondary" htmlFor="supporting-files">
+              {supporting.length
+                ? `${supporting.length} supporting file${supporting.length === 1 ? "" : "s"} selected`
+                : "Choose supporting files"}
+            </label>
+            <p className="field-note">Discovery notes, business cases, architecture audits, or source material</p>
             {supporting.length > 0 && (
               <ul className="file-list" aria-label="Selected supporting files">
                 {supporting.map((file) => <li key={`${file.name}-${file.size}`}>{file.name}</li>)}

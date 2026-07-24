@@ -1,353 +1,179 @@
-/* Synced from salesfactory-agents/design_system/tokens.css at source commit fa3f7cd3d34e2cedc84f53af7e41af23a6196a01. */
-/* Portable web copy: remote/local font loading and unused image/scrim utilities are omitted; canonical token values and fallback stacks are unchanged. */
-/* ============================================================================
-   8090 Design System — Tokens
-   ----------------------------------------------------------------------------
-   Color palette is sampled directly from 8090's brand paintings (turn-of-the-
-   century impressionist factory scenes) plus the high-contrast ink black and
-   chalk white used in the pixel "8090" mark.
-
-   Typography:
-     - Display / UI: Founders Grotesk by Klim Type Foundry. Self-hosted from
-       /fonts as woff2 (with otf fallback). Weights 300 / 400 / 500 / 600 / 700,
-       all with italics.
-     - Body:    Instrument Sans — humanist, optical-size friendly.
-     - Mono:    IBM Plex Mono — industrial, technical, on-brand.
-     - Readout: same IBM Plex Mono at small size, uppercase, +0.06em tracked
-       — used for factory data readouts (timestamps, agent statuses, build
-       counters). Replaces the previous VT323 pixel accent.
-   ========================================================================= */
-
-/* ---------- Founders Grotesk (Klim Type Foundry) -------------------------- */
-/* ---------- Instrument Sans (body / paragraph text) ----------------------- */
+/* 8090 Design System tokens imported from the supplied brand package. */
 :root {
-  /* ========== BRAND / CORE ============================================== */
+  /* ========== COLORS — from Figma variables (Default mode) =============== */
 
-  /* Ink — the logo color. Near-black with a hint of warmth, never pure #000. */
-  --color-ink:           #1F1F1F;
-  --color-ink-soft:      #3A5560;   /* deep slate — sampled from the water  */
+  /* Linen / neutral ramp (light-theme surfaces + text) */
+  --color-linen-100: #F5F4F4;
+  --color-linen-200: #ECEBEB;
+  --color-linen-300: #DAD9D9;
+  --color-linen-400: #B4AFAD;
+  --color-linen-500: #8E8784;
+  --color-linen-600: #706C6A;
+  --color-linen-700: #535251;
+  --color-linen-800: #2F2B29;
+  --color-linen-900: #1D1918;
 
-  /* Chalk — the "white" used on dark canvases (warm, not bleached). */
-  --color-chalk:         #F4F1EA;
-  --color-chalk-bright:  #FFFFFF;
+  /* Rust accent */
+  --color-rust-100:  #FAE6E0;
+  --color-rust-200:  #E5C2B8;
+  --color-rust-300:  #CC9D8F;
+  --color-rust-400:  #996A5C;
+  --color-rust-500:  #663F33;
+  --color-rust-600:  #41231A;
 
-  /* Paper — the canvas of the brand. Warm sky-cream sampled directly
-     from twin-stacks-close.png (the canonical brand painting). */
-  --color-paper:         #D9D0A0;
-  --color-paper-soft:    #CFC692;
+  /* Moss accent */
+  --color-moss-100:  #E0F5F0;
+  --color-moss-200:  #B8E5DB;
+  --color-moss-300:  #8FCCBE;
+  --color-moss-400:  #5C998B;
+  --color-moss-500:  #33665A;
+  --color-moss-600:  #1F3D36;
 
-  /* Sun, Mauve, Mist — the accent neutrals that bracket the paper canvas.
-     All sampled from the dawn-smokestacks painting. */
-  --color-sun:           #E5DCB8;   /* sky cream highlight                  */
-  --color-mauve:         #C5AF8E;   /* sunlit-smoke warm midtone            */
-  --color-mist:          #92968E;   /* cool stone-mist                      */
+  /* Rock accent */
+  --color-rock-100:  #F4EFEB;
+  --color-rock-200:  #E5CDB8;
+  --color-rock-300:  #CCAB8F;
+  --color-rock-400:  #99785C;
+  --color-rock-500:  #664B33;
+  --color-rock-600:  #3D2E21;
 
-  /* ========== PAINTING PALETTE ==========================================
-     Re-anchored to twin-stacks-close (the canonical brand canvas) with
-     supporting samples from the other 9 paintings in the library. All 12
-     tokens hit the same dusty, painterly value world as the core neutrals
-     — no neon, no punch-saturated pop. Use for background panels, gradient
-     sweeps, painterly category headers. Never for UI chrome. */
+  /* Status */
+  --color-status-destructive: #902305;
+  --color-status-success:     #6B8E57;
 
-  /* Creams & sky — the highlight range */
-  --paint-sky-light:     #E5DCB8;  /* brightest sky highlight (matches sun)  */
-  --paint-sky-cream:     #D9D0A0;  /* canonical sky cream (matches paper)    */
-  --paint-sky-cool:      #C9CBA8;  /* cooler cream sky                       */
+  /* Custom / brand */
+  --color-brand-primary: #2C4C83;
+  --color-brand-clover:  #673399;
+  --color-link:          #0055D4;
 
-  /* Smokes & warm midtones */
-  --paint-smoke-cream:   #C5AF8E;  /* sunlit smoke (matches mauve)           */
-  --paint-smoke-rose:    #B89B82;  /* deeper rose-cream plume                */
-  --paint-smoke-stone:   #ABA497;  /* warm stone / roof tan                  */
+  /* ---------- Semantic roles (deck usage) -------------------------------- */
+  --bg-page:      var(--color-linen-200);   /* content-slide background      */
+  --bg-card:      var(--color-linen-100);   /* cards, lifted surfaces        */
+  --bg-dark:      var(--color-linen-900);   /* dark slides                   */
+  --fg-1:         var(--color-linen-900);   /* primary text on light         */
+  --fg-2:         var(--color-linen-700);   /* secondary text                */
+  --fg-3:         var(--color-linen-500);   /* muted body                    */
+  --fg-eyebrow:   var(--color-linen-500);   /* eyebrow labels                */
+  --fg-on-dark-1: var(--color-linen-100);   /* primary text on dark          */
+  --fg-on-dark-2: var(--color-linen-500);   /* muted text on dark            */
+  --accent:       var(--color-moss-500);    /* card labels / numbers         */
+  --border:       var(--color-linen-300);   /* hairline rules, card edges    */
+  --border-on-dark: var(--color-linen-500);
 
-  /* Mists & cool middles */
-  --paint-mist-cool:     #92968E;  /* stone-mist haze (matches mist token)   */
-  --paint-mist-blue:     #6E8B96;  /* deeper periwinkle mist                 */
-  --paint-water:         #496A70;  /* river / bay surface — water-slate      */
+  /* ========== RADII ================ */
+  --radius-none: 0px;
+  --radius-xs:   2px;
+  --radius-sm:   4px;
+  --radius-md:   6px;    /* cards */
+  --radius-lg:   8px;
+  --radius-xl:   10px;
+  --radius-2xl:  12px;   /* images */
+  --radius-full: 9999px;
 
-  /* Buildings & deep shadows */
-  --paint-building:      #3A5560;  /* shadowed factory mass (= ink-soft)     */
-  --paint-foliage:       #2C4548;  /* forest-teal foreground brush           */
-  --paint-shadow-deep:   #1A3338;  /* deepest teal shadow / silhouette       */
+  /* ========== BORDER WIDTH ================================= */
+  --border-0: 0px;
+  --border-1: 1px;
+  --border-2: 2px;
 
-  /* Warm accents — the quietest, painterly warm pops. No furnace orange. */
-  --paint-ember:         #A07738;  /* dusty sienna — loudest warm we allow   */
-  --paint-ember-soft:    #C5A47C;  /* sunlit roof-cream                      */
+  /* ========== TYPE — families =========================================== */
+  --font-display: "Söhne", -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif;
+  --font-body:    "Söhne", -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif;
+  --font-mono:    "Söhne Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  /* ========== FOREGROUND / TEXT ==========================================
-     Tuned for the new warmer paper canvas (#D9D0A0). All tokens hit ≥ 4.5:1
-     contrast against paper for AA body text; fg-4 is reserved for
-     placeholders and disabled states. */
-  --fg-1:                #1F1F1F;  /* primary text on paper       9.5:1     */
-  --fg-2:                #3A3A3A;  /* secondary text, labels      6.8:1     */
-  --fg-3:                #525252;  /* tertiary / muted            5.0:1     */
-  --fg-4:                #6E6555;  /* placeholder, disabled       3.0:1     */
-  --fg-on-dark-1:        #F4F1EA;  /* primary text on ink         13.0:1    */
-  --fg-on-dark-2:        #CFC9BC;  /* secondary on ink             8.5:1    */
-  --fg-on-dark-3:        #948D7E;  /* tertiary on ink              4.6:1    */
-  --fg-link:             #3A5560;  /* links — deep painting slate           */
-  --fg-link-hover:       #1F1F1F;  /* hover — straight to ink               */
-  --fg-link-on-dark:     #C5A47C;  /* links on ink — sunlit roof   7.5:1    */
-  --fg-link-on-dark-hover:#F4F1EA; /* hover on ink — straight to chalk      */
+  /* ========== TYPE — scale (graphics) =============== */
+  --fs-hero:    148px; --lh-hero:    156px;    /* slideshows only    */
+  --fs-title1:  120px; --lh-title1:  136px;    /* slideshows only    */
+  --fs-title2:   96px; --lh-title2:  100px;    /* slideshows only    */
+  --fs-title3:   72px; --lh-title3:   76px;    /* slideshows only    */
+  --fs-header1:  60px; --lh-header1:  64px;    /* slideshows only    */
+  --fs-header2:  48px; --lh-header2:  54px;    /* slideshows only    */
+  --fs-header3:  32px; --lh-header3:  40px;    /* slideshows only    */
+  --fs-header4:  24px; --lh-header4:  32px;    /* printed only    */
+  --fs-header5:  18px; --lh-header5:  24px;    /* printed only    */
+  --fs-header6:  16px; --lh-header6:  22px;    /* printed only    */
+  --fs-body1:    36px; --lh-body1:    48px;    /* slideshows only    */
+  --fs-body2:    28px; --lh-body2:    40px;    /* slideshows only    */
+  --fs-body3:    24px; --lh-body3:    32px;    /* slideshows only    */
+  --fs-body4:    22px; --lh-body4:    28px;    /* slideshows only    */
+  --fs-body5:    18px; --lh-body5:    26px;    /* slideshows only    */
+  --fs-body6:    16px; --lh-body6:    24px;    /* printed only    */
+  --fs-body7:    15px; --lh-body7:    22px;    /* printed only    */
+  --fs-body8:    14px; --lh-body8:    20px;    /* printed only    */
+  --fs-body9:    13px; --lh-body9:    18px;    /* printed only    */
+  --fs-body10:   12px; --lh-body10:   16px;    /* printed only    */
+  --fs-eyebrow:  24px; --lh-eyebrow:  24px;   /* for slideshows; mono, uppercase, tracked    */
+  --fs-eyebrow-small:  9px; --lh-eyebrow-small:  9px;  /* for printed materials/paper docs; uppercase, tracked    */
 
-  /* ========== BACKGROUND / SURFACE ======================================= */
-  --bg-canvas:           #EFEAE0;  /* default page — warm cream             */
-  --bg-canvas-alt:       #E7E1D2;  /* zebra / banded section                */
-  --bg-surface:          #F1ECD8;  /* cards, sheets — lifted from the sky   */
-  --bg-surface-sunk:     #E4DDCB;  /* sunken / inset wells (warm cream)     */
-  --bg-ink:              #1F1F1F;  /* inverted surface                      */
-  --bg-ink-elev:         #2A2A2A;  /* elevated card on ink                  */
+  /* ========== WEB PRODUCT ROLES ========================================== */
+  --bg-canvas: var(--color-linen-100);
+  --bg-canvas-alt: var(--color-linen-200);
+  --bg-surface: var(--color-linen-100);
+  --bg-surface-sunk: var(--color-linen-200);
+  --bg-ink: var(--color-linen-900);
+  --bg-ink-elev: var(--color-linen-800);
+  --color-ink: var(--color-linen-900);
+  --color-ink-soft: var(--color-linen-800);
+  --color-chalk: var(--color-linen-100);
+  --color-chalk-bright: var(--color-linen-100);
+  --color-paper: var(--color-linen-200);
+  --fg-3: var(--color-linen-600);
+  --fg-4: var(--color-linen-500);
+  --border-soft: var(--color-linen-300);
+  --border-strong: var(--color-linen-400);
+  --border-ink: var(--color-linen-700);
+  --status-success: var(--color-status-success);
+  --status-warning: var(--color-rust-400);
+  --status-danger: var(--color-status-destructive);
+  --status-info: var(--color-brand-primary);
+  --focus-ring: var(--color-link);
 
-  /* ========== BORDERS / RULES =========================================== */
-  --border-hairline:     rgba(31,31,31,0.10);
-  --border-soft:         rgba(31,31,31,0.16);
-  --border-strong:       rgba(31,31,31,0.36);
-  --border-ink:          #1F1F1F;
-  --border-on-dark:      rgba(244,241,234,0.14);
+  --web-fs-hero: clamp(44px, 5.5vw, 80px);
+  --web-lh-hero: 1.05;
+  --web-fs-h2: clamp(30px, 3.2vw, 48px);
+  --web-lh-h2: 1.1;
+  --web-fs-h3: var(--fs-header4);
+  --web-lh-h3: var(--lh-header4);
+  --web-fs-h4: var(--fs-header5);
+  --web-lh-h4: var(--lh-header5);
+  --web-fs-body: var(--fs-body6);
+  --web-lh-body: var(--lh-body6);
+  --web-fs-small: var(--fs-body8);
+  --web-lh-small: var(--lh-body8);
+  --web-fs-eyebrow: 12px;
+  --web-tracking-eyebrow: 0.08em;
 
-  /* ========== SEMANTIC ==================================================
-     Status colors re-derived from the painting palette. Every status is a
-     dusty, painterly tone that sits inside the brand's value world — no
-     pure red, no neon yellow, no Bootstrap blue. */
-  --status-success:      #5C7A4A;  /* mossy green — foliage family           */
-  --status-warning:      #A07738;  /* dusty sienna — = --paint-ember         */
-  --status-danger:       #8B4A38;  /* muted brick-rose                        */
-  --status-info:         #3A5560;  /* deep painting slate — = --paint-building*/
+  --fs-12: 12px;
+  --fs-16: 16px;
+  --fs-24: 24px;
+  --fs-48: 48px;
+  --fs-96: 96px;
+  --lh-16: 24px;
+  --tracking-caps: 0.08em;
 
-  /* ========== SPACING (4px base) ======================================== */
-  --space-0:   0;
-  --space-1:   4px;
-  --space-2:   8px;
-  --space-3:   12px;
-  --space-4:   16px;
-  --space-5:   20px;
-  --space-6:   24px;
-  --space-8:   32px;
-  --space-10:  40px;
-  --space-12:  48px;
-  --space-16:  64px;
-  --space-20:  80px;
-  --space-24:  96px;
-  --space-32:  128px;
-  --space-40:  160px;   /* landing-page section padding              */
-  --space-48:  192px;   /* hero composition vertical breathing room  */
-
-  /* ========== RADII =====================================================
-     8090 is a *square* brand. The logo is built from sharp orthogonal
-     pixels. UI corners are crisp — small radii only where ergonomically
-     needed (chips, inputs). Cards and panels stay square. */
-  --radius-0:   0px;          /* default — cards, panels, sections         */
-  --radius-1:   2px;          /* inputs, small buttons                     */
-  --radius-2:   4px;          /* chips, tags                               */
-  --radius-3:   6px;          /* the most curve we ever allow              */
-  --radius-pill: 999px;       /* status pills only                          */
-
-  /* ========== SHADOWS / ELEVATION =======================================
-     Painterly, soft, low-contrast. Never a "Material" puff. */
-  --shadow-1:  0 1px 0 rgba(31,31,31,0.04), 0 1px 2px rgba(31,31,31,0.06);
-  --shadow-2:  0 1px 0 rgba(31,31,31,0.04), 0 4px 12px rgba(31,31,31,0.08);
-  --shadow-3:  0 2px 0 rgba(31,31,31,0.04), 0 12px 32px rgba(31,31,31,0.10);
-  --shadow-inset: inset 0 1px 0 rgba(31,31,31,0.04);
-
-  /* Brand-only accent: a soft warm glow used on hero painterly cards. */
-  --shadow-painterly: 0 30px 80px -20px rgba(196,102,58,0.25),
-                      0 12px 32px -12px rgba(47,59,74,0.20);
-
-  /* ========== MOTION ==================================================== */
-  --ease-out:       cubic-bezier(0.20, 0.80, 0.20, 1.00);  /* primary       */
-  --ease-in-out:    cubic-bezier(0.65, 0.00, 0.35, 1.00);  /* transitions   */
-  --ease-painterly: cubic-bezier(0.34, 0.04, 0.18, 1.00);  /* slow fade     */
-  --dur-fast:    120ms;
-  --dur-base:    200ms;
-  --dur-slow:    320ms;
-  --dur-painterly: 600ms;
-
-  /* ========== TYPE — FAMILIES =========================================== */
-  --font-display: "Founders Grotesk", -apple-system, BlinkMacSystemFont,
-                  "Segoe UI", Helvetica, Arial, sans-serif;
-  --font-sans:    "Founders Grotesk", -apple-system, BlinkMacSystemFont,
-                  "Segoe UI", Helvetica, Arial, sans-serif;
-  /* Body — Instrument Sans. Slightly humanist, optical-size friendly at
-     small sizes. Used for paragraph copy, lede, body-sm, table cells. */
-  --font-body:    "Instrument Sans", -apple-system, BlinkMacSystemFont,
-                  "Segoe UI", Helvetica, Arial, sans-serif;
-  /* Compatibility aliases (some components still reference these tokens). */
-  --font-sans-semicondensed: "Founders Grotesk", sans-serif;
-  --font-sans-condensed:     "Founders Grotesk", sans-serif;
-  --font-mono:    "IBM Plex Mono", "JetBrains Mono", ui-monospace,
-                  SFMono-Regular, Menlo, Consolas, monospace;
-  /* Readout — same mono, used at small uppercase tracked sizes for factory
-     data readouts. Kept under the legacy --font-pixel name for back-compat;
-     no longer a bitmap pixel face. */
-  --font-pixel:   "IBM Plex Mono", "JetBrains Mono", ui-monospace,
-                  SFMono-Regular, Menlo, Consolas, monospace;
-
-  /* ========== TYPE — SCALE (modular 1.200) ============================= */
-  --fs-12: 12px;   --lh-12: 16px;
-  --fs-13: 13px;   --lh-13: 18px;
-  --fs-14: 14px;   --lh-14: 20px;
-  --fs-15: 15px;   --lh-15: 22px;
-  --fs-16: 16px;   --lh-16: 24px;
-  --fs-18: 18px;   --lh-18: 26px;
-  --fs-20: 20px;   --lh-20: 28px;
-  --fs-24: 24px;   --lh-24: 32px;
-  --fs-28: 28px;   --lh-28: 36px;
-  --fs-32: 32px;   --lh-32: 40px;
-  --fs-40: 40px;   --lh-40: 46px;
-  --fs-48: 48px;   --lh-48: 54px;
-  --fs-60: 60px;   --lh-60: 64px;
-  --fs-72: 72px;   --lh-72: 76px;
-  --fs-96: 96px;   --lh-96: 100px;
-  --fs-120: 120px; --lh-120: 120px;   /* landing hero — single dramatic line */
-
-  /* ========== TYPE — TRACKING ===========================================
-     8090's display copy ("Quality. Control. Consistency.") and the all-caps
-     section labels run a few units negative for headings, positive for caps. */
-  --tracking-tight:   -0.02em;
-  --tracking-snug:    -0.01em;
-  --tracking-normal:  0;
-  --tracking-wide:    0.04em;
-  --tracking-caps:    0.12em;   /* uppercase eyebrow labels                */
+  /* 4px base spacing scale for product UI. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
 }
 
 /* ============================================================================
-   SEMANTIC TYPE ROLES
-   Use these classes for instant on-brand text. They're also exposed as
-   variables so React inline styles can opt in.
+   TYPE ROLES (slideshows) - one role per use-case
    ========================================================================= */
-
-.t-display {
-  font-family: var(--font-display);
-  font-size: var(--fs-72); line-height: var(--lh-72);
-  font-weight: 600; letter-spacing: var(--tracking-tight);
-  color: var(--fg-1);
-}
-
-/* Landing-hero — the long declarative multi-line statement from the
-   marketing site ("The AI-native software factory for regulated
-   enterprises."). Slight negative tracking, generous line height. */
-.t-hero {
-  font-family: var(--font-display);
-  font-size: clamp(48px, 7vw, 120px);
-  line-height: 1.02;
-  font-weight: 500;
-  letter-spacing: -0.025em;
-  color: var(--fg-1);
-}
-.t-h1 {
-  font-family: var(--font-display);
-  font-size: var(--fs-48); line-height: var(--lh-48);
-  font-weight: 600; letter-spacing: var(--tracking-tight);
-  color: var(--fg-1);
-}
-.t-h2 {
-  font-family: var(--font-display);
-  font-size: var(--fs-32); line-height: var(--lh-32);
-  font-weight: 600; letter-spacing: var(--tracking-snug);
-  color: var(--fg-1);
-}
-.t-h3 {
-  font-family: var(--font-display);
-  font-size: var(--fs-24); line-height: var(--lh-24);
-  font-weight: 600; letter-spacing: var(--tracking-snug);
-  color: var(--fg-1);
-}
-.t-h4 {
-  font-family: var(--font-display);
-  font-size: var(--fs-18); line-height: var(--lh-18);
-  font-weight: 600; letter-spacing: var(--tracking-normal);
-  color: var(--fg-1);
-}
-.t-lede {
-  font-family: var(--font-body);
-  font-size: var(--fs-20); line-height: var(--lh-20);
-  font-weight: 400; letter-spacing: var(--tracking-snug);
-  color: var(--fg-2);
-}
-.t-body {
-  font-family: var(--font-body);
-  font-size: var(--fs-15); line-height: var(--lh-15);
-  font-weight: 400; color: var(--fg-1);
-}
-.t-body-sm {
-  font-family: var(--font-body);
-  font-size: var(--fs-13); line-height: var(--lh-13);
-  font-weight: 400; color: var(--fg-2);
-}
-.t-label {
-  font-family: var(--font-sans);
-  font-size: var(--fs-13); line-height: var(--lh-13);
-  font-weight: 500; color: var(--fg-1);
-}
-.t-eyebrow {
-  font-family: var(--font-sans);
-  font-size: var(--fs-12); line-height: var(--lh-12);
-  font-weight: 500;
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
-  color: var(--fg-3);
-}
-.t-mono {
-  font-family: var(--font-mono);
-  font-size: var(--fs-13); line-height: var(--lh-13);
-  font-weight: 400;
-  color: var(--fg-1);
-}
-.t-mono-sm {
-  font-family: var(--font-mono);
-  font-size: var(--fs-12); line-height: var(--lh-12);
-  font-weight: 400;
-  color: var(--fg-2);
-}
-.t-code {
-  font-family: var(--font-mono);
-  font-size: 0.92em;
-  background: var(--bg-surface-sunk);
-  border: 1px solid var(--border-hairline);
-  padding: 1px 6px;
-  border-radius: var(--radius-2);
-}
-.t-pixel {
-  font-family: var(--font-pixel);
-  font-size: var(--fs-13); line-height: 1.2;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--fg-1);
-}
-
-/* Optional: a condensed display headline, useful for tight poster-style
-   compositions or stat readouts where Instrument Sans Regular feels loose. */
-.t-display-condensed {
-  font-family: var(--font-sans-condensed);
-  font-size: var(--fs-72); line-height: 1.02;
-  font-weight: 600; letter-spacing: var(--tracking-tight);
-  color: var(--fg-1);
-}
-.t-h1-condensed {
-  font-family: var(--font-sans-condensed);
-  font-size: var(--fs-48); line-height: var(--lh-48);
-  font-weight: 600; letter-spacing: var(--tracking-tight);
-  color: var(--fg-1);
-}
-
-/* ============================================================================
-   BASE
-   ========================================================================= */
-html, body {
-  background: var(--bg-canvas);
-  color: var(--fg-1);
-  font-family: var(--font-body);
-  font-size: var(--fs-15);
-  line-height: var(--lh-15);
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
-a {
-  color: var(--fg-link);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  text-decoration-thickness: 1px;
-  transition: color var(--dur-base) var(--ease-out);
-}
-a:hover { color: var(--fg-link-hover); }
-::selection { background: var(--paint-water); color: var(--color-chalk); }
+.t-hero  { font-family: var(--font-display); font-size: var(--fs-hero);  line-height: var(--lh-hero);  font-weight: 400; }
+.t-title2  { font-family: var(--font-display); font-size: var(--fs-title2);  line-height: var(--lh-title2);  font-weight: 400; }
+.t-header1 { font-family: var(--font-display); font-size: var(--fs-header1); line-height: var(--lh-header1); font-weight: 600; }
+.t-header2 { font-family: var(--font-display); font-size: var(--fs-header2); line-height: var(--lh-header2); font-weight: 600; }
+.t-header3 { font-family: var(--font-display); font-size: var(--fs-header3); line-height: var(--lh-header3); font-weight: 600; }
+.t-body-lg { font-family: var(--font-body);    font-size: var(--fs-body1);   line-height: var(--lh-body1);   font-weight: 400; }
+.t-body-reg { font-family: var(--font-body);    font-size: var(--fs-body2);   line-height: var(--lh-body2);   font-weight: 400; }
+.t-body-sm { font-family: var(--font-body);    font-size: var(--fs-body4);   line-height: var(--lh-body4);   font-weight: 400; }
+.t-eyebrow { font-family: var(--font-mono);    font-size: var(--fs-eyebrow); line-height: var(--lh-eyebrow); font-weight: 400; text-transform: uppercase; }

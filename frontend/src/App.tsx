@@ -2,6 +2,9 @@ import { useState } from "react";
 
 import { EvaluationWorkspace } from "./components/EvaluationWorkspace";
 import { JudgeResult } from "./components/JudgeResult";
+import brandMark from "./assets/brand/8090-mark-dark.png";
+import footerArt from "./assets/brand/letterhead-footer.webp";
+import heroPainting from "./assets/brand/twin-stacks-close.webp";
 import { EXAMPLE_RESULT } from "./data/exampleResult";
 import type { JudgeEnvelope } from "./types/judge";
 
@@ -46,7 +49,7 @@ export default function App() {
       <a className="skip-link" href="#main">Skip to content</a>
       <header className="site-header">
         <a className="brand" href="#top" aria-label="EvalGPT home">
-          <span className="brand-mark">8090</span>
+          <img className="brand-mark" src={brandMark} alt="" />
           <span>EvalGPT</span>
         </a>
         <nav aria-label="Primary navigation">
@@ -88,14 +91,17 @@ export default function App() {
               )}
             </div>
           </div>
-          <div className="decision-specimen" aria-label="Example verdict summary">
-            <p className="eyebrow">{PUBLIC_EVALUATIONS_ENABLED ? "Decision specimen" : "Synthetic example"}</p>
-            <div className="specimen-score"><span>5</span>/10</div>
-            <p className="specimen-verdict">Revise</p>
-            <p>The product direction is credible. Two unowned decisions still block a safe handoff.</p>
-            <div className="specimen-rule" />
-            <p className="specimen-next"><span>01</span> Define the investment threshold.</p>
-            <p className="specimen-next"><span>02</span> Assign the manual override path.</p>
+          <div className="hero-visual">
+            <img className="hero-painting" src={heroPainting} alt="" />
+            <div className="decision-specimen" aria-label="Example verdict summary">
+              <p className="eyebrow">{PUBLIC_EVALUATIONS_ENABLED ? "Example result" : "Synthetic example"}</p>
+              <div className="specimen-score"><span>5</span>/10</div>
+              <p className="specimen-verdict">Revise</p>
+              <p>The product direction is credible. Two unowned decisions still block a safe handoff.</p>
+              <div className="specimen-rule" />
+              <p className="specimen-next"><span>01</span> Define the investment threshold.</p>
+              <p className="specimen-next"><span>02</span> Assign the manual override path.</p>
+            </div>
           </div>
         </section>
 
@@ -200,8 +206,9 @@ export default function App() {
         </section>
       </main>
 
+      <img className="footer-art" src={footerArt} alt="" />
       <footer className="site-footer">
-        <div className="brand"><span className="brand-mark">8090</span><span>EvalGPT</span></div>
+        <div className="brand"><img className="brand-mark" src={brandMark} alt="" /><span>EvalGPT</span></div>
         <p>Evidence-backed PRD judgment.</p>
         <nav aria-label="Footer navigation"><button type="button" onClick={showExample}>Example result</button><a href="#methodology">Methodology</a><a href="#privacy">Privacy</a><a href="#top">Back to top</a></nav>
       </footer>

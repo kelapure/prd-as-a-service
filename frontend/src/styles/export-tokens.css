@@ -1,0 +1,80 @@
+:root {
+  --color-linen-100: #F5F4F4;
+  --color-linen-200: #ECEBEB;
+  --color-linen-300: #DAD9D9;
+  --color-linen-400: #B4AFAD;
+  --color-linen-500: #8E8784;
+  --color-linen-600: #706C6A;
+  --color-linen-700: #535251;
+  --color-linen-800: #2F2B29;
+  --color-linen-900: #1D1918;
+  --color-rust-500: #663F33;
+  --color-moss-500: #33665A;
+  --color-brand-primary: #2C4C83;
+  --color-status-destructive: #902305;
+  --color-status-success: #6B8E57;
+
+  --bg-canvas: var(--color-linen-100);
+  --bg-canvas-alt: var(--color-linen-200);
+  --bg-surface: var(--color-linen-100);
+  --bg-surface-sunk: var(--color-linen-200);
+  --bg-ink: var(--color-linen-900);
+  --color-ink: var(--color-linen-900);
+  --color-chalk-bright: var(--color-linen-100);
+  --fg-1: var(--color-linen-900);
+  --fg-2: var(--color-linen-700);
+  --fg-3: var(--color-linen-600);
+  --fg-on-dark-1: var(--color-linen-100);
+  --border-soft: var(--color-linen-300);
+  --border-strong: var(--color-linen-400);
+  --border-ink: var(--color-linen-700);
+  --status-info: var(--color-brand-primary);
+  --status-warning: var(--color-rust-500);
+  --status-danger: var(--color-status-destructive);
+  --status-success: var(--color-status-success);
+
+  --font-display: "Söhne", Helvetica, Arial, sans-serif;
+  --font-body: "Söhne", Helvetica, Arial, sans-serif;
+  --font-mono: "Söhne Mono", "SFMono-Regular", Consolas, monospace;
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --fs-12: 12px;
+  --fs-16: 16px;
+  --fs-24: 24px;
+  --fs-48: 48px;
+  --fs-96: 96px;
+  --lh-16: 24px;
+  --tracking-caps: 0.08em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+}
+
+.eyebrow { color: var(--color-moss-500); }
+.hero { border-radius: var(--radius-md); }
+.hero .eyebrow { color: var(--color-linen-100); }
+.finding, .rubric-row { border-radius: var(--radius-md); }
+.evidence-derived {
+  margin: var(--space-4) 0 0;
+  border-left: 3px solid var(--color-rust-500);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-surface-sunk);
+  color: var(--fg-2);
+}
+
+@media print {
+  .hero {
+    border: 1px solid var(--fg-1) !important;
+    background: transparent !important;
+    color: var(--fg-1) !important;
+  }
+
+  .hero .eyebrow { color: var(--color-moss-500) !important; }
+}

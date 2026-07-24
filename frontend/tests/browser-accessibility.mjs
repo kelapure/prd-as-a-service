@@ -90,8 +90,39 @@ try {
   assert.equal(await page.locator(".trust-strip").count(), 0);
   assert.equal(await page.getByText(/public beta/i).count(), 0);
   assert.equal(await page.getByText("Readiness and draft strength answer different questions.").count(), 1);
+  assert.equal(
+    await page.evaluate(() => document.fonts.check('16px "Söhne"') && document.fonts.check('12px "Söhne Mono"')),
+    true,
+    "the supplied Söhne fonts must load",
+  );
   const inputMethod = page.getByRole("group", { name: "PRD input method" });
   assert.equal(await inputMethod.getByRole("button", { name: "Upload a file" }).getAttribute("aria-pressed"), "true");
+  await page.locator("#primary-prd").focus();
+  assert.equal(
+    await page.locator(".drop-field").evaluate((element) => getComputedStyle(element).outlineWidth),
+    "3px",
+    "the visible upload dropzone must show keyboard focus",
+  );
+  await page.locator(".drop-field").evaluate((element) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(["# Dropped PRD"], "dropped-prd.md", { type: "text/markdown" }));
+    element.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+  });
+  assert.equal(await page.getByText("dropped-prd.md", { exact: true }).count(), 1, "file drop must select the PRD");
+  await page.getByText("Add supporting evidence", { exact: true }).click();
+  assert.equal(await page.getByText("Close", { exact: true }).count(), 1);
+  await page.locator("#supporting-files").focus();
+  assert.equal(
+    await page.locator(".supporting-picker").evaluate((element) => getComputedStyle(element).outlineWidth),
+    "3px",
+    "the visible supporting-file control must show keyboard focus",
+  );
+  const workspaceButtonColors = await page.getByRole("button", { name: "Evaluate this PRD" }).evaluate((element) => {
+    const button = getComputedStyle(element);
+    const panel = getComputedStyle(element.closest(".evaluation-form"));
+    return { button: button.backgroundColor, panel: panel.backgroundColor };
+  });
+  assert.notEqual(workspaceButtonColors.button, workspaceButtonColors.panel, "the workspace primary action must contrast with its panel");
   await inputMethod.getByRole("button", { name: "Paste text" }).click();
   assert.equal(await inputMethod.getByRole("button", { name: "Paste text" }).getAttribute("aria-pressed"), "true");
   assert.equal(await page.locator("footer").getByRole("button", { name: "Example result" }).count(), 1);
@@ -166,6 +197,11 @@ try {
     5,
     "rubric placeholders must be labeled missing rather than styled as source quotations",
   );
+  const summaryFinding = page.locator(".finding").filter({ hasText: "Two workflow terms describe the same state" });
+  await summaryFinding.locator("summary").click();
+  assert.equal(await summaryFinding.locator(".derived-evidence").count(), 1);
+  assert.equal(await summaryFinding.getByText("EvalGPT summary · not a quotation", { exact: true }).count(), 1);
+  assert.equal(await summaryFinding.locator("blockquote").count(), 0, "derived evidence must not render as a source quotation");
   await audit(page, "desktop result");
   await page.screenshot({ path: resolve(evidenceDir, "local-result-desktop-viewport.png") });
   await page.locator("#judge-result").screenshot({
@@ -186,6 +222,8 @@ try {
   assert.match(html, /--color-ink:/, "HTML export must inline the canonical 8090 tokens");
   assert.doesNotMatch(html, /public beta/i);
   assert.match(html, /Evidence ledger/);
+  assert.match(html, /Hard gates fired/);
+  assert.match(html, /@font-face\{font-family:"Söhne";src:url\("data:font\/woff2;base64,/);
   assert.match(html, /PRD Eval Rubric v2/);
   assert.match(html, /Draft strength/);
   assert.match(html, /does not change the readiness verdict/i);
@@ -200,6 +238,9 @@ try {
   assert.match(html, /customer value or ROI gap/);
   assert.doesNotMatch(html, /customer_value_or_roi_gap/);
   assert.doesNotMatch(html, /“No sufficient evidence was found for/);
+  assert.match(html, /EvalGPT summary · not a quotation/);
+  assert.doesNotMatch(html, /“The document alternates between Pending billing review and Cannot verify\.”/);
+  assert.match(html, /@media print[\s\S]*\.hero[\s\S]*background: transparent !important/);
 
   const jsonDownload = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download JSON" }).click();
@@ -208,6 +249,14 @@ try {
   await jsonFile.saveAs(jsonPath);
   assert.equal(JSON.parse(await readFile(jsonPath, "utf8")).schema_version, "evalgpt-prd-judge/v2");
 
+  await page.emulateMedia({ media: "print" });
+  const printedVerdict = await page.locator(".verdict-panel").evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { background: style.backgroundColor, color: style.color };
+  });
+  assert.equal(printedVerdict.background, "rgba(0, 0, 0, 0)", "printed verdict must not depend on background graphics");
+  assert.equal(printedVerdict.color, "rgb(29, 25, 24)", "printed verdict text must remain visible on paper");
+  await page.emulateMedia({ media: "screen" });
   await page.evaluate(() => {
     window.print = () => {
       document.body.dataset.printOpenDetails = String(document.querySelectorAll("#judge-result details[open]").length);

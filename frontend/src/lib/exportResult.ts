@@ -1,5 +1,8 @@
 import type { JudgeEnvelope } from "../types/judge";
-import tokens from "../styles/8090-tokens.css?raw";
+import soehneBook from "../assets/fonts/soehne-buch.woff2?inline";
+import soehneHalbfett from "../assets/fonts/soehne-halbfett.woff2?inline";
+import soehneMonoBook from "../assets/fonts/soehne-mono-buch.woff2?inline";
+import tokens from "../styles/export-tokens.css?raw";
 import {
   humanize,
   SCORE_NAMES,
@@ -28,7 +31,13 @@ function evidenceHtml(item: {
   if (item.status === "missing") {
     return `<div class="evidence-missing"><span>${escapeHtml(item.status)}</span> ${escapeHtml(item.quote)}${citation ? `<br><small>${citation}</small>` : ""}</div>`;
   }
-  return `<blockquote><span>${escapeHtml(item.status)}</span> “${escapeHtml(item.quote)}”${citation ? `<br><small>${citation}</small>` : ""}</blockquote>`;
+  if (item.status !== "used") {
+    const label = item.status === "summary"
+      ? "EvalGPT summary · not a quotation"
+      : `${humanize(item.status)} evidence · not a quotation`;
+    return `<div class="evidence-derived"><span>${escapeHtml(label)}</span> ${escapeHtml(item.quote)}${citation ? `<br><small>${citation}</small>` : ""}</div>`;
+  }
+  return `<blockquote><span>Source quotation</span> “${escapeHtml(item.quote)}”${citation ? `<br><small>${citation}</small>` : ""}</blockquote>`;
 }
 
 function download(name: string, type: string, contents: string): void {
@@ -47,10 +56,14 @@ export function downloadJson(result: JudgeEnvelope): void {
 }
 
 export function downloadHtml(result: JudgeEnvelope): void {
+  const fontFaces = `
+@font-face{font-family:"Söhne";src:url("${soehneBook}") format("woff2");font-style:normal;font-weight:400;font-display:swap}
+@font-face{font-family:"Söhne";src:url("${soehneHalbfett}") format("woff2");font-style:normal;font-weight:600;font-display:swap}
+@font-face{font-family:"Söhne Mono";src:url("${soehneMonoBook}") format("woff2");font-style:normal;font-weight:400;font-display:swap}`;
   const findings = result.report.findings
     .map(
       (finding) => `<article class="finding">
-        <p class="label">${escapeHtml(finding.severity)}${finding.gate ? ` · ${escapeHtml(humanize(finding.gate))}` : ""}</p>
+        <p class="label">${escapeHtml(finding.severity)}${finding.gate ? ` · ${escapeHtml(humanize(finding.gate))}` : ""}${finding.acknowledged ? " · Acknowledged" : ""}</p>
         <h2>${escapeHtml(finding.title)}</h2>
         <p><strong>Impact.</strong> ${escapeHtml(finding.impact)}</p>
         <p><strong>Required fix.</strong> ${escapeHtml(finding.required_fix)}</p>
@@ -59,6 +72,8 @@ export function downloadHtml(result: JudgeEnvelope): void {
     )
     .join("");
   const actions = result.report.required_next_actions.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+  const gates = result.report.gates_fired.map((item) => `<li>${escapeHtml(humanize(item))}</li>`).join("");
+  const inputWarnings = result.input.warnings.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
   const rubric = result.rubric.criteria
     .map((item) => `<article class="rubric-row"><p class="label">${escapeHtml(item.id)} · ${escapeHtml(item.status)}${item.structural_deferral ? " · structural deferral" : ""}</p><h3>${escapeHtml(item.name)}</h3><p>${escapeHtml(item.rationale)}</p>${item.evidence.map(evidenceHtml).join("")}</article>`)
     .join("");
@@ -91,10 +106,12 @@ export function downloadHtml(result: JudgeEnvelope): void {
   const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>EvalGPT PRD Judge report</title><style>
+${fontFaces}
 ${tokens}
 *{box-sizing:border-box}body{margin:0;background:var(--bg-canvas);color:var(--fg-1);font-family:var(--font-body);font-size:var(--fs-16);line-height:var(--lh-16)}main{max-width:980px;margin:auto;padding:var(--space-12) var(--space-6)}.eyebrow,.label,small,th,td{font-family:var(--font-mono)}.eyebrow,.label{font-size:var(--fs-12);font-weight:600;letter-spacing:var(--tracking-caps);text-transform:uppercase}.hero{background:var(--bg-ink);color:var(--fg-on-dark-1);padding:var(--space-10);border:1px solid var(--border-ink)}.score{font-family:var(--font-mono);font-size:clamp(var(--fs-48),10vw,var(--fs-96));font-weight:600;line-height:1;margin:var(--space-2) 0}.summary{font-size:var(--fs-24);max-width:760px}.section{border-top:1px solid var(--border-soft);padding:var(--space-8) 0}.finding,.rubric-row{background:var(--bg-surface);border:1px solid var(--border-soft);padding:var(--space-6);margin:var(--space-4) 0}.finding h2,.rubric-row h3{margin:var(--space-1) 0 var(--space-4)}blockquote,.evidence-missing{margin:var(--space-4) 0 0;padding:var(--space-3) var(--space-4);background:var(--bg-surface-sunk)}blockquote{border-left:3px solid var(--status-info)}.evidence-missing{border-left:3px solid var(--border-strong);color:var(--fg-2)}table{width:100%;border-collapse:collapse}th,td{text-align:left;vertical-align:top;border-bottom:1px solid var(--border-soft);padding:var(--space-3) var(--space-2)}footer{color:var(--fg-3);font-size:var(--fs-12);margin-top:var(--space-12)}@media print{body{background:var(--color-chalk-bright)}main{max-width:none;padding:0}.finding,.rubric-row{break-inside:avoid}}</style></head>
 <body><main><section class="hero"><p class="eyebrow">PRD Judge${result.run.id === "example_public_beta" ? " · Example result" : ""}</p><div class="score">${result.readiness_score.value}/10 · ${escapeHtml(VERDICT_LABELS[result.report.verdict])}</div><p class="summary">${escapeHtml(result.report.summary)}</p><p>${escapeHtml(result.report.confidence.charAt(0).toUpperCase() + result.report.confidence.slice(1))} confidence · ${escapeHtml(humanize(result.report.artifact_type))}</p></section>
 <section class="section"><p class="eyebrow">Path to GO</p><ol>${actions}</ol></section>
+<section class="section"><p class="eyebrow">Hard gates fired</p>${gates ? `<ul>${gates}</ul>` : "<p>None.</p>"}${inputWarnings ? `<h2>Coverage notices</h2><ul>${inputWarnings}</ul>` : ""}</section>
 <section class="section"><p class="eyebrow">Evidence-backed findings</p>${findings || "<p>No findings.</p>"}</section>
 ${draftStrength}
 <section class="section"><p class="eyebrow">Evidence ledger</p><table><thead><tr><th>Source</th><th>Status</th><th>Notes</th></tr></thead><tbody>${ledger}</tbody></table></section>

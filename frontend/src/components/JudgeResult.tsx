@@ -32,9 +32,21 @@ function EvidenceBlock({ status, quote, source, locator }: EvidenceBlockProps) {
       </div>
     );
   }
+  if (status !== "used") {
+    const label = status === "summary"
+      ? "EvalGPT summary · not a quotation"
+      : `${humanize(status)} evidence · not a quotation`;
+    return (
+      <div className="derived-evidence">
+        <p className="evidence-status">{label}</p>
+        <p>{quote}</p>
+        {citation && <cite>{citation}</cite>}
+      </div>
+    );
+  }
   return (
     <blockquote>
-      <p className="evidence-status">{status}</p>
+      <p className="evidence-status">Source quotation</p>
       <p>“{quote}”</p>
       {citation && <cite>{citation}</cite>}
     </blockquote>
@@ -235,8 +247,8 @@ export function JudgeResult({ result, onReset }: JudgeResultProps) {
                     <span><span className="eyebrow">Anchored 0–5 dimensions</span>Inspect the draft score</span>
                     <span className="disclosure-meta">
                       <strong>{draftScore.totals.writing}/{draftScore.totals.writing_denominator} writing</strong>
-                      <span className="disclosure-prompt prompt-open">Open scorecard ↓</span>
-                      <span className="disclosure-prompt prompt-close">Close scorecard ↑</span>
+                      <span className="disclosure-prompt prompt-open">Open scorecard</span>
+                      <span className="disclosure-prompt prompt-close">Close scorecard</span>
                     </span>
                   </summary>
                   <div className="score-caveat">
@@ -301,7 +313,7 @@ export function JudgeResult({ result, onReset }: JudgeResultProps) {
             <details className="wide-disclosure">
               <summary>
                 <span><span className="eyebrow">Source accounting</span>Evidence ledger</span>
-                <span className="disclosure-meta"><strong>{report.evidence_ledger.length} source{report.evidence_ledger.length === 1 ? "" : "s"}</strong><span className="disclosure-prompt prompt-open">Open ledger ↓</span><span className="disclosure-prompt prompt-close">Close ledger ↑</span></span>
+                <span className="disclosure-meta"><strong>{report.evidence_ledger.length} source{report.evidence_ledger.length === 1 ? "" : "s"}</strong><span className="disclosure-prompt prompt-open">Open ledger</span><span className="disclosure-prompt prompt-close">Close ledger</span></span>
               </summary>
               <div className="ledger-list">
                 {report.evidence_ledger.map((row, index) => (
@@ -318,7 +330,7 @@ export function JudgeResult({ result, onReset }: JudgeResultProps) {
             <details className="wide-disclosure">
               <summary>
                 <span><span className="eyebrow">Secondary diagnostic</span>PRD Eval Rubric v2</span>
-                <span className="disclosure-meta"><strong>{rubric.pass_count}/12 pass</strong><span className="disclosure-prompt prompt-open">Open diagnostic ↓</span><span className="disclosure-prompt prompt-close">Close diagnostic ↑</span></span>
+                <span className="disclosure-meta"><strong>{rubric.pass_count}/12 pass</strong><span className="disclosure-prompt prompt-open">Open diagnostic</span><span className="disclosure-prompt prompt-close">Close diagnostic</span></span>
               </summary>
               <p className="disclosure-intro">The rubric diagnoses coverage. It does not override the PRD Judge verdict.</p>
               <div className="rubric-list">
