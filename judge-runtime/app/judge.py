@@ -43,6 +43,15 @@ SCORE_ALLOWED_MODEL_ENV = "PRD_SCORE_ALLOWED_MODELS"
 SCORE_ENABLED_ENV = "PRD_SCORE_ENABLED"
 Progress = Callable[[str, str], None]
 logger = logging.getLogger("evalgpt.prd_score")
+JUDGE_MAX_TOKENS = 32_000
+RUBRIC_MAX_TOKENS = 24_000
+SCORE_MAX_TOKENS = 32_000
+
+# Sonnet 5 enables adaptive thinking when this field is omitted. Thinking tokens
+# count against max_tokens and can truncate schema-constrained JSON before it
+# closes. These versioned instruments already define their deliberation method,
+# so disable API-level thinking for complete reports and predictable latency.
+MODEL_THINKING = {"type": "disabled"}
 
 
 class EvaluationError(RuntimeError):
@@ -76,13 +85,17 @@ class RuntimeConfig:
             if item.strip()
         )
         score_enabled_value = os.environ.get(
-            SCORE_ENABLED_ENV, "true" if mode == "fixture" else "false"
+            SCORE_ENABLED_ENV, "true"
         ).strip().lower()
         if mode not in {"model", "fixture"}:
             raise EvaluationError("JUDGE_RUNTIME_MODE must be model or fixture")
         if score_enabled_value not in {"true", "false"}:
             raise EvaluationError("PRD_SCORE_ENABLED must be true or false")
         score_enabled = score_enabled_value == "true"
+        if mode == "model" and not score_enabled:
+            raise EvaluationError(
+                "PRD Score is mandatory for production evaluations and cannot be disabled."
+            )
         if mode == "model" and (not model or model not in allowed):
             raise EvaluationError(
                 "No validated PRD Judge model is configured. Set PRD_JUDGE_MODEL and include "
@@ -145,19 +158,6 @@ def _parsed_model(message: Any, expected_type: type[Any], label: str) -> Any:
 def _reference_text(documents: list[ExtractedDocument]) -> str:
     """Text that came from source artifacts, excluding extraction metadata."""
     return "\n\n".join(document.evidence_text for document in documents)
-
-
-def _unavailable_prd_score(warning: str) -> PrdScoreDiagnostic:
-    return PrdScoreDiagnostic(
-        status="unavailable",
-        report=None,
-        validation={
-            "ok": False,
-            "warnings": [warning],
-            "used_quotes_verified": False,
-            "arithmetic_verified": False,
-        },
-    )
 
 
 def _fixture_excerpt(value: str, limit: int = 160) -> str:
@@ -339,8 +339,8 @@ class PrdJudge:
 
         async def score_pipeline() -> PrdScoreDiagnostic:
             if not self.config.score_enabled:
-                return _unavailable_prd_score(
-                    "The draft-strength diagnostic is not enabled for this release; the readiness judgment is unaffected."
+                raise EvaluationError(
+                    "PRD Score is mandatory for production evaluations and is not enabled."
                 )
 
             async def score_within_budget() -> PrdScoreDiagnostic:
@@ -376,9 +376,9 @@ class PrdJudge:
                 logger.warning(
                     "PRD Score failed safely: %s", type(exc).__name__
                 )
-                return _unavailable_prd_score(
-                    "The draft-strength diagnostic was unavailable; the readiness judgment is unaffected."
-                )
+                raise EvaluationError(
+                    "The approved PRD Score did not produce a valid report. Retry the evaluation."
+                ) from exc
 
         judge_task = asyncio.create_task(judge_pipeline())
         rubric_task = asyncio.create_task(rubric_pipeline())
@@ -416,11 +416,7 @@ class PrdJudge:
                 "prd_score": SCORE_BUNDLE.score_version,
                 "prd_score_source_commit": SCORE_BUNDLE.source_commit,
                 "prd_score_manifest_sha256": SCORE_BUNDLE.manifest_sha256,
-                "prd_score_calculation": (
-                    prd_score.report.calculation_version
-                    if prd_score.report is not None
-                    else SCORE_TOOLS.calculation_version
-                ),
+                "prd_score_calculation": prd_score.report.calculation_version,
                 "prd_score_model": self.config.score_model,
             },
             input={
@@ -461,7 +457,8 @@ class PrdJudge:
         assert self.client is not None
         message = await self.client.messages.parse(
             model=self.config.model,
-            max_tokens=16_000,
+            max_tokens=JUDGE_MAX_TOKENS,
+            thinking=MODEL_THINKING,
             system=_judge_system_prompt(),
             messages=[{"role": "user", "content": _artifact_content(documents, preflight)}],
             output_format=JudgeReport,
@@ -474,7 +471,8 @@ class PrdJudge:
         assert self.client is not None
         message = await self.client.messages.parse(
             model=self.config.model,
-            max_tokens=12_000,
+            max_tokens=RUBRIC_MAX_TOKENS,
+            thinking=MODEL_THINKING,
             system=_rubric_system_prompt(),
             messages=[{"role": "user", "content": _artifact_content(documents, preflight)}],
             output_format=RubricDiagnostic,
@@ -487,7 +485,8 @@ class PrdJudge:
         assert self.client is not None
         message = await self.client.messages.parse(
             model=self.config.score_model,
-            max_tokens=20_000,
+            max_tokens=SCORE_MAX_TOKENS,
+            thinking=MODEL_THINKING,
             system=_score_system_prompt(),
             messages=[
                 {
@@ -536,6 +535,10 @@ class PrdJudge:
             "Repair the candidate PRD Score object so it satisfies the model-owned absolute-mode "
             "contract. Do not add totals, adjusted scores, thresholds, hard caps, or a verdict. "
             "Every status='used' quote must be copied verbatim from the untrusted documents. "
+            "Prefer status='missing' over a paraphrase. Keep layer1 in exact C1-C11 order, "
+            "layer2 in exact M1-M9 order, writing_layer in exact W1-W4 order, and include "
+            "P1-P3 only when layer3.in_scope is true. Every anchor must begin with the exact "
+            "numeric score followed by a colon, for example '3:'. "
             "Return the complete JSON object only.\n\n"
             f"VALIDATION ERRORS\n{json.dumps(validation.get('errors', []))}\n\n"
             f"CANDIDATE\n{json.dumps(report, ensure_ascii=False)}"
@@ -545,7 +548,8 @@ class PrdJudge:
         ]
         message = await self.client.messages.parse(
             model=self.config.score_model,
-            max_tokens=20_000,
+            max_tokens=SCORE_MAX_TOKENS,
+            thinking=MODEL_THINKING,
             system=_score_system_prompt(),
             messages=[{"role": "user", "content": content}],
             output_format=RawPrdScoreReport,
@@ -602,7 +606,8 @@ class PrdJudge:
         content = _artifact_content(documents, preflight) + [{"type": "text", "text": repair_prompt}]
         message = await self.client.messages.parse(
             model=self.config.model,
-            max_tokens=16_000,
+            max_tokens=JUDGE_MAX_TOKENS,
+            thinking=MODEL_THINKING,
             system=_judge_system_prompt(),
             messages=[{"role": "user", "content": content}],
             output_format=JudgeReport,

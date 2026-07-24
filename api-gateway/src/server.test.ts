@@ -15,8 +15,9 @@ function healthyRuntimeFetch() {
 }
 
 
-test("health reports the pinned runtime without auth or persistence routes", async () => {
+test("health reports the pinned runtime without persistence routes", async () => {
   const server = await buildServer({
+    authRequired: false,
     runtimeFetch: async () =>
       new Response(
         JSON.stringify({
@@ -36,7 +37,7 @@ test("health reports the pinned runtime without auth or persistence routes", asy
 
   for (const url of ["/api/auth/session", "/api/payments/create-checkout", "/api/evaluations"]) {
     const removed = await server.inject({ method: "GET", url });
-    assert.equal(removed.statusCode, 404, `${url} must not be reachable in the anonymous beta`);
+    assert.equal(removed.statusCode, 404, `${url} must not be reachable`);
   }
   await server.close();
 });
@@ -44,6 +45,7 @@ test("health reports the pinned runtime without auth or persistence routes", asy
 
 test("health fails closed when no validated runtime is available", async () => {
   const server = await buildServer({
+    authRequired: false,
     runtimeFetch: async () =>
       new Response(JSON.stringify({ status: "degraded", configured: false }), {
         status: 200,
@@ -62,6 +64,7 @@ test("preview and production origins can be allowlisted without a wildcard", asy
   process.env.ALLOWED_ORIGIN = "https://evalgpt.com,https://preview.example";
   try {
     const server = await buildServer({
+      authRequired: false,
       runtimeFetch: async () =>
         new Response(JSON.stringify({ status: "ok", configured: true }), {
           status: 200,
@@ -88,31 +91,42 @@ test("preview and production origins can be allowlisted without a wildcard", asy
 });
 
 
-test("rate limiting keys on the App Engine client IP and ignores spoofed forwarding entries", async () => {
+test("evaluation rate limiting keys on the App Engine client IP and ignores spoofed forwarding entries", async () => {
   const previousHops = process.env.TRUST_PROXY_HOPS;
   const previousMax = process.env.RATE_LIMIT_MAX;
   process.env.TRUST_PROXY_HOPS = "2";
   process.env.RATE_LIMIT_MAX = "1";
   try {
-    const server = await buildServer({ runtimeFetch: healthyRuntimeFetch() });
+    const server = await buildServer({ authRequired: false, runtimeFetch: healthyRuntimeFetch() });
     const first = await server.inject({
-      method: "GET",
-      url: "/api/health",
-      headers: { "x-forwarded-for": "6.6.6.6, 203.0.113.5, 169.254.1.1" },
+      method: "POST",
+      url: "/api/prd-judge/evaluate",
+      headers: {
+        "content-type": "multipart/form-data; boundary=x",
+        "x-forwarded-for": "6.6.6.6, 203.0.113.5, 169.254.1.1",
+      },
+      payload: "--x--\r\n",
     });
-    assert.equal(first.statusCode, 200);
+    assert.equal(first.statusCode, 400);
     const spoofedRetry = await server.inject({
-      method: "GET",
-      url: "/api/health",
-      headers: { "x-forwarded-for": "9.9.9.9, 203.0.113.5, 169.254.1.1" },
+      method: "POST",
+      url: "/api/prd-judge/evaluate",
+      headers: { "x-forwarded-for": "6.6.6.6, 203.0.113.5, 169.254.1.1" },
+      payload: "--x--\r\n",
     });
     assert.equal(spoofedRetry.statusCode, 429, "a spoofed leftmost entry must not rotate the rate-limit key");
     const otherClient = await server.inject({
-      method: "GET",
-      url: "/api/health",
-      headers: { "x-forwarded-for": "6.6.6.6, 198.51.100.7, 169.254.1.1" },
+      method: "POST",
+      url: "/api/prd-judge/evaluate",
+      headers: {
+        "content-type": "multipart/form-data; boundary=x",
+        "x-forwarded-for": "6.6.6.6, 198.51.100.7, 169.254.1.1",
+      },
+      payload: "--x--\r\n",
     });
-    assert.equal(otherClient.statusCode, 200, "a different real client must get its own rate-limit budget");
+    assert.equal(otherClient.statusCode, 400, "a different real client must get its own rate-limit budget");
+    const health = await server.inject({ method: "GET", url: "/api/health" });
+    assert.equal(health.statusCode, 200, "health checks must be excluded from route rate limits");
     await server.close();
   } finally {
     if (previousHops === undefined) delete process.env.TRUST_PROXY_HOPS;
@@ -123,21 +137,29 @@ test("rate limiting keys on the App Engine client IP and ignores spoofed forward
 });
 
 
-test("forwarded headers are ignored when proxy trust is not configured", async () => {
+test("forwarded headers are ignored by the evaluation limiter when proxy trust is not configured", async () => {
   const previousMax = process.env.RATE_LIMIT_MAX;
   process.env.RATE_LIMIT_MAX = "1";
   try {
-    const server = await buildServer({ runtimeFetch: healthyRuntimeFetch() });
+    const server = await buildServer({ authRequired: false, runtimeFetch: healthyRuntimeFetch() });
     const first = await server.inject({
-      method: "GET",
-      url: "/api/health",
-      headers: { "x-forwarded-for": "203.0.113.5" },
+      method: "POST",
+      url: "/api/prd-judge/evaluate",
+      headers: {
+        "content-type": "multipart/form-data; boundary=x",
+        "x-forwarded-for": "203.0.113.5",
+      },
+      payload: "--x--\r\n",
     });
-    assert.equal(first.statusCode, 200);
+    assert.equal(first.statusCode, 400);
     const forged = await server.inject({
-      method: "GET",
-      url: "/api/health",
-      headers: { "x-forwarded-for": "198.51.100.7" },
+      method: "POST",
+      url: "/api/prd-judge/evaluate",
+      headers: {
+        "content-type": "multipart/form-data; boundary=x",
+        "x-forwarded-for": "198.51.100.7",
+      },
+      payload: "--x--\r\n",
     });
     assert.equal(forged.statusCode, 429, "an untrusted forwarded header must not bypass the socket-keyed limit");
     await server.close();
@@ -175,7 +197,7 @@ test("the emergency kill switch rejects an evaluation before reading content", a
   const previous = process.env.EVALUATIONS_ENABLED;
   process.env.EVALUATIONS_ENABLED = "false";
   try {
-    const server = await buildServer();
+    const server = await buildServer({ authRequired: false });
     const response = await server.inject({
       method: "POST",
       url: "/api/prd-judge/evaluate",
@@ -227,7 +249,7 @@ test("evaluation progress reaches a real HTTP client before the runtime complete
       headers: { "content-type": "text/event-stream" },
     });
   };
-  const server = await buildServer({ runtimeFetch });
+  const server = await buildServer({ authRequired: false, runtimeFetch });
   await server.listen({ host: "127.0.0.1", port: 0 });
   try {
     const { port } = server.server.address() as AddressInfo;

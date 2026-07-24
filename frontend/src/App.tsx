@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { AccessGate } from "./components/AccessGate";
 import { EvaluationWorkspace } from "./components/EvaluationWorkspace";
 import { JudgeResult } from "./components/JudgeResult";
+import { useWorkspaceAuth } from "./contexts/WorkspaceAuthContext";
 import brandMark from "./assets/brand/8090-mark-dark.png";
 import footerArt from "./assets/brand/letterhead-footer.webp";
 import heroPainting from "./assets/brand/twin-stacks-close.webp";
@@ -28,6 +30,21 @@ const RUBRIC = [
 
 export default function App() {
   const [result, setResult] = useState<JudgeEnvelope | null>(null);
+  const auth = useWorkspaceAuth();
+  const previousIdentity = useRef<string | null>(null);
+
+  useEffect(() => {
+    const currentIdentity = auth.access?.identity.email || null;
+    const identityChanged = Boolean(
+      previousIdentity.current
+      && currentIdentity
+      && previousIdentity.current !== currentIdentity,
+    );
+    if (!auth.everAuthorized || identityChanged) {
+      setResult(null);
+    }
+    previousIdentity.current = currentIdentity;
+  }, [auth.access?.identity.email, auth.everAuthorized]);
 
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -43,6 +60,10 @@ export default function App() {
   };
 
   const showExample = () => revealResult(EXAMPLE_RESULT);
+
+  if (auth.authRequired && !auth.everAuthorized) {
+    return <AccessGate />;
+  }
 
   return (
     <>
@@ -65,6 +86,12 @@ export default function App() {
             {PUBLIC_EVALUATIONS_ENABLED ? "Evaluate a PRD" : "View example"}
           </button>
         </nav>
+        {auth.authRequired && (
+          <div className="session-controls">
+            <span>{auth.access?.identity.email || "8090 Workspace"}</span>
+            <button type="button" onClick={auth.signOut}>Sign out</button>
+          </div>
+        )}
       </header>
 
       <main id="main">
@@ -192,6 +219,7 @@ export default function App() {
             {PUBLIC_EVALUATIONS_ENABLED ? (
               <>
                 <p>EvalGPT processes uploads in memory for the active evaluation and does not write source documents, extracted text, findings, or evidence to application storage, analytics, or browser local storage.</p>
+                <p>Workspace authentication is kept in this tab&apos;s memory. Firestore stores only HMAC-pseudonymous quota counters and short-lived concurrency leases, with a 90-day inactivity TTL.</p>
                 <p>The production subprocessor and exact retention behavior are published only after they are verified for the deployed API account. EvalGPT does not claim provider-side zero retention or no training without that verification.</p>
                 <p>Closing or refreshing the page loses the report unless you export it.</p>
               </>

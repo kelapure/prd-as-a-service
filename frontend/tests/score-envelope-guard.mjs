@@ -115,7 +115,65 @@ try {
   await page.screenshot({ path: resolve(evidenceDir, "v2-envelope-guard-error-desktop.png") });
   await page.unroute(evaluateUrl);
 
-  process.stdout.write(`Layer 3 in-scope zero and v2 envelope guard checks passed. Evidence: ${evidenceDir}\n`);
+  // A stale runtime must not defeat mandatory PRD Score by returning a legacy
+  // unavailable status alongside an otherwise valid Judge result.
+  const unavailableScore = structuredClone(envelope);
+  unavailableScore.prd_score = {
+    status: "unavailable",
+    report: null,
+    validation: { ok: false, warnings: ["score unavailable"] },
+  };
+  await evaluateWithMockedResponse(page, sseComplete(unavailableScore));
+  await page.locator(".form-error").waitFor();
+  assert.match(
+    await page.locator(".form-error").innerText(),
+    /complete Judge and PRD Score report this page requires/,
+  );
+  assert.equal(
+    await page.locator("#judge-result").count(),
+    0,
+    "a legacy unavailable score must never render a Judge-only result",
+  );
+  await page.unroute(evaluateUrl);
+
+  // A validated artifact-gate failure is the one legitimate non-scored state.
+  // It must render explicitly without inventing a partial numeric score.
+  const notScored = structuredClone(envelope);
+  notScored.prd_score.status = "not_scored";
+  notScored.prd_score.report.status = "not_scored";
+  notScored.prd_score.report.artifact_gate = {
+    passed: false,
+    reason: "The supplied artifact is not a PRD.",
+  };
+  notScored.prd_score.report.layer1 = [];
+  notScored.prd_score.report.layer2 = [];
+  notScored.prd_score.report.layer3 = { in_scope: false, scores: [] };
+  notScored.prd_score.report.writing_layer = [];
+  notScored.prd_score.report.integration_subscore = null;
+  notScored.prd_score.report.totals = null;
+  notScored.prd_score.report.lowest_three = [];
+  notScored.prd_score.report.fix_plan_ranked = [];
+  await evaluateWithMockedResponse(page, sseComplete(notScored));
+  await page.locator("#judge-result").waitFor();
+  await page.getByRole("heading", { name: "Draft strength was not scored" }).waitFor();
+  assert.equal(
+    await page.getByText(/The supplied artifact is not a PRD.*No partial score was produced/).count(),
+    1,
+  );
+  await page.unroute(evaluateUrl);
+
+  // Status and arithmetic shape must agree even when both values are
+  // individually valid parts of the v2 schema.
+  const incoherentScore = structuredClone(envelope);
+  incoherentScore.prd_score.status = "complete";
+  incoherentScore.prd_score.report.status = "not_scored";
+  incoherentScore.prd_score.report.totals = null;
+  await evaluateWithMockedResponse(page, sseComplete(incoherentScore));
+  await page.locator(".form-error").waitFor();
+  assert.equal(await page.locator("#judge-result").count(), 0);
+  await page.unroute(evaluateUrl);
+
+  process.stdout.write(`Layer 3, v2 envelope, mandatory PRD Score, and not-scored guards passed. Evidence: ${evidenceDir}\n`);
 } finally {
   if (browser) await browser.close();
   preview.kill("SIGTERM");

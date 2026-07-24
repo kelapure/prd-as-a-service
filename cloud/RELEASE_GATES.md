@@ -1,80 +1,134 @@
-# PRD Judge public-beta release gates
+# EvalGPT release gates
 
-Every checkbox below is blocking for accepting or evaluating user documents unless marked post-beta. Evidence belongs in the release issue or PR.
+Every applicable checkbox is blocking for production traffic. Evidence belongs in the release issue or pull request.
 
-## Fail-closed public information preview
+## Workspace authentication
 
-A frontend-only information preview may be promoted while the live-evaluation gates remain open only when all of these narrower conditions pass:
+- [ ] The Google OAuth consent screen is Internal to the `8090.inc` organization.
+- [ ] Authorized JavaScript origins contain only production, the exact preview, and approved local origins.
+- [ ] Anonymous requests receive `401 auth_required` before multipart parsing.
+- [ ] Expired tokens receive `401 token_expired`.
+- [ ] Gmail, `dfyautomation.io`, missing `hd`, aliases, subdomains, unverified email, wrong audience, wrong issuer, malformed, and forged tokens are denied.
+- [ ] Only verified tokens with `hd=8090.inc`, the configured audience, valid issuer/expiration, verified email, and stable `sub` are admitted.
+- [ ] The ID token exists only in browser memory and never enters local storage, session storage, cookies, analytics, error reporting, or logs.
+- [ ] `GET /api/access` returns only the signed-in work email plus daily/monthly quota status.
+- [ ] Sign-out clears in-memory identity and disables Google automatic account selection.
+- [ ] Token-expiry recovery preserves locally selected files and pasted content.
+- [ ] `/api/health` remains unauthenticated and content-free.
 
-- [ ] The production build omits upload, paste, evaluate, and supporting-document controls because `VITE_PUBLIC_EVALUATIONS_ENABLED` is unset or exactly `false`.
-- [ ] The preview makes the closed state conspicuous and does not imply that a user can submit a document.
-- [ ] The example result is synthetic or explicitly licensed and is labeled as an example.
-- [ ] Public-preview browser tests prove that no document input is present at desktop, tablet, or narrow-mobile widths.
-- [ ] The exact deployed preview passes the required fresh-context Fable review with no unresolved P0/P1.
-- [ ] No runtime, API, routing, secret, storage, authentication, payment, or production-model change is included in the frontend promotion.
-- [ ] The existing frontend version and traffic split are recorded, and the new frontend advances through 10, 50, and 100 percent only after browser and content checks pass.
+## Durable quotas
 
-This exception does not authorize live evaluation. Setting `VITE_PUBLIC_EVALUATIONS_ENABLED=true` remains blocked until every applicable gate below passes.
+- [ ] Firestore Native `(default)` is in `us-central1`.
+- [ ] The gateway service account has `roles/datastore.user` and no unnecessary Firestore role.
+- [ ] User document IDs are HMAC-SHA256 digests of Google `sub`; raw `sub`, email, token, filename, PRD content, findings, and evidence are absent from Firestore.
+- [ ] The HMAC key is supplied from Secret Manager and contains at least 32 random bytes.
+- [ ] Transactions enforce 3 starts per user per UTC day, 10 per calendar month, 50 globally per UTC day, and 2 active global leases across revisions.
+- [ ] Capacity rejections do not consume a start; every admitted start counts once even on cancellation or downstream failure.
+- [ ] Concurrency is released in `finally`, and abandoned leases expire after 12 minutes.
+- [ ] `expiresAt` TTL policies are enabled for `evalgpt_quota_users` and `evalgpt_quota`; inactivity retention is 90 days.
+- [ ] Firestore outage fails closed with `503 quota_store_unavailable`; no per-instance fallback is active when authentication is required.
+- [ ] Limit responses use stable error codes and valid `Retry-After` headers.
+- [ ] Route-specific IP burst limits exclude health checks and do not trust unconfigured forwarding headers.
 
 ## Judgment and evidence
 
 - [ ] The runtime bundle source commit and manifest match the reviewed canonical PRD Judge commit.
-- [ ] The production model won the adjudicated bakeoff: zero false GO, then gate/verdict accuracy, evidence precision, latency, and cost.
-- [ ] No unvalidated fallback model is configured.
+- [ ] The production Judge model won the adjudicated bakeoff: zero false GO, then gate/verdict accuracy, evidence precision, latency, and cost.
+- [ ] No unvalidated Judge fallback model is configured.
 - [ ] Canonical report validator passes 100 percent of release-suite outputs.
 - [ ] Fabricated or unsupported used quotes: zero.
 - [ ] Finding precision is at least 70 percent on the adjudicated release set.
 - [ ] Defect recall is at least 40 percent on the adjudicated release set.
 - [ ] Historical source-status, negation, intent, verdict-consistency, and fabricated-evidence regressions pass.
-- [ ] The public example uses synthetic or explicitly licensed material.
+- [ ] The example result uses synthetic or explicitly licensed material.
 
-## PRD Score draft-strength diagnostic
+## Mandatory PRD Score
 
-- [ ] `PRD_SCORE_ENABLED` remains false until every item in this section passes.
-- [ ] The runtime bundle source commit and manifest match the reviewed canonical `prd_score` commit.
-- [ ] The production PRD Score model is allowlisted and pinned with no automatic fallback.
+- [ ] Runtime health reports `prd_score_enabled: true`.
+- [ ] The PRD Score bundle source commit and manifest match the reviewed canonical `prd_score` commit.
+- [ ] The PRD Score model is independently allowlisted and pinned with no automatic fallback.
 - [ ] The family-separated score suite includes at least 20 artifacts and 20 distinct artifact families.
 - [ ] PRD Score schema and deterministic arithmetic pass 100 percent of release outputs.
 - [ ] Unsupported PRD Score evidence quotations: zero.
 - [ ] Repeat-score groups include at least five families and maximum per-criterion drift is no more than one anchor point.
 - [ ] At least 80 percent of five or more controlled revision pairs improve monotonically.
 - [ ] At least 80 percent of five or more human reviews rate the prioritized fixes useful.
-- [ ] The UI and exports disclose the mode, denominator, writing-layer status, sample size, and historical 70 threshold.
-- [ ] Short-document length normalization counts lines from the authored text for pasted, `.md`, and `.txt` artifacts. PDF and DOCX uploads fall back to extracted-text line counts, and the score suite verifies that basis on at least one PDF and one DOCX artifact.
-- [ ] PRD Score remains visibly secondary and does not alter, average with, or override Judge readiness.
+- [ ] The UI and exports disclose the mode, denominator, writing-layer status, sample size, and historical threshold.
+- [ ] PRD Score remains visibly secondary and never alters, averages with, or overrides Judge readiness.
+- [ ] A real preview evaluation proves Judge and PRD Score both execute.
 
 ## Product, privacy, and security
 
-- [ ] Auth, Stripe, Firestore, saved history, and persistent sharing routes are unreachable.
-- [ ] Source files, extracted text, findings, and evidence do not enter application storage, logs, analytics, browser local storage, or error reporting.
+- [ ] Stripe, profile, saved-history, document-storage, and persistent-sharing routes are unreachable.
+- [ ] Source files, extracted text, findings, evidence, filenames, email addresses, Google subjects, and tokens do not enter application logs, analytics, browser storage, or error reporting.
 - [ ] The production model provider and account retention terms are verified before stronger privacy claims are published.
-- [ ] Cloud Run denies unauthenticated invocation and grants roles/run.invoker only to the gateway service account.
-- [ ] MIME/signature validation, 25 MB combined limit, 200-page limit, five-supporting-file limit, timeouts, cancellation, per-IP rate limits, and daily kill switch pass.
-- [ ] npm audit reports zero known vulnerabilities for frontend and gateway images.
+- [ ] Cloud Run denies unauthenticated invocation of the runtime and grants `roles/run.invoker` only to the gateway service account.
+- [ ] MIME/signature validation, 25 MB combined limit, 200-page limit, five-supporting-file limit, timeouts, cancellation, and kill switch pass.
+- [ ] Frontend and gateway npm audit reports contain zero known production vulnerabilities.
 - [ ] Secret scanning and container scanning pass.
 
 ## UX and accessibility
 
-- [ ] Fable prototype review findings are incorporated.
-- [ ] Fresh-context Fable review runs against real preview pixels and interactions.
-- [ ] No unresolved Fable P0/P1 finding remains; fixes are re-reviewed.
-- [ ] A first-time user can identify verdict, score meaning, and first required fix without opening secondary detail.
-- [ ] At least four of five target users identify the verdict and first required fix within 30 seconds without coaching.
-- [ ] Homepage, file/paste input, supporting evidence, progress, Revise, Go, Wrong artifact, long findings, no findings, validation failure, unsupported file, and narrow mobile states are verified.
+- [x] Fable prototype review approved the sign-in and quota-state plan.
+- [ ] A fresh-context Fable review runs against real preview pixels and interactions.
+- [ ] No unresolved Fable P0/P1 remains; fixes are re-reviewed.
+- [ ] If Fable is unavailable, Opus 5 reviews at xhigh effort and every P0/P1 remains blocking.
+- [ ] The signed-out screen is a focused doorway, not an account dashboard.
+- [ ] Signed-in identity and quota status remain secondary to the evaluation task.
+- [ ] Sign-in, sign-out, denial, expiry, exhausted quota, global limit, capacity busy, quota unavailable, loading, error, no-findings, and realistic result states are verified.
 - [ ] Keyboard flow, visible focus, semantic headings, disclosures, live progress, error announcements, and export controls pass.
 - [ ] WCAG 2.2 AA contrast and 200 percent zoom/reflow pass.
 - [ ] There is one dominant emphasis per screen and no gradients, emoji, decorative dashboards, generic red-card walls, or unbounded corner radii.
 
 ## Reliability and rollout
 
-- [ ] /api/health reports the exact deployed Judge and PRD Score models, bundle versions, source commits, manifests, rubric version, calculation versions, and whether PRD Score is enabled.
+- [ ] `/api/health` reports the exact deployed Judge and PRD Score models, bundles, source commits, manifests, rubric version, calculation versions, PRD Score enabled state, authentication mode, and quota-store health.
 - [ ] Valid-run completion is at least 98 percent.
 - [ ] 5xx responses remain below 2 percent.
 - [ ] p95 completion remains below 120 seconds for a representative 30-page PRD.
-- [ ] Current App Engine versions and traffic splits are recorded as rollback targets.
-- [ ] 10 percent canary observation passes before 50 percent; 50 percent passes before 100 percent.
-- [ ] Roll back immediately on false GO evidence, leaked content, malformed reports, score/report mismatch, or loss of approved-model capacity.
+- [ ] Current App Engine version and gateway revision are recorded as rollback targets.
+- [ ] Auth-capable gateway deploys with enforcement off before the frontend canary.
+- [ ] Authenticated frontend passes 10 percent, then 50 percent, then 100 percent observation windows.
+- [ ] Gateway mandatory authentication is enabled only after the authenticated frontend reaches 100 percent.
+- [ ] Real 8090, external Google, anonymous, quota, multi-revision, Judge, and PRD Score checks pass after cutover.
+- [ ] Rollback never restores anonymous access; evaluation failure uses `EVALUATIONS_ENABLED=false`.
 
-## Certification language
+## Claims
 
-The site and every export remain labeled Public beta. Validated, certified, or generally available language is blocked until a frozen, family-separated test report is produced from the exact deployed judge/model version.
+Do not use “validated,” “certified,” or general-availability language until a frozen, family-separated test report exists for the exact deployed Judge and PRD Score versions.
+
+## 2026-07-24 Workspace cutover evidence
+
+This evidence records the access-control release only. It does not satisfy or
+waive the independent model-certification, target-user, or general-availability
+gates above.
+
+- Fable approved the sign-in and quota plan, then returned `PASS` on the exact
+  zero-traffic `workspace-auth3-20260724` preview with no P0/P1 findings.
+- Automated gateway coverage verifies exact-domain claims, invalid and forged
+  token rejection, authentication before multipart parsing, quota reset and
+  boundary behavior, concurrency, lease expiry, cancellation, store failure,
+  mandatory PRD Score health, and structured `Retry-After` responses.
+- Browser coverage verifies sign-in, sign-out, identity changes, quota display,
+  exhaustion, capacity and store failures, expired-token recovery, preserved
+  local input, keyboard operation, and result clearing.
+- A real `@8090.inc` account reached the authenticated workspace. Google
+  rejected an external Gmail account at the Internal OAuth boundary, and an
+  anonymous upload received `401 auth_required` before multipart parsing.
+- A real end-to-end run returned both a validated Judge report and a mandatory
+  validated PRD Score report. The production runtime and frontend now reject
+  partial or legacy `prd_score.status=unavailable` completions.
+- Firestore inspection showed a 64-character HMAC user key, content-free
+  counters and timestamps, and no email, token, filename, PRD, finding, or
+  evidence fields. Both quota collections have active 90-day TTL policies.
+- At cutover, the recorded rollback targets were App Engine
+  `workspace-auth2-20260724`, gateway
+  `evalgpt-api-gateway-00009-zt7`, and runtime
+  `prd-judge-runtime-real-demo-00012-dwq`. Rollback must disable evaluations
+  rather than restore anonymous access.
+- The final hardened release serves App Engine
+  `workspace-auth4-20260724`, gateway
+  `evalgpt-api-gateway-00010-px5`, and runtime
+  `prd-judge-runtime-real-demo-00013-6q2` at 100 percent traffic.
+- Health reported authentication `required`, quota store `ok`, mandatory PRD
+  Score enabled, and `claude-sonnet-5` for both instruments.

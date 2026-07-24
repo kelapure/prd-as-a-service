@@ -24,7 +24,14 @@ const children = [
   }),
   spawn("node", ["dist/server.js"], {
     cwd: resolve(appRoot, "api-gateway"),
-    env: { ...process.env, PORT: "8081", PRD_JUDGE_RUNTIME_URL: "http://127.0.0.1:8093", ALLOWED_ORIGIN: "http://127.0.0.1:4175", LOG_LEVEL: "error" },
+    env: {
+      ...process.env,
+      PORT: "8081",
+      PRD_JUDGE_RUNTIME_URL: "http://127.0.0.1:8093",
+      ALLOWED_ORIGIN: "http://127.0.0.1:4175",
+      WORKSPACE_AUTH_REQUIRED: "false",
+      LOG_LEVEL: "error",
+    },
     stdio: ["ignore", "pipe", "pipe"],
   }),
   spawn(resolve(frontendRoot, "node_modules/.bin/vite"), ["preview", "--host", "127.0.0.1", "--port", "4175"], {

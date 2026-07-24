@@ -35,7 +35,12 @@ from app.judge import (
     _score_system_prompt,
     _reference_text,
 )
-from app.models import EXPECTED_SCORE_CRITERION_IDS, JudgeReport, RawPrdScoreReport
+from app.models import (
+    EXPECTED_SCORE_CRITERION_IDS,
+    JudgeReport,
+    RawPrdScoreReport,
+    RubricDiagnostic,
+)
 
 
 class BundleTests(unittest.TestCase):
@@ -84,7 +89,7 @@ class BundleTests(unittest.TestCase):
             self.assertEqual(config.model, "candidate-model")
             self.assertTrue(config.score_enabled)
 
-    def test_model_mode_can_keep_unvalidated_prd_score_disabled(self) -> None:
+    def test_model_mode_rejects_disabled_prd_score(self) -> None:
         with patch.dict(os.environ, {
             "JUDGE_RUNTIME_MODE": "model",
             "PRD_JUDGE_MODEL": "candidate-model",
@@ -93,9 +98,8 @@ class BundleTests(unittest.TestCase):
             "PRD_JUDGE_EXPECTED_MANIFEST_SHA256": BUNDLE.manifest_sha256,
             "PRD_SCORE_ENABLED": "false",
         }, clear=True):
-            config = RuntimeConfig.from_environment()
-            self.assertFalse(config.score_enabled)
-            self.assertEqual(config.score_model, "disabled")
+            with self.assertRaisesRegex(EvaluationError, "mandatory"):
+                RuntimeConfig.from_environment()
 
     def test_direct_runtime_config_fails_closed_for_prd_score(self) -> None:
         config = RuntimeConfig(
@@ -160,6 +164,21 @@ class StructuredOutputTests(unittest.TestCase):
         result = asyncio.run(judge._run_judge_model([document], {}))
         self.assertEqual(result["verdict"], "REVISE")
         self.assertIs(messages.kwargs["output_format"], JudgeReport)
+        self.assertEqual(messages.kwargs["thinking"], {"type": "disabled"})
+        self.assertEqual(messages.kwargs["max_tokens"], 32_000)
+
+    def test_rubric_counts_are_derived_from_criterion_statuses(self) -> None:
+        document = extract_pasted_text(
+            "# PRD\n" + "A measurable workflow requirement. " * 10
+        )
+        payload = PrdJudge._fixture_rubric(document).model_dump(mode="json")
+        payload["pass_count"] = 12
+        payload["fail_count"] = 0
+
+        rubric = RubricDiagnostic.model_validate(payload)
+
+        self.assertEqual(rubric.pass_count, 5)
+        self.assertEqual(rubric.fail_count, 7)
 
     def test_score_semantic_gaps_reach_the_repair_flow(self) -> None:
         primary = extract_pasted_text(
@@ -266,6 +285,28 @@ class ExtractionTests(unittest.TestCase):
             finalized, document.evidence_text, document.evidence_text
         )
         self.assertTrue(validation["ok"], validation.get("errors"))
+
+    def test_failed_score_artifact_gate_returns_a_valid_not_scored_report(self) -> None:
+        document = extract_pasted_text(
+            "# Architecture note\n" + "A system boundary description. " * 10
+        )
+        raw = PrdJudge._fixture_prd_score(document)
+        raw["artifact_gate"]["pass"] = False
+        raw["artifact_gate"]["reason"] = "The supplied artifact is not a PRD."
+
+        finalized = SCORE_TOOLS.finalize(raw, document.line_count_text)
+        validation = SCORE_TOOLS.validate(
+            finalized,
+            document.evidence_text,
+            document.line_count_text,
+        )
+
+        self.assertTrue(validation["ok"], validation.get("errors"))
+        self.assertEqual(finalized["status"], "not_scored")
+        self.assertIsNone(finalized["totals"])
+        self.assertEqual(finalized["layer1"], [])
+        self.assertEqual(finalized["layer2"], [])
+        self.assertEqual(finalized["writing_layer"], [])
 
     def test_fixture_evidence_excerpt_does_not_truncate_mid_word(self) -> None:
         source = (
@@ -513,7 +554,7 @@ class ConcurrentEvaluationTests(unittest.TestCase):
         self.assertTrue(observed["rubric"])
         self.assertTrue(observed["score"])
 
-    def test_score_failure_does_not_suppress_the_authoritative_judgment(self) -> None:
+    def test_score_validation_failure_fails_the_complete_evaluation(self) -> None:
         primary = self._primary()
 
         async def scenario():
@@ -540,12 +581,10 @@ class ConcurrentEvaluationTests(unittest.TestCase):
             finally:
                 await judge.close()
 
-        envelope = asyncio.run(scenario())
-        self.assertEqual(envelope.report.verdict, "REVISE")
-        self.assertEqual(envelope.prd_score.status, "unavailable")
-        self.assertIsNone(envelope.prd_score.report)
+        with self.assertRaisesRegex(EvaluationError, "did not produce a valid report"):
+            asyncio.run(scenario())
 
-    def test_score_api_failure_does_not_suppress_the_authoritative_judgment(self) -> None:
+    def test_score_api_failure_fails_the_complete_evaluation(self) -> None:
         primary = self._primary()
         phases: list[str] = []
 
@@ -576,17 +615,15 @@ class ConcurrentEvaluationTests(unittest.TestCase):
                 await judge.close()
 
         with self.assertLogs("evalgpt.prd_score", level="WARNING") as logs:
-            envelope = asyncio.run(scenario())
-        self.assertEqual(envelope.report.verdict, "REVISE")
-        self.assertEqual(envelope.prd_score.status, "unavailable")
-        self.assertIsNone(envelope.prd_score.report)
+            with self.assertRaisesRegex(EvaluationError, "did not produce a valid report"):
+                asyncio.run(scenario())
         self.assertIn("scoring_draft", phases)
         self.assertTrue(
             any("APIConnectionError" in message for message in logs.output),
             logs.output,
         )
 
-    def test_slow_score_model_degrades_to_unavailable_within_its_time_budget(self) -> None:
+    def test_slow_score_model_fails_closed_within_its_time_budget(self) -> None:
         primary = self._primary()
 
         async def scenario():
@@ -626,16 +663,14 @@ class ConcurrentEvaluationTests(unittest.TestCase):
                 await judge.close()
 
         with self.assertLogs("evalgpt.prd_score", level="WARNING") as logs:
-            envelope = asyncio.run(scenario())
-        self.assertEqual(envelope.report.verdict, "REVISE")
-        self.assertEqual(envelope.prd_score.status, "unavailable")
-        self.assertIsNone(envelope.prd_score.report)
+            with self.assertRaisesRegex(EvaluationError, "did not produce a valid report"):
+                asyncio.run(scenario())
         self.assertTrue(
             any("TimeoutError" in message for message in logs.output),
             logs.output,
         )
 
-    def test_disabled_score_does_not_call_score_model_or_block_judgment(self) -> None:
+    def test_direct_disabled_score_configuration_fails_closed(self) -> None:
         primary = self._primary()
         phases: list[str] = []
 
@@ -671,10 +706,8 @@ class ConcurrentEvaluationTests(unittest.TestCase):
             finally:
                 await judge.close()
 
-        envelope = asyncio.run(scenario())
-        self.assertEqual(envelope.report.verdict, "REVISE")
-        self.assertEqual(envelope.prd_score.status, "unavailable")
-        self.assertIn("not enabled", envelope.prd_score.validation["warnings"][0])
+        with self.assertRaisesRegex(EvaluationError, "mandatory"):
+            asyncio.run(scenario())
         self.assertNotIn("scoring_draft", phases)
 
     def test_rubric_failure_still_raises_a_plain_evaluation_error(self) -> None:

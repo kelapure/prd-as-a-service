@@ -1,14 +1,16 @@
 # EvalGPT PRD Judge runtime
 
-The runtime is an internal, stateless service for the EvalGPT public beta. It loads
+The runtime is an internal, stateless service for EvalGPT. It loads
 integrity-checked snapshots exported from the canonical `prd_judge` and `prd_score`
 agents, extracts PDF/DOCX/Markdown/text in memory, and runs PRD Judge, PRD Score, and
 the secondary PRD Eval Rubric v2 concurrently in isolated model contexts. Every Judge,
 rubric, and PRD Score model call, including the repair calls, requires schema-enforced
 structured output derived from the report models, and the rubric diagnostic must
 contain exactly the twelve criteria C1-C12. A Judge or rubric response that does not
-match the required structure fails the run with a retryable error; a nonconforming
-PRD Score response follows the fail-soft path described below. The runtime validates
+match the required structure fails the run with a retryable error. PRD Score is
+mandatory in every deployed evaluation, so a missing, unavailable, or nonconforming
+PRD Score report also fails the complete run instead of returning a partial result.
+The runtime validates
 quotes against the supplied sources and applies each instrument's deterministic
 calculation only after the corresponding report is valid. PRD Score never changes or
 mathematically combines with the Judge verdict or readiness score.
@@ -34,29 +36,28 @@ export PRD_JUDGE_MODEL=<validated-model-id>
 export PRD_JUDGE_ALLOWED_MODELS=<same-validated-model-id>
 export PRD_JUDGE_EXPECTED_SOURCE_COMMIT=<reviewed-canonical-commit>
 export PRD_JUDGE_EXPECTED_MANIFEST_SHA256=<reviewed-runtime-manifest>
-export PRD_SCORE_ENABLED=false
-uvicorn app.main:app --port 8092
-```
-
-PRD Score is feature-gated separately because its checked-in release candidate is
-blocked until the family-separated validation metrics pass. After that gate passes,
-configure the exact approved pair:
-
-```bash
 export PRD_SCORE_ENABLED=true
 export PRD_SCORE_MODEL=<validated-score-model-id>
 export PRD_SCORE_ALLOWED_MODELS=<same-validated-score-model-id>
 export PRD_SCORE_EXPECTED_SOURCE_COMMIT=<reviewed-canonical-score-commit>
 export PRD_SCORE_EXPECTED_MANIFEST_SHA256=<reviewed-score-runtime-manifest>
+uvicorn app.main:app --port 8092
 ```
+
+The runtime keeps an explicit PRD Score feature flag for local isolation and
+diagnostics, but the EvalGPT gateway treats a runtime with
+`prd_score_enabled=false` as unavailable. Every deployed release therefore
+configures the exact approved Judge and PRD Score pair.
 
 There is no automatic fallback model. A missing or mismatched commit or manifest pin
 for any enabled instrument makes `/health` degrade and blocks evaluation. A
-run-specific PRD Score validation failure is fail-soft: the authoritative Judge report
-still returns and `prd_score.status` is `unavailable`. Cloud Run should require IAM,
-and the optional `INTERNAL_SERVICE_TOKEN` provides an additional gateway-to-runtime
-check. `/health` exposes the exact score bundle, model, calculation version, and
-enabled state without including document content.
+run-specific PRD Score validation failure returns a retryable evaluation error; the
+gateway and frontend reject an incomplete or legacy `unavailable` score envelope.
+For Claude Sonnet 5, extended thinking is disabled on schema-constrained calls so the
+full output budget remains available for the validated JSON report. Cloud Run should
+require IAM, and the optional `INTERNAL_SERVICE_TOKEN` provides an additional
+gateway-to-runtime check. `/health` exposes the exact score bundle, model, calculation
+version, and enabled state without including document content.
 
 ## Refreshing the canonical bundles
 
