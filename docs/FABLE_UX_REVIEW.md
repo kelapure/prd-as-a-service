@@ -2,7 +2,7 @@
 
 Date: 2026-07-23
 Model: `claude-fable-5`, xhigh effort
-Status: local and deployed-preview reviews passed. The overall public-beta release remains blocked by the non-UX certification gates.
+Status: the reviewed frontend build passed local and deployed-preview review. The exact final backend-preview rerun is pending because Fable access hit its session limit; public-beta launch remains blocked.
 
 ## Pass 1: prototype and information architecture
 
@@ -110,7 +110,7 @@ The final deployed review used the zero-traffic preview:
   `prd-score-2775dbb-20260723-dot-dompe-dev-439304.uc.r.appspot.com`
 - API:
   `prd-score-2775dbb-20260723-dot-api-dot-dompe-dev-439304.uc.r.appspot.com`
-- Runtime revision: `prd-judge-runtime-preview-00005-5tg`
+- Runtime revision: `prd-judge-runtime-preview-00006-fcr`
 - Viewports: 1440-pixel desktop, 834-pixel tablet, and 375-to-390-pixel mobile
 - Canonical PRD Score source:
   `20225956d8659f77fb15e0ee7be53b105f9f2944`
@@ -132,21 +132,35 @@ Fable verified:
 - the responsive, long-finding, loading, error, no-findings, unavailable, and
   not-scored states remain credible.
 
-A final exact-build review followed the no-mistakes fixes in frontend commit
-`2775dbb`. It confirmed that the loading stepper now derives its columns from
-visible phases, the shared score-row component preserves the reviewed hierarchy
-at every viewport, and the independent PRD Score timeout cannot consume the
-Judge deadline. The deployed pass returned `PASS` and the exact statement
-`No blocking Fable findings.` It left two product-polish opportunities that do
-not block stakeholder review: render `summary` evidence as an explicitly
+A final exact-frontend review followed the no-mistakes fixes in frontend
+commit `2775dbb`. It confirmed that the loading stepper now derives its columns
+from visible phases, the shared score-row component preserves the reviewed
+hierarchy at every viewport, and the independent PRD Score timeout cannot
+consume the Judge deadline. The deployed pass returned `PASS` and the exact
+statement `No blocking Fable findings.` It left two product-polish opportunities
+that do not block stakeholder review: render `summary` evidence as an explicitly
 unquoted paraphrase, and include human-readable PRD Score dimension names in the
 JSON envelope. Sticky-header and skip-link artifacts were limited to stitched
 capture mechanics rather than the live interface.
 
+The later backend-only correctness commit `f92cbfc` changed authored-line
+counting for short-document normalization, deduplicated fail-soft score
+construction, and asserted criterion IDs against the bundled validator. It did
+not change frontend code. Runtime revision
+`prd-judge-runtime-preview-00006-fcr` was deployed to the same zero-traffic
+preview, and the complete browser capture passed again with unchanged fixture
+math, hierarchy, exports, and edge states. The required fresh-context Fable
+rerun was attempted but could not start because Fable's Claude session quota was
+exhausted until 2:50 a.m. America/Los_Angeles. Consistent with the release rule,
+that browser evidence is not treated as a substitute: exact-final-preview Fable
+approval and public launch remain blocked until the rerun completes.
+
 ## Scope
 
 The Fable record now covers the PRD Judge public-beta interface and the complete
-PRD Score integration through frontend commit `2775dbb`, including the exact
-deployed preview and browser exports. It does not certify the fixture model or
+PRD Score integration through frontend commit `2775dbb`, including the
+reviewed frontend preview and browser exports. Backend integration commit
+`f92cbfc` has refreshed browser evidence but still requires the pending Fable
+rerun described above. This record does not certify the fixture model or
 waive the independent PRD Score release gate, frozen model suite, privacy
 verification, or target-user comprehension gate.
