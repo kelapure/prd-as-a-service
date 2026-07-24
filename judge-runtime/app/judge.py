@@ -11,7 +11,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from anthropic import AsyncAnthropic, transform_schema
+from anthropic import AsyncAnthropic
 from pydantic import ValidationError
 
 from .bundle import (
@@ -41,15 +41,6 @@ ALLOWED_MODEL_ENV = "PRD_JUDGE_ALLOWED_MODELS"
 SCORE_MODEL_ENV = "PRD_SCORE_MODEL"
 SCORE_ALLOWED_MODEL_ENV = "PRD_SCORE_ALLOWED_MODELS"
 SCORE_ENABLED_ENV = "PRD_SCORE_ENABLED"
-JUDGE_OUTPUT_CONFIG: dict[str, Any] = {
-    "format": {"type": "json_schema", "schema": transform_schema(JudgeReport)}
-}
-RUBRIC_OUTPUT_CONFIG: dict[str, Any] = {
-    "format": {"type": "json_schema", "schema": transform_schema(RubricDiagnostic)}
-}
-SCORE_OUTPUT_CONFIG: dict[str, Any] = {
-    "format": {"type": "json_schema", "schema": transform_schema(RawPrdScoreReport)}
-}
 Progress = Callable[[str, str], None]
 logger = logging.getLogger("evalgpt.prd_score")
 
@@ -142,21 +133,13 @@ class RuntimeConfig:
         )
 
 
-def _structured_object(message: Any, label: str) -> dict[str, Any]:
-    text = "".join(
-        block.text for block in message.content if getattr(block, "type", "") == "text"
-    )
-    try:
-        value = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise EvaluationError(
-            f"The approved {label} model did not return the required structured output"
-        ) from exc
-    if not isinstance(value, dict):
+def _parsed_model(message: Any, expected_type: type[Any], label: str) -> Any:
+    parsed = getattr(message, "parsed_output", None)
+    if not isinstance(parsed, expected_type):
         raise EvaluationError(
             f"The approved {label} model did not return the required structured output"
         )
-    return value
+    return parsed
 
 
 def _reference_text(documents: list[ExtractedDocument]) -> str:
@@ -476,39 +459,33 @@ class PrdJudge:
         self, documents: list[ExtractedDocument], preflight: dict[str, Any]
     ) -> dict[str, Any]:
         assert self.client is not None
-        message = await self.client.messages.create(
+        message = await self.client.messages.parse(
             model=self.config.model,
             max_tokens=16_000,
             system=_judge_system_prompt(),
             messages=[{"role": "user", "content": _artifact_content(documents, preflight)}],
-            output_config=JUDGE_OUTPUT_CONFIG,
+            output_format=JudgeReport,
         )
-        return _structured_object(message, "PRD Judge")
+        return _parsed_model(message, JudgeReport, "PRD Judge").model_dump(mode="json")
 
     async def _run_rubric_model(
         self, documents: list[ExtractedDocument], preflight: dict[str, Any]
     ) -> RubricDiagnostic:
         assert self.client is not None
-        message = await self.client.messages.create(
+        message = await self.client.messages.parse(
             model=self.config.model,
             max_tokens=12_000,
             system=_rubric_system_prompt(),
             messages=[{"role": "user", "content": _artifact_content(documents, preflight)}],
-            output_config=RUBRIC_OUTPUT_CONFIG,
+            output_format=RubricDiagnostic,
         )
-        data = _structured_object(message, "PRD Eval Rubric")
-        try:
-            return RubricDiagnostic.model_validate(data)
-        except ValidationError as exc:
-            raise EvaluationError(
-                "The approved PRD Eval Rubric model did not return a valid rubric diagnostic"
-            ) from exc
+        return _parsed_model(message, RubricDiagnostic, "PRD Eval Rubric")
 
     async def _run_score_model(
         self, documents: list[ExtractedDocument], preflight: dict[str, Any]
     ) -> dict[str, Any]:
         assert self.client is not None
-        message = await self.client.messages.create(
+        message = await self.client.messages.parse(
             model=self.config.score_model,
             max_tokens=20_000,
             system=_score_system_prompt(),
@@ -518,9 +495,11 @@ class PrdJudge:
                     "content": _artifact_content(documents, preflight),
                 }
             ],
-            output_config=SCORE_OUTPUT_CONFIG,
+            output_format=RawPrdScoreReport,
         )
-        return _structured_object(message, "PRD Score")
+        return _parsed_model(message, RawPrdScoreReport, "PRD Score").model_dump(
+            mode="json", by_alias=True
+        )
 
     async def _validate_score_or_repair(
         self,
@@ -564,14 +543,16 @@ class PrdJudge:
         content = _artifact_content(documents, preflight) + [
             {"type": "text", "text": repair_prompt}
         ]
-        message = await self.client.messages.create(
+        message = await self.client.messages.parse(
             model=self.config.score_model,
             max_tokens=20_000,
             system=_score_system_prompt(),
             messages=[{"role": "user", "content": content}],
-            output_config=SCORE_OUTPUT_CONFIG,
+            output_format=RawPrdScoreReport,
         )
-        repaired = _structured_object(message, "PRD Score repair")
+        repaired = _parsed_model(
+            message, RawPrdScoreReport, "PRD Score repair"
+        ).model_dump(mode="json", by_alias=True)
         try:
             raw = RawPrdScoreReport.model_validate(repaired)
             finalized = SCORE_TOOLS.finalize(
@@ -619,14 +600,16 @@ class PrdJudge:
             f"CANDIDATE REPORT\n{json.dumps(report, ensure_ascii=False)}"
         )
         content = _artifact_content(documents, preflight) + [{"type": "text", "text": repair_prompt}]
-        message = await self.client.messages.create(
+        message = await self.client.messages.parse(
             model=self.config.model,
             max_tokens=16_000,
             system=_judge_system_prompt(),
             messages=[{"role": "user", "content": content}],
-            output_config=JUDGE_OUTPUT_CONFIG,
+            output_format=JudgeReport,
         )
-        repaired = _structured_object(message, "PRD Judge repair")
+        repaired = _parsed_model(
+            message, JudgeReport, "PRD Judge repair"
+        ).model_dump(mode="json")
         repaired_validation = TOOLS.validate(repaired, reference_text)
         try:
             JudgeReport.model_validate(repaired)
