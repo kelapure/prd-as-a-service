@@ -26,6 +26,7 @@ Every checkbox is blocking unless marked post-beta. Evidence belongs in the rele
 - [ ] At least 80 percent of five or more controlled revision pairs improve monotonically.
 - [ ] At least 80 percent of five or more human reviews rate the prioritized fixes useful.
 - [ ] The UI and exports disclose the mode, denominator, writing-layer status, sample size, and historical 70 threshold.
+- [ ] Short-document length normalization counts lines from the authored text for pasted, `.md`, and `.txt` artifacts. PDF and DOCX uploads fall back to extracted-text line counts, and the score suite verifies that basis on at least one PDF and one DOCX artifact.
 - [ ] PRD Score remains visibly secondary and does not alter, average with, or override Judge readiness.
 
 ## Product, privacy, and security

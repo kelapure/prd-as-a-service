@@ -174,6 +174,13 @@ class CanonicalScoreTools:
     def calculation_version(self) -> str:
         return str(self._scorer.CALCULATION_VERSION)
 
+    @property
+    def expected_criterion_ids(self) -> dict[str, list[str]]:
+        return {
+            key: list(values)
+            for key, values in self._validator.EXPECTED_IDS.items()
+        }
+
     def finalize(
         self, report: dict[str, Any], primary_text: str
     ) -> dict[str, Any]:

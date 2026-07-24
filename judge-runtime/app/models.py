@@ -152,6 +152,13 @@ class ScoreIntegrationContext(BaseModel):
     customer_named_missing_system: bool
 
 
+EXPECTED_SCORE_CRITERION_IDS: dict[str, list[str]] = {
+    "layer1": [f"C{number}" for number in range(1, 12)],
+    "layer2": [f"M{number}" for number in range(1, 10)],
+    "writing_layer": [f"W{number}" for number in range(1, 5)],
+}
+
+
 class RawPrdScoreReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
     instrument: Literal["prd-score"] = "prd-score"
@@ -173,12 +180,7 @@ class RawPrdScoreReport(BaseModel):
             if self.layer1 or self.layer2 or self.layer3.scores or self.writing_layer:
                 raise ValueError("a failed artifact gate cannot emit partial scores")
             return self
-        expected = {
-            "layer1": [f"C{number}" for number in range(1, 12)],
-            "layer2": [f"M{number}" for number in range(1, 10)],
-            "writing_layer": [f"W{number}" for number in range(1, 5)],
-        }
-        for field, identifiers in expected.items():
+        for field, identifiers in EXPECTED_SCORE_CRITERION_IDS.items():
             actual = [row.id for row in getattr(self, field)]
             if actual != identifiers:
                 raise ValueError(f"{field} must contain {identifiers} in order")

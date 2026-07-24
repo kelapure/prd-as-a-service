@@ -33,7 +33,7 @@ from app.judge import (
     _score_system_prompt,
     _reference_text,
 )
-from app.models import RawPrdScoreReport
+from app.models import EXPECTED_SCORE_CRITERION_IDS, RawPrdScoreReport
 
 
 class BundleTests(unittest.TestCase):
@@ -48,6 +48,11 @@ class BundleTests(unittest.TestCase):
             SCORE_BUNDLE.schema_version, "prd-score-runtime-bundle/v1"
         )
         self.assertEqual(SCORE_BUNDLE.score_version, "prd-score-public-beta-v1")
+
+    def test_score_schema_criterion_sets_match_the_bundled_validator(self) -> None:
+        self.assertEqual(
+            EXPECTED_SCORE_CRITERION_IDS, SCORE_TOOLS.expected_criterion_ids
+        )
 
     def test_model_mode_requires_exact_bundle_pins(self) -> None:
         with patch.dict(os.environ, {
@@ -108,6 +113,15 @@ class ExtractionTests(unittest.TestCase):
         self.assertIn("[Source: Pasted PRD]", document.text)
         self.assertNotIn("[Source: Pasted PRD]", document.evidence_text)
         self.assertNotIn("[Source: Pasted PRD]", _reference_text([document]))
+
+    def test_line_count_basis_is_the_authored_text_for_text_inputs(self) -> None:
+        pasted = "\n# Product requirements\n" + "A measurable workflow requirement. " * 10 + "\n\n"
+        document = extract_pasted_text(pasted)
+        self.assertEqual(document.line_count_text, pasted)
+
+        markdown = "# Product requirements\n" + "A measurable workflow requirement.\n" * 5 + "\n\n"
+        document = extract_document("requirements.md", markdown.encode())
+        self.assertEqual(document.line_count_text, markdown)
 
     def test_legacy_doc_is_rejected(self) -> None:
         with self.assertRaisesRegex(InputError, "legacy .doc"):
@@ -194,6 +208,7 @@ class ExtractionTests(unittest.TestCase):
         self.assertIn("Handling time | Under 60 seconds", document.text)
         self.assertNotIn("[Table 1]", document.evidence_text)
         self.assertIn("Handling time", document.evidence_text)
+        self.assertEqual(document.line_count_text, document.evidence_text)
 
 
 class ImageBoundTests(unittest.TestCase):
@@ -299,6 +314,41 @@ class ConcurrentEvaluationTests(unittest.TestCase):
         self.assertIsNotNone(envelope.prd_score.report)
         self.assertEqual(envelope.prd_score.report.totals["denominator"], 100)
         self.assertFalse(envelope.validation["model_fallback_used"])
+
+    def test_score_length_normalization_counts_authored_lines(self) -> None:
+        primary = extract_pasted_text(
+            "# PRD\n" + "A measurable workflow requirement. " * 10 + "\n" * 120
+        )
+
+        async def scenario():
+            judge = self._judge()
+
+            async def fake_judge(documents, preflight):
+                return PrdJudge._fixture_report(primary)
+
+            async def fake_rubric(documents, preflight):
+                return PrdJudge._fixture_rubric(primary)
+
+            async def fake_score(documents, preflight):
+                return PrdJudge._fixture_prd_score(primary)
+
+            try:
+                with (
+                    patch.object(judge, "_run_judge_model", fake_judge),
+                    patch.object(judge, "_run_rubric_model", fake_rubric),
+                    patch.object(judge, "_run_score_model", fake_score),
+                ):
+                    return await judge.evaluate(
+                        [primary], lambda phase, message: None
+                    )
+            finally:
+                await judge.close()
+
+        envelope = asyncio.run(scenario())
+        self.assertEqual(envelope.prd_score.status, "complete")
+        normalization = envelope.prd_score.report.length_normalization
+        self.assertGreaterEqual(normalization["line_count"], 100)
+        self.assertFalse(normalization["applied"])
 
     def test_cancellation_reaches_all_model_calls(self) -> None:
         primary = self._primary()

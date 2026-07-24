@@ -46,6 +46,7 @@ class ExtractedDocument:
     file_type: str
     text: str
     evidence_text: str = ""
+    line_count_text: str = ""
     page_count: int | None = None
     sections: list[str] = field(default_factory=list)
     images: list[ExtractedImage] = field(default_factory=list)
@@ -114,6 +115,7 @@ def extract_pasted_text(text: str) -> ExtractedDocument:
         file_type="text/plain",
         text="[Source: Pasted PRD]\n" + normalized,
         evidence_text=normalized,
+        line_count_text=text,
         sections=_headings(normalized),
     )
 
@@ -132,6 +134,7 @@ def _extract_text(name: str, data: bytes, extension: str) -> ExtractedDocument:
         file_type="text/markdown" if extension == ".md" else "text/plain",
         text=f"[Source: {name}]\n{text.strip()}",
         evidence_text=text.strip(),
+        line_count_text=text,
         sections=_headings(text),
     )
 
@@ -179,11 +182,13 @@ def _extract_pdf(name: str, data: bytes) -> ExtractedDocument:
         raise InputError(f"{name} has no readable text or renderable pages")
     if len(images) == MAX_IMAGES:
         warnings.append("Figure-aware review was limited to the first 12 relevant page images.")
+    evidence = "\n\n".join(evidence_pages)
     return ExtractedDocument(
         name=name,
         file_type="application/pdf",
         text=combined,
-        evidence_text="\n\n".join(evidence_pages),
+        evidence_text=evidence,
+        line_count_text=evidence,
         page_count=document.page_count,
         sections=_headings(combined),
         images=images,
@@ -271,11 +276,13 @@ def _extract_docx(name: str, data: bytes) -> ExtractedDocument:
         raise InputError(f"Extracted text from {name} exceeds {MAX_TEXT_CHARS:,} characters")
     if len(combined) < 50 and not images:
         raise InputError(f"{name} does not contain enough readable PRD content")
+    evidence = "\n".join(evidence_blocks)
     return ExtractedDocument(
         name=name,
         file_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         text=combined,
-        evidence_text="\n".join(evidence_blocks),
+        evidence_text=evidence,
+        line_count_text=evidence,
         page_count=declared_pages,
         sections=sections,
         images=images,

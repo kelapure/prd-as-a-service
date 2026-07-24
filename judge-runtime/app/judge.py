@@ -160,6 +160,19 @@ def _reference_text(documents: list[ExtractedDocument]) -> str:
     return "\n\n".join(document.evidence_text for document in documents)
 
 
+def _unavailable_prd_score(warning: str) -> PrdScoreDiagnostic:
+    return PrdScoreDiagnostic(
+        status="unavailable",
+        report=None,
+        validation={
+            "ok": False,
+            "warnings": [warning],
+            "used_quotes_verified": False,
+            "arithmetic_verified": False,
+        },
+    )
+
+
 def _fixture_excerpt(value: str, limit: int = 160) -> str:
     normalized = re.sub(r"\s+", " ", value).strip()
     if len(normalized) <= limit:
@@ -340,17 +353,8 @@ class PrdJudge:
 
         async def score_pipeline() -> PrdScoreDiagnostic:
             if not self.config.score_enabled:
-                return PrdScoreDiagnostic(
-                    status="unavailable",
-                    report=None,
-                    validation={
-                        "ok": False,
-                        "warnings": [
-                            "The draft-strength diagnostic is not enabled for this release; the readiness judgment is unaffected."
-                        ],
-                        "used_quotes_verified": False,
-                        "arithmetic_verified": False,
-                    },
+                return _unavailable_prd_score(
+                    "The draft-strength diagnostic is not enabled for this release; the readiness judgment is unaffected."
                 )
 
             async def score_within_budget() -> PrdScoreDiagnostic:
@@ -363,7 +367,7 @@ class PrdJudge:
                     documents,
                     preflight,
                     reference_text,
-                    primary.evidence_text,
+                    primary.line_count_text or primary.evidence_text,
                 )
                 status = (
                     "complete"
@@ -386,17 +390,8 @@ class PrdJudge:
                 logger.warning(
                     "PRD Score failed safely: %s", type(exc).__name__
                 )
-                return PrdScoreDiagnostic(
-                    status="unavailable",
-                    report=None,
-                    validation={
-                        "ok": False,
-                        "warnings": [
-                            "The draft-strength diagnostic was unavailable; the readiness judgment is unaffected."
-                        ],
-                        "used_quotes_verified": False,
-                        "arithmetic_verified": False,
-                    },
+                return _unavailable_prd_score(
+                    "The draft-strength diagnostic was unavailable; the readiness judgment is unaffected."
                 )
 
         judge_task = asyncio.create_task(judge_pipeline())
