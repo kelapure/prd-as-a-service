@@ -20,6 +20,7 @@ from app.bundle import BUNDLE, RUBRIC_SHA256, SCORE_BUNDLE, SCORE_TOOLS, TOOLS
 from app.extraction import (
     MAX_IMAGE_DIMENSION,
     ExtractedDocument,
+    ExtractedImage,
     InputError,
     extract_document,
     extract_pasted_text,
@@ -228,6 +229,139 @@ class StructuredOutputTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertTrue(validation["ok"], validation.get("errors"))
         self.assertEqual(report.status, "scored")
+
+    def test_repeated_unsupported_judge_quote_becomes_explicitly_missing(self) -> None:
+        primary = extract_pasted_text(
+            "# PRD\n" + "A measurable workflow requirement. " * 10
+        )
+        invalid = PrdJudge._fixture_report(primary)
+        invalid["findings"][0]["evidence"][0]["quote"] = (
+            "This paraphrase does not appear in the supplied artifact."
+        )
+        repaired = JudgeReport.model_validate(invalid)
+        messages = SimpleNamespace()
+
+        async def parse(**kwargs):
+            return SimpleNamespace(parsed_output=repaired)
+
+        messages.parse = parse
+
+        async def scenario():
+            judge = PrdJudge(
+                RuntimeConfig(
+                    mode="fixture",
+                    model="candidate-model",
+                    allowed_models=frozenset({"candidate-model"}),
+                )
+            )
+            judge.config = RuntimeConfig(
+                mode="model",
+                model="candidate-model",
+                allowed_models=frozenset({"candidate-model"}),
+                score_enabled=True,
+                score_model="candidate-model",
+                score_allowed_models=frozenset({"candidate-model"}),
+            )
+            judge.client = SimpleNamespace(messages=messages)
+            return await judge._validate_or_repair(
+                invalid,
+                [primary],
+                {},
+                _reference_text([primary]),
+            )
+
+        report, validation = asyncio.run(scenario())
+        evidence = report["findings"][0]["evidence"][0]
+        self.assertTrue(validation["ok"], validation.get("errors"))
+        self.assertEqual(evidence["status"], "missing")
+        self.assertNotIn("paraphrase", evidence["quote"].lower())
+        self.assertTrue(
+            TOOLS.validate(report, _reference_text([primary]))["ok"]
+        )
+
+    def test_unsupported_quote_from_rendered_page_is_labeled_as_summary(self) -> None:
+        primary = extract_pasted_text(
+            "# PRD\n" + "A measurable workflow requirement. " * 10
+        )
+        primary.images.append(
+            ExtractedImage(
+                data=b"not-used-by-the-sanitizer",
+                media_type="image/png",
+                locator="Pasted PRD, page 2",
+            )
+        )
+        report = PrdJudge._fixture_report(primary)
+        evidence = report["findings"][0]["evidence"][0]
+        evidence["quote"] = "The figure depicts a three-stage workflow."
+        evidence["locator"] = "Page 2"
+
+        sanitized = PrdJudge._sanitize_judge_evidence(
+            report,
+            [primary],
+            _reference_text([primary]),
+        )
+
+        sanitized_evidence = sanitized["findings"][0]["evidence"][0]
+        self.assertEqual(sanitized_evidence["status"], "summary")
+        self.assertEqual(
+            sanitized_evidence["quote"],
+            "The figure depicts a three-stage workflow.",
+        )
+        self.assertTrue(
+            TOOLS.validate(sanitized, _reference_text([primary]))["ok"]
+        )
+
+    def test_repair_output_with_unsupported_quote_is_also_sanitized(self) -> None:
+        primary = extract_pasted_text(
+            "# PRD\n" + "A measurable workflow requirement. " * 10
+        )
+        repaired_payload = PrdJudge._fixture_report(primary)
+        repaired_payload["findings"][0]["evidence"][0]["quote"] = (
+            "The repair model repeated an unsupported paraphrase."
+        )
+        repaired = JudgeReport.model_validate(repaired_payload)
+        invalid = json.loads(json.dumps(repaired_payload))
+        invalid["summary"] = ""
+        messages = SimpleNamespace()
+        calls: list[dict] = []
+
+        async def parse(**kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(parsed_output=repaired)
+
+        messages.parse = parse
+
+        async def scenario():
+            judge = PrdJudge(
+                RuntimeConfig(
+                    mode="fixture",
+                    model="candidate-model",
+                    allowed_models=frozenset({"candidate-model"}),
+                )
+            )
+            judge.config = RuntimeConfig(
+                mode="model",
+                model="candidate-model",
+                allowed_models=frozenset({"candidate-model"}),
+                score_enabled=True,
+                score_model="candidate-model",
+                score_allowed_models=frozenset({"candidate-model"}),
+            )
+            judge.client = SimpleNamespace(messages=messages)
+            return await judge._validate_or_repair(
+                invalid,
+                [primary],
+                {},
+                _reference_text([primary]),
+            )
+
+        report, validation = asyncio.run(scenario())
+        self.assertEqual(len(calls), 1)
+        self.assertTrue(validation["ok"], validation.get("errors"))
+        self.assertEqual(
+            report["findings"][0]["evidence"][0]["status"],
+            "missing",
+        )
 
 
 class ExtractionTests(unittest.TestCase):

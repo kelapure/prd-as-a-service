@@ -160,6 +160,75 @@ def _reference_text(documents: list[ExtractedDocument]) -> str:
     return "\n\n".join(document.evidence_text for document in documents)
 
 
+def _normalized_text(value: str) -> str:
+    return re.sub(r"\s+", " ", value).strip().lower()
+
+
+def _has_matching_source_image(
+    evidence: dict[str, Any], documents: list[ExtractedDocument]
+) -> bool:
+    locator = evidence.get("locator")
+    if not isinstance(locator, str) or not locator.strip():
+        return False
+
+    normalized_locator = _normalized_text(locator)
+    locator_pages = {
+        int(value)
+        for value in re.findall(r"\bpage\s+(\d+)\b", normalized_locator)
+    }
+    source = evidence.get("source")
+    normalized_source = (
+        _normalized_text(source) if isinstance(source, str) else ""
+    )
+    source_matched_documents = [
+        document
+        for document in documents
+        if normalized_source
+        and (
+            normalized_source == _normalized_text(document.name)
+            or (
+                min(
+                    len(normalized_source),
+                    len(_normalized_text(document.name)),
+                )
+                >= 3
+                and (
+                    normalized_source in _normalized_text(document.name)
+                    or _normalized_text(document.name) in normalized_source
+                )
+            )
+        )
+    ]
+    if source_matched_documents:
+        candidates = source_matched_documents
+    elif len(documents) == 1:
+        candidates = documents
+    else:
+        return False
+
+    for document in candidates:
+        for image in document.images:
+            image_locator = _normalized_text(image.locator)
+            image_pages = {
+                int(value)
+                for value in re.findall(r"\bpage\s+(\d+)\b", image_locator)
+            }
+            if locator_pages and image_pages and locator_pages & image_pages:
+                return True
+            if (
+                normalized_locator == image_locator
+                or (
+                    min(len(normalized_locator), len(image_locator)) >= 8
+                    and (
+                        normalized_locator in image_locator
+                        or image_locator in normalized_locator
+                    )
+                )
+            ):
+                return True
+    return False
+
+
 def _fixture_excerpt(value: str, limit: int = 160) -> str:
     normalized = re.sub(r"\s+", " ", value).strip()
     if len(normalized) <= limit:
@@ -595,6 +664,21 @@ class PrdJudge:
         if self.config.mode == "fixture" or self.client is None:
             raise EvaluationError("Fixture report failed canonical validation: " + "; ".join(validation["errors"]))
 
+        sanitized = self._sanitize_judge_evidence(
+            report, documents, reference_text
+        )
+        if sanitized != report:
+            sanitized_validation = TOOLS.validate(sanitized, reference_text)
+            try:
+                JudgeReport.model_validate(sanitized)
+            except ValidationError as exc:
+                sanitized_validation.setdefault("errors", []).append(
+                    f"schema: {exc}"
+                )
+                sanitized_validation["ok"] = False
+            if sanitized_validation.get("ok"):
+                return sanitized, sanitized_validation
+
         repair_prompt = (
             "Repair the candidate report so it satisfies the canonical contract and evidence "
             "checks. Do not change a supported finding merely to obtain a preferred verdict. "
@@ -615,6 +699,9 @@ class PrdJudge:
         repaired = _parsed_model(
             message, JudgeReport, "PRD Judge repair"
         ).model_dump(mode="json")
+        repaired = self._sanitize_judge_evidence(
+            repaired, documents, reference_text
+        )
         repaired_validation = TOOLS.validate(repaired, reference_text)
         try:
             JudgeReport.model_validate(repaired)
@@ -627,6 +714,62 @@ class PrdJudge:
                 + "; ".join(repaired_validation.get("errors", []))
             )
         return repaired, repaired_validation
+
+    @staticmethod
+    def _sanitize_judge_evidence(
+        report: dict[str, Any],
+        documents: list[ExtractedDocument],
+        reference_text: str,
+    ) -> dict[str, Any]:
+        normalized_reference = _normalized_text(reference_text)
+        sanitized = json.loads(json.dumps(report))
+        summary_count = 0
+        missing_count = 0
+
+        findings = sanitized.get("findings")
+        if not isinstance(findings, list):
+            return report
+        for finding in findings:
+            if not isinstance(finding, dict):
+                continue
+            evidence_items = finding.get("evidence")
+            if not isinstance(evidence_items, list):
+                continue
+            for evidence in evidence_items:
+                if (
+                    not isinstance(evidence, dict)
+                    or evidence.get("status") != "used"
+                ):
+                    continue
+                quote = evidence.get("quote")
+                normalized_quote = (
+                    _normalized_text(quote) if isinstance(quote, str) else ""
+                )
+                if normalized_quote and normalized_quote in normalized_reference:
+                    continue
+                if normalized_quote and _has_matching_source_image(
+                    evidence, documents
+                ):
+                    evidence["status"] = "summary"
+                    summary_count += 1
+                    continue
+                evidence["status"] = "missing"
+                evidence["quote"] = (
+                    "No verbatim supporting passage was found in the supplied "
+                    "evidence for this finding."
+                )
+                evidence["locator"] = None
+                missing_count += 1
+
+        if not summary_count and not missing_count:
+            return report
+        logger.warning(
+            "Downgraded unsupported judge evidence without exposing source content "
+            "(summary=%d, missing=%d)",
+            summary_count,
+            missing_count,
+        )
+        return sanitized
 
     @staticmethod
     def _sanitize_rubric_evidence(
