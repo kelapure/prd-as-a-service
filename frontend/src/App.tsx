@@ -4,7 +4,6 @@ import { AccessGate } from "./components/AccessGate";
 import { EvaluationWorkspace } from "./components/EvaluationWorkspace";
 import { JudgeResult } from "./components/JudgeResult";
 import { useWorkspaceAuth } from "./contexts/WorkspaceAuthContext";
-import brandMark from "./assets/brand/8090-mark-dark.png";
 import footerArt from "./assets/brand/letterhead-footer.webp";
 import heroPainting from "./assets/brand/twin-stacks-close.webp";
 import { EXAMPLE_RESULT } from "./data/exampleResult";
@@ -70,7 +69,6 @@ export default function App() {
       <a className="skip-link" href="#main">Skip to content</a>
       <header className="site-header">
         <a className="brand" href="#top" aria-label="EvalGPT home">
-          <img className="brand-mark" src={brandMark} alt="" />
           <span>EvalGPT</span>
         </a>
         <nav aria-label="Primary navigation">
@@ -88,7 +86,7 @@ export default function App() {
         </nav>
         {auth.authRequired && (
           <div className="session-controls">
-            <span>{auth.access?.identity.email || "8090 Workspace"}</span>
+            <span>{auth.access?.identity.email || "Workspace account"}</span>
             <button type="button" onClick={auth.signOut}>Sign out</button>
           </div>
         )}
@@ -236,7 +234,7 @@ export default function App() {
 
       <img className="footer-art" src={footerArt} alt="" />
       <footer className="site-footer">
-        <div className="brand"><img className="brand-mark" src={brandMark} alt="" /><span>EvalGPT</span></div>
+        <div className="brand"><span>EvalGPT</span></div>
         <p>Evidence-backed PRD judgment.</p>
         <nav aria-label="Footer navigation"><button type="button" onClick={showExample}>Example result</button><a href="#methodology">Methodology</a><a href="#privacy">Privacy</a><a href="#top">Back to top</a></nav>
       </footer>

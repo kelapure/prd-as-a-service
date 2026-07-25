@@ -25,7 +25,7 @@ function verifier(): WorkspaceTokenVerifier {
       if (token === "external-token") {
         throw new WorkspaceAuthError(
           "workspace_not_allowed",
-          "EvalGPT is available only to verified @8090.inc Google Workspace accounts.",
+          "This account does not have access. Use your authorized work account.",
           403,
         );
       }

@@ -1,4 +1,3 @@
-import brandMark from "../assets/brand/8090-mark-dark.png";
 import footerArt from "../assets/brand/letterhead-footer.webp";
 import { useWorkspaceAuth } from "../contexts/WorkspaceAuthContext";
 import { GoogleSignInButton } from "./GoogleSignInButton";
@@ -15,14 +14,13 @@ export function AccessGate() {
       <a className="skip-link" href="#access-main">Skip to content</a>
       <header className="site-header access-header">
         <div className="brand" aria-label="EvalGPT">
-          <img className="brand-mark" src={brandMark} alt="" />
           <span>EvalGPT</span>
         </div>
       </header>
 
       <main id="access-main" className="access-main">
         <section className="access-gate" aria-labelledby="access-title">
-          <p className="eyebrow">PRD Judge · 8090 internal</p>
+          <p className="eyebrow">PRD Judge</p>
           <h1 id="access-title">
             {denied
               ? "This account does not have access."
@@ -32,8 +30,7 @@ export function AccessGate() {
           </h1>
           {denied ? (
             <p className="access-lede">
-              EvalGPT is available only to verified @8090.inc Google Workspace accounts.
-              Sign out of Google, then choose your 8090 work account.
+              Sign out of Google, then choose your authorized work account.
             </p>
           ) : failed ? (
             <p className="access-lede">
@@ -42,7 +39,7 @@ export function AccessGate() {
           ) : (
             <p className="access-lede">
               EvalGPT gives you a readiness verdict, a deterministic score, and an
-              evidence-backed path to GO. It is available to 8090 staff only.
+              evidence-backed path to GO. Access is limited to authorized staff.
             </p>
           )}
 
@@ -50,12 +47,12 @@ export function AccessGate() {
             {waiting ? (
               <p className="access-status" role="status">
                 {status === "verifying"
-                  ? "Verifying 8090 Workspace access…"
+                  ? "Verifying workspace access…"
                   : "Preparing secure sign-in…"}
               </p>
             ) : (
               <>
-                <p>Sign in with your @8090.inc Google Workspace account to continue.</p>
+                <p>Sign in with your work Google account to continue.</p>
                 {gisReady ? <GoogleSignInButton /> : (
                   <p className="access-status" role="status">Google sign-in is loading…</p>
                 )}
@@ -73,10 +70,9 @@ export function AccessGate() {
       <img className="footer-art" src={footerArt} alt="" />
       <footer className="site-footer access-footer">
         <div className="brand">
-          <img className="brand-mark" src={brandMark} alt="" />
           <span>EvalGPT</span>
         </div>
-        <p>Evidence-backed PRD judgment for 8090.</p>
+        <p>Evidence-backed PRD judgment.</p>
       </footer>
     </div>
   );
