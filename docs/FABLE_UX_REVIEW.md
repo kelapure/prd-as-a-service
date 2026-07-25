@@ -1,5 +1,31 @@
 # Fable UX review record
 
+## Google access tiers
+
+Plan review: 2026-07-25
+Model: `claude-fable-5`, xhigh effort
+Status: `PLAN APPROVED`; deployed-preview review pending.
+
+Fable reviewed the proposed change from a single-workspace gate to two
+server-owned access tiers before implementation. It required the signed-out
+gate to state the allowance before sign-in, internal identities to see a
+simple no-limits treatment, external identities to see an explicit one-time
+three-evaluation allowance with no reset language, and exhaustion to be a
+terminal state rather than a retry prompt.
+
+The implementation follows those requirements without showing the internal
+domain in product copy. The gateway classifies only the signed Google `hd`
+claim, never an email suffix. Internal identities bypass user and guest-global
+count exhaustion while retaining concurrency and kill-switch safeguards.
+Other verified Google identities receive three admitted starts total.
+Firestore retains only the HMAC-pseudonymous total count for a guest identity;
+it stores no timestamp, email, token, filename, document, finding, or evidence.
+
+The required fresh-context review will inspect the exact no-traffic preview,
+including signed-out, internal unlimited, external remaining, external
+exhausted, capacity-busy, token-expiry, and allowance-store failure states.
+Every P0/P1 remains blocking until the review is rerun and passes.
+
 ## Removal of visible 8090 branding
 
 Plan and final review: 2026-07-25

@@ -33,6 +33,25 @@ function validateFile(file: File): string | null {
   return null;
 }
 
+function evaluationErrorMessage(error: EvaluationApiError): string {
+  switch (error.code) {
+    case "evaluation_limit_reached":
+      return "You have used all three guest evaluations. This one-time allowance does not reset.";
+    case "capacity_busy": {
+      const wait = error.retryAfterSeconds
+        ? ` Try again in about ${Math.max(1, Math.ceil(error.retryAfterSeconds / 60))} minute${error.retryAfterSeconds > 60 ? "s" : ""}.`
+        : " Try again shortly.";
+      return `All evaluation slots are currently in use.${wait}`;
+    }
+    case "global_limit_reached":
+      return "Guest evaluation capacity has been reached for today. Try again after 00:00 UTC.";
+    case "quota_store_unavailable":
+      return "Evaluation access is temporarily unavailable because allowance enforcement could not be verified.";
+    default:
+      return error.message;
+  }
+}
+
 export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
   const auth = useWorkspaceAuth();
   const [mode, setMode] = useState<"file" | "paste">("file");
@@ -59,7 +78,8 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
   const activeIndex = progress ? visiblePhases.findIndex((phase) => phase.id === progress.phase) : -1;
   const quotaExhausted = Boolean(
     auth.access
-    && (auth.access.quota.daily.remaining === 0 || auth.access.quota.monthly.remaining === 0),
+    && auth.access.quota.policy === "limited"
+    && auth.access.quota.remaining === 0,
   );
   const authenticationReady = !auth.authRequired
     || (auth.status === "authorized" && Boolean(auth.token) && Boolean(auth.access));
@@ -127,7 +147,7 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
           auth.markExpired();
           setError("Your Google sign-in expired. Sign in again below; your selected documents are still here.");
         } else {
-          setError(caught.message);
+          setError(evaluationErrorMessage(caught));
           await auth.refreshAccess();
         }
       } else {
@@ -151,30 +171,41 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
         </p>
         {auth.authRequired && auth.access && (
           <p className="quota-summary" aria-live="polite">
-            <strong>
-              {auth.access.quota.daily.remaining} of {auth.access.quota.daily.limit} evaluations left today
-            </strong>
-            <span> · </span>
-            <span>
-              {auth.access.quota.monthly.remaining} of {auth.access.quota.monthly.limit} this month
-            </span>
-            <span> · daily counter resets 00:00 UTC</span>
+            {auth.access.quota.policy === "unlimited" ? (
+              <>
+                <strong>Team member · no evaluation limits</strong>
+                <span> · temporary capacity safeguards still apply</span>
+              </>
+            ) : (
+              <>
+                <strong>
+                  {auth.access.quota.remaining} of {auth.access.quota.limit} guest evaluations remaining
+                </strong>
+                <span> · one-time allowance · does not reset</span>
+              </>
+            )}
           </p>
+        )}
+        {quotaExhausted && (
+          <div className="form-notice" role="status">
+            <strong>Guest evaluation allowance used.</strong>
+            <p>You have completed all three evaluations in this one-time allowance.</p>
+          </div>
         )}
       </div>
 
       <form className="evaluation-form" onSubmit={submit} noValidate>
         {auth.authRequired && auth.status !== "authorized" && (
           <div className="reauth-panel" role="alert">
-            <p className="eyebrow">Workspace access</p>
+            <p className="eyebrow">Google sign-in</p>
             <h3>
               {auth.status === "denied"
-                ? "Use your authorized work account."
+                ? "Choose another Google account."
                 : "Your Google sign-in expired."}
             </h3>
             <p>
               {auth.status === "denied"
-                ? "This account is not part of the permitted workspace."
+                ? "Google could not verify this account."
                 : "Your selected documents are still here. Sign in again to continue."}
             </p>
             <GoogleSignInButton />
@@ -182,8 +213,8 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
         )}
         {auth.accessError && (
           <div className="form-error" role="alert">
-            <strong>Quota status is temporarily unavailable.</strong>
-            <p>{auth.accessError} Evaluations stay disabled until quota enforcement is verified.</p>
+            <strong>Allowance status is temporarily unavailable.</strong>
+            <p>{auth.accessError} Evaluations stay disabled until access limits can be verified.</p>
           </div>
         )}
 
@@ -329,7 +360,7 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
             </button>
           )}
           <span className="field-note">
-            25 MB combined limit{auth.authRequired ? " · Workspace access required" : ""}
+            25 MB combined limit{auth.authRequired ? " · Google sign-in required" : ""}
           </span>
         </div>
       </form>

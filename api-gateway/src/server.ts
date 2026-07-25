@@ -63,6 +63,60 @@ interface StructuredFailure {
   quota?: unknown;
 }
 
+interface LegacyQuotaWindow {
+  limit: number;
+  used: number;
+  remaining: number;
+  resetsAt: string;
+}
+
+function accessQuotaResponse(
+  quota: Awaited<ReturnType<QuotaStore["snapshot"]>>,
+  now: Date,
+) {
+  const nextDay = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate() + 1,
+  )).toISOString();
+  const nextMonth = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth() + 1,
+    1,
+  )).toISOString();
+  const legacyUsed = quota.policy === "limited" ? quota.used : 0;
+  const legacyRemaining = quota.policy === "limited" ? quota.remaining || 0 : 3;
+  const legacyDaily: LegacyQuotaWindow = {
+    limit: 3,
+    used: legacyUsed,
+    remaining: legacyRemaining,
+    resetsAt: nextDay,
+  };
+  const legacyMonthly: LegacyQuotaWindow = quota.policy === "limited"
+    ? {
+        limit: 3,
+        used: legacyUsed,
+        remaining: legacyRemaining,
+        resetsAt: nextMonth,
+      }
+    : {
+        limit: 10,
+        used: 0,
+        remaining: 10,
+        resetsAt: nextMonth,
+      };
+
+  // The daily/monthly fields keep the currently deployed frontend functional
+  // while the new tier-aware frontend is canaried. New clients use the
+  // policy/limit/used/remaining fields; remove the bridge after the old asset
+  // version is no longer served.
+  return {
+    ...quota,
+    daily: legacyDaily,
+    monthly: legacyMonthly,
+  };
+}
+
 function extension(filename: string): string {
   const dot = filename.lastIndexOf(".");
   return dot >= 0 ? filename.slice(dot).toLowerCase() : "";
@@ -158,7 +212,7 @@ function sendQuotaFailure(reply: FastifyReply, error: QuotaError) {
   return reply.status(error.statusCode).send({
     code: error.code,
     error: error.message,
-    retryable: true,
+    retryable: error.code !== "evaluation_limit_reached",
     ...(error.quota ? { quota: error.quota } : {}),
   } satisfies StructuredFailure);
 }
@@ -181,7 +235,9 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
   let quotaStore = options.quotaStore;
 
   const googleClientId = process.env.GOOGLE_OAUTH_CLIENT_ID?.trim() || "";
-  const workspaceDomain = process.env.GOOGLE_WORKSPACE_DOMAIN?.trim() || DEFAULT_WORKSPACE_DOMAIN;
+  const workspaceDomain = process.env.INTERNAL_GOOGLE_WORKSPACE_DOMAIN?.trim()
+    || process.env.GOOGLE_WORKSPACE_DOMAIN?.trim()
+    || DEFAULT_WORKSPACE_DOMAIN;
   const quotaHmacKey = process.env.QUOTA_IDENTITY_HMAC_KEY || "";
   if (!verifyIdentity && googleClientId) {
     verifyIdentity = createGoogleWorkspaceVerifier(googleClientId, workspaceDomain);
@@ -335,10 +391,16 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
       );
     }
     try {
+      const requestedAt = now();
+      const quota = await quotaStore.snapshot(
+        identity.sub,
+        requestedAt,
+        identity.tier === "internal" ? "unlimited" : "limited",
+      );
       return reply.send({
         access: "allowed",
-        identity: { email: identity.email },
-        quota: await quotaStore.snapshot(identity.sub, now()),
+        identity: { email: identity.email, tier: identity.tier },
+        quota: accessQuotaResponse(quota, requestedAt),
       });
     } catch (error) {
       if (error instanceof QuotaError) return sendQuotaFailure(reply, error);
@@ -504,7 +566,11 @@ export async function buildServer(options: BuildServerOptions = {}): Promise<Fas
         );
       }
       try {
-        const reservation = await quotaStore.reserve(identity.sub, now());
+        const reservation = await quotaStore.reserve(
+          identity.sub,
+          now(),
+          identity.tier === "internal" ? "unlimited" : "limited",
+        );
         leaseId = reservation.leaseId;
       } catch (error) {
         if (error instanceof QuotaError) return sendQuotaFailure(reply, error);

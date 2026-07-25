@@ -41,32 +41,50 @@ function assertAuthError(
   });
 }
 
-test("accepts a verified identity from exactly the 8090 Workspace", () => {
+test("classifies the exact 8090 hosted domain as the unlimited internal tier", () => {
   assert.deepEqual(validateWorkspaceClaims(claims(), AUDIENCE, "8090.inc", NOW), {
     sub: "google-subject-123",
     email: "person@8090.inc",
     domain: "8090.inc",
+    tier: "internal",
   });
+  assert.equal(
+    validateWorkspaceClaims(
+      claims({ email: "verified-alias@example.com", hd: "8090.inc" }),
+      AUDIENCE,
+      "8090.inc",
+      NOW,
+    ).tier,
+    "internal",
+    "the signed hosted-domain claim, not the email suffix, owns membership",
+  );
+  assert.equal(
+    validateWorkspaceClaims(
+      claims({ email: "lookalike@8090.inc", hd: "external.example" }),
+      AUDIENCE,
+      "8090.inc",
+      NOW,
+    ).tier,
+    "external",
+  );
 });
 
-test("rejects external Workspace, Gmail, missing hosted domain, and unverified email", () => {
+test("accepts verified Gmail and external Workspace accounts as the limited tier", () => {
   for (const payload of [
     claims({ email: "person@dfyautomation.io", hd: "dfyautomation.io" }),
     claims({ email: "person@gmail.com", hd: undefined }),
-    claims({ hd: undefined }),
-    claims({ email_verified: false }),
     claims({ email: "person@sub.8090.inc", hd: "sub.8090.inc" }),
   ]) {
-    assertAuthError(
-      () => validateWorkspaceClaims(payload, AUDIENCE, "8090.inc", NOW),
-      "workspace_not_allowed",
-      403,
-    );
+    const identity = validateWorkspaceClaims(payload, AUDIENCE, "8090.inc", NOW);
+    assert.equal(identity.tier, "external");
+    assert.equal(identity.email, payload.email);
   }
 });
 
-test("rejects wrong audience, issuer, missing subject, and expired tokens", () => {
+test("rejects unverified or incomplete identities, wrong audience, issuer, and missing subject", () => {
   for (const payload of [
+    claims({ email_verified: false }),
+    claims({ email: undefined }),
     claims({ aud: "wrong-client.apps.googleusercontent.com" }),
     claims({ iss: "https://attacker.example" }),
     claims({ sub: "" }),

@@ -1,7 +1,7 @@
 # EvalGPT PRD Judge
 
-EvalGPT is the 8090-internal browser experience for PRD Judge. It gives a
-verified `@8090.inc` Workspace user a stage-aware readiness verdict, a deterministic score,
+EvalGPT is a Google-authenticated browser experience for PRD Judge. It gives a
+verified Google identity a stage-aware readiness verdict, a deterministic score,
 evidence-backed findings, a prioritized path to GO, and a separate PRD Score
 draft-strength diagnostic.
 
@@ -11,10 +11,12 @@ draft-strength diagnostic.
   diagnostic and cannot override the judge verdict.
 - PRD Score is an independent authoring diagnostic. Do not average, blend,
   rescale, or otherwise use it to alter the verdict or readiness score.
-- Google Workspace authentication is mandatory in every deployed environment.
-  Only a verified token with `hd=8090.inc` is allowed.
+- Google authentication is mandatory in every deployed environment. Exact
+  `hd=8090.inc` identities are the unlimited internal tier; all other verified
+  Google identities receive three lifetime evaluation starts.
 - ID tokens stay in browser memory. Firestore may contain only HMAC-pseudonymous
-  quota counters and short-lived leases with the approved TTL.
+  external allowance counters and short-lived capacity leases. External
+  lifetime counters intentionally do not expire.
 - Do not add payment, profiles, saved history, persistent sharing, or a public
   developer API.
 - Do not write source documents, extracted text, findings, or evidence to
@@ -27,7 +29,7 @@ draft-strength diagnostic.
 ## Architecture
 
 ```text
-frontend/       React/Vite Workspace gate and in-browser HTML/PDF/JSON export
+frontend/       React/Vite Google sign-in gate and in-browser HTML/PDF/JSON export
 api-gateway/    Fastify token validation, durable quotas, kill switch, SSE proxy
 judge-runtime/  FastAPI extraction, judge/score calls, validation, deterministic score
 tests/          Cross-service smoke and canonical-bundle conformance tests

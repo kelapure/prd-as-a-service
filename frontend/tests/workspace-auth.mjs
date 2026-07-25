@@ -44,23 +44,20 @@ async function audit(page, label) {
   );
 }
 
-function accessBody(dailyRemaining = 2, monthlyRemaining = 7) {
+function accessBody(tier = "internal", remaining = 2) {
+  const unlimited = tier === "internal";
   return {
     access: "allowed",
-    identity: { email: "person@8090.inc" },
+    identity: {
+      email: unlimited ? "person@8090.inc" : "person@gmail.com",
+      tier,
+    },
     quota: {
-      daily: {
-        limit: 3,
-        used: 3 - dailyRemaining,
-        remaining: dailyRemaining,
-        resetsAt: "2026-07-25T00:00:00.000Z",
-      },
-      monthly: {
-        limit: 10,
-        used: 10 - monthlyRemaining,
-        remaining: monthlyRemaining,
-        resetsAt: "2026-08-01T00:00:00.000Z",
-      },
+      policy: unlimited ? "unlimited" : "limited",
+      limit: unlimited ? null : 3,
+      used: unlimited ? 0 : 3 - remaining,
+      remaining: unlimited ? null : remaining,
+      resetsAt: null,
     },
   };
 }
@@ -86,8 +83,7 @@ try {
   });
   let accessMode = "normal";
   let evaluationMode = "capacity";
-  let dailyRemaining = 2;
-  let monthlyRemaining = 7;
+  let guestRemaining = 2;
 
   await context.route("https://accounts.google.com/gsi/client", (route) => route.fulfill({
     status: 200,
@@ -116,16 +112,6 @@ try {
 
   await context.route(`${origin}/api/access`, async (route) => {
     const authorization = route.request().headers().authorization || "";
-    if (authorization === "Bearer external-token") {
-      return route.fulfill({
-        status: 403,
-        contentType: "application/json",
-        body: JSON.stringify({
-          code: "workspace_not_allowed",
-          error: "This account does not have access. Use your authorized work account.",
-        }),
-      });
-    }
     if (authorization === "Bearer expired-token") {
       return route.fulfill({
         status: 401,
@@ -147,9 +133,10 @@ try {
         }),
       });
     }
-    const quota = accessMode === "exhausted"
-      ? accessBody(0, 7)
-      : accessBody(dailyRemaining, monthlyRemaining);
+    const tier = authorization === "Bearer external-token" ? "external" : "internal";
+    const quota = accessMode === "exhausted" && tier === "external"
+      ? accessBody("external", 0)
+      : accessBody(tier, guestRemaining);
     return route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -207,7 +194,7 @@ try {
   assert.equal(await page.locator(".evaluation-form").count(), 0, "signed-out users must not see uploads");
   assert.deepEqual(
     await page.getByText(
-      "Your sign-in stays in this browser tab's memory only. EvalGPT stores your evaluation-start count and nothing else about you or your documents.",
+      "Your sign-in stays in this browser tab's memory only. EvalGPT stores your pseudonymous guest evaluation count and nothing else about you or your documents.",
       { exact: true },
     ).count(),
     1,
@@ -217,8 +204,7 @@ try {
 
   await page.getByRole("button", { name: "Sign in with Google" }).click();
   await page.getByText("person@8090.inc", { exact: true }).waitFor();
-  assert.equal(await page.getByText(/2 of 3 evaluations left today/).count(), 1);
-  assert.equal(await page.getByText(/7 of 10 this month/).count(), 1);
+  assert.equal(await page.getByText(/Team member · no evaluation limits/).count(), 1);
   assert.deepEqual(
     await page.evaluate(() => ({
       local: Object.keys(localStorage),
@@ -250,22 +236,18 @@ try {
 
   evaluationMode = "capacity";
   await page.getByRole("button", { name: "Evaluate this PRD" }).click();
-  await page.getByText("Both evaluation slots are in use. Try again shortly.", { exact: true }).waitFor();
+  await page.getByText(
+    "All evaluation slots are currently in use. Try again in about 1 minute.",
+    { exact: true },
+  ).waitFor();
 
   evaluationMode = "stream-error";
-  dailyRemaining = 1;
-  monthlyRemaining = 6;
   await page.getByRole("button", { name: "Evaluate this PRD" }).click();
   await page.getByText(
     "The approved PRD Score did not produce a valid report.",
     { exact: true },
   ).waitFor();
-  await page.getByText(/1 of 3 evaluations left today/).waitFor();
-  assert.equal(
-    await page.getByText(/6 of 10 this month/).count(),
-    1,
-    "quota must refresh after an admitted run fails in the streamed runtime",
-  );
+  await page.getByText(/Team member · no evaluation limits/).waitFor();
 
   await page.getByRole("button", { name: "Example result" }).first().click();
   await page.locator("#judge-result").waitFor();
@@ -280,20 +262,24 @@ try {
     window.__evalgptCredential = "external-token";
   });
   await page.getByRole("button", { name: "Sign in with Google" }).click();
-  await page.getByRole("heading", { name: "This account does not have access." }).waitFor();
+  await page.getByText("person@gmail.com", { exact: true }).waitFor();
+  assert.equal(await page.getByText(/2 of 3 guest evaluations remaining/).count(), 1);
+  assert.equal(await page.getByText(/one-time allowance · does not reset/).count(), 1);
+  await page.getByRole("button", { name: "Sign out" }).click();
 
   await page.evaluate(() => {
-    window.__evalgptCredential = "valid-token";
+    window.__evalgptCredential = "external-token";
   });
   accessMode = "exhausted";
   await page.getByRole("button", { name: "Sign in with Google" }).click();
-  await page.getByText("person@8090.inc", { exact: true }).waitFor();
+  await page.getByText("person@gmail.com", { exact: true }).waitFor();
   assert.equal(
     await page.locator("#judge-result").count(),
     0,
     "a later signer-in must never inherit the previous report",
   );
   assert.equal(await page.getByRole("button", { name: "Evaluation limit reached" }).isDisabled(), true);
+  assert.equal(await page.getByText("Guest evaluation allowance used.", { exact: true }).count(), 1);
   await page.getByRole("button", { name: "Sign out" }).click();
 
   for (const viewport of [

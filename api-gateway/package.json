@@ -1,7 +1,7 @@
 {
   "name": "evalgpt-prd-judge-gateway",
   "version": "2.0.0-beta.1",
-  "description": "8090 Workspace-authenticated gateway for EvalGPT PRD Judge",
+  "description": "Google-authenticated gateway for EvalGPT PRD Judge",
   "type": "module",
   "main": "dist/server.js",
   "scripts": {

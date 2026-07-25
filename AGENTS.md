@@ -17,8 +17,8 @@
   secondary diagnostic and never overrides the verdict.
 - PRD Score is a separate draft-strength diagnostic. Never mathematically
   combine it with readiness or use it to change the verdict.
-- The beta is anonymous and ephemeral. Do not add accounts, payment, saved
-  history, persistent sharing, or a public developer API.
+- The beta is Google-authenticated and ephemeral. Authentication must not add
+  profiles, payment, saved history, persistent sharing, or a public developer API.
 - Do not put document content, extracted text, findings, or evidence in logs,
   analytics, storage, browser local storage, or error reporting.
 - Do not automatically fall back to an unvalidated model.

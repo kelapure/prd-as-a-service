@@ -4,22 +4,19 @@ import { Firestore } from "@google-cloud/firestore";
 
 
 export type QuotaFailureCode =
-  | "daily_limit_reached"
-  | "monthly_limit_reached"
+  | "evaluation_limit_reached"
   | "global_limit_reached"
   | "capacity_busy"
   | "quota_store_unavailable";
 
-export interface QuotaWindow {
-  limit: number;
-  used: number;
-  remaining: number;
-  resetsAt: string;
-}
+export type QuotaPolicy = "limited" | "unlimited";
 
 export interface QuotaSnapshot {
-  daily: QuotaWindow;
-  monthly: QuotaWindow;
+  policy: QuotaPolicy;
+  limit: number | null;
+  used: number;
+  remaining: number | null;
+  resetsAt: null;
 }
 
 export interface QuotaReservation {
@@ -28,8 +25,7 @@ export interface QuotaReservation {
 }
 
 export interface QuotaLimits {
-  userDaily: number;
-  userMonthly: number;
+  externalTotal: number;
   globalDaily: number;
   concurrent: number;
   leaseMs: number;
@@ -37,8 +33,8 @@ export interface QuotaLimits {
 }
 
 export interface QuotaStore {
-  snapshot(subject: string, now?: Date): Promise<QuotaSnapshot>;
-  reserve(subject: string, now?: Date): Promise<QuotaReservation>;
+  snapshot(subject: string, now?: Date, policy?: QuotaPolicy): Promise<QuotaSnapshot>;
+  reserve(subject: string, now?: Date, policy?: QuotaPolicy): Promise<QuotaReservation>;
   release(leaseId: string, now?: Date): Promise<void>;
   health(): Promise<void>;
 }
@@ -68,10 +64,7 @@ export class QuotaError extends Error {
 }
 
 interface UserQuotaRecord {
-  dayKey: string;
-  dayCount: number;
-  monthKey: string;
-  monthCount: number;
+  totalCount: number;
 }
 
 interface GlobalQuotaRecord {
@@ -82,8 +75,7 @@ interface GlobalQuotaRecord {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_LIMITS: QuotaLimits = {
-  userDaily: 3,
-  userMonthly: 10,
+  externalTotal: 3,
   globalDaily: 50,
   concurrent: 2,
   leaseMs: 12 * 60 * 1000,
@@ -99,8 +91,10 @@ function finitePositiveInteger(value: number, name: string): number {
 
 export function quotaLimitsFromEnv(): QuotaLimits {
   return {
-    userDaily: finitePositiveInteger(Number(process.env.USER_DAILY_RUN_LIMIT || 3), "USER_DAILY_RUN_LIMIT"),
-    userMonthly: finitePositiveInteger(Number(process.env.USER_MONTHLY_RUN_LIMIT || 10), "USER_MONTHLY_RUN_LIMIT"),
+    externalTotal: finitePositiveInteger(
+      Number(process.env.EXTERNAL_TOTAL_RUN_LIMIT || 3),
+      "EXTERNAL_TOTAL_RUN_LIMIT",
+    ),
     globalDaily: finitePositiveInteger(Number(process.env.GLOBAL_DAILY_RUN_LIMIT || 50), "GLOBAL_DAILY_RUN_LIMIT"),
     concurrent: finitePositiveInteger(Number(process.env.GLOBAL_CONCURRENT_RUN_LIMIT || 2), "GLOBAL_CONCURRENT_RUN_LIMIT"),
     leaseMs: finitePositiveInteger(Number(process.env.QUOTA_LEASE_MS || 12 * 60 * 1000), "QUOTA_LEASE_MS"),
@@ -112,30 +106,28 @@ function utcDayKey(now: Date): string {
   return now.toISOString().slice(0, 10);
 }
 
-function utcMonthKey(now: Date): string {
-  return now.toISOString().slice(0, 7);
-}
-
 function nextUtcDay(now: Date): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
-}
-
-function nextUtcMonth(now: Date): Date {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 }
 
 function retryAfter(now: Date, reset: Date): number {
   return Math.max(1, Math.ceil((reset.getTime() - now.getTime()) / 1000));
 }
 
-function normalizedUser(record: Partial<UserQuotaRecord> | undefined, now: Date): UserQuotaRecord {
-  const dayKey = utcDayKey(now);
-  const monthKey = utcMonthKey(now);
+function normalizedUser(
+  record: (Partial<UserQuotaRecord> & {
+    dayCount?: number;
+    monthCount?: number;
+  }) | undefined,
+): UserQuotaRecord {
   return {
-    dayKey,
-    dayCount: record?.dayKey === dayKey ? Math.max(0, Number(record.dayCount) || 0) : 0,
-    monthKey,
-    monthCount: record?.monthKey === monthKey ? Math.max(0, Number(record.monthCount) || 0) : 0,
+    totalCount: Math.max(
+      0,
+      Number(record?.totalCount)
+      || Number(record?.monthCount)
+      || Number(record?.dayCount)
+      || 0,
+    ),
   };
 }
 
@@ -155,20 +147,26 @@ function normalizedGlobal(
   };
 }
 
-function quotaSnapshot(user: UserQuotaRecord, limits: QuotaLimits, now: Date): QuotaSnapshot {
+function quotaSnapshot(
+  user: UserQuotaRecord,
+  limits: QuotaLimits,
+  policy: QuotaPolicy,
+): QuotaSnapshot {
+  if (policy === "unlimited") {
+    return {
+      policy,
+      limit: null,
+      used: 0,
+      remaining: null,
+      resetsAt: null,
+    };
+  }
   return {
-    daily: {
-      limit: limits.userDaily,
-      used: user.dayCount,
-      remaining: Math.max(0, limits.userDaily - user.dayCount),
-      resetsAt: nextUtcDay(now).toISOString(),
-    },
-    monthly: {
-      limit: limits.userMonthly,
-      used: user.monthCount,
-      remaining: Math.max(0, limits.userMonthly - user.monthCount),
-      resetsAt: nextUtcMonth(now).toISOString(),
-    },
+    policy,
+    limit: limits.externalTotal,
+    used: user.totalCount,
+    remaining: Math.max(0, limits.externalTotal - user.totalCount),
+    resetsAt: null,
   };
 }
 
@@ -177,23 +175,17 @@ function checkReservation(
   global: GlobalQuotaRecord,
   limits: QuotaLimits,
   now: Date,
+  policy: QuotaPolicy,
 ): void {
-  const snapshot = quotaSnapshot(user, limits, now);
-  if (user.dayCount >= limits.userDaily) {
+  const snapshot = quotaSnapshot(user, limits, policy);
+  if (policy === "limited" && user.totalCount >= limits.externalTotal) {
     throw new QuotaError(
-      "daily_limit_reached",
-      "You have used all three evaluations available today.",
-      { quota: snapshot, retryAfterSeconds: retryAfter(now, nextUtcDay(now)) },
+      "evaluation_limit_reached",
+      "You have used all three guest evaluations.",
+      { quota: snapshot },
     );
   }
-  if (user.monthCount >= limits.userMonthly) {
-    throw new QuotaError(
-      "monthly_limit_reached",
-      "You have used all ten evaluations available this month.",
-      { quota: snapshot, retryAfterSeconds: retryAfter(now, nextUtcMonth(now)) },
-    );
-  }
-  if (global.dayCount >= limits.globalDaily) {
+  if (policy === "limited" && global.dayCount >= limits.globalDaily) {
     throw new QuotaError(
       "global_limit_reached",
       "EvalGPT has reached today's organization-wide evaluation limit.",
@@ -219,16 +211,16 @@ function admittedRecords(
   leaseId: string,
   limits: QuotaLimits,
   now: Date,
+  policy: QuotaPolicy,
 ): { user: UserQuotaRecord; global: GlobalQuotaRecord } {
   return {
     user: {
       ...user,
-      dayCount: user.dayCount + 1,
-      monthCount: user.monthCount + 1,
+      totalCount: user.totalCount + (policy === "limited" ? 1 : 0),
     },
     global: {
       ...global,
-      dayCount: global.dayCount + 1,
+      dayCount: global.dayCount + (policy === "limited" ? 1 : 0),
       leases: {
         ...global.leases,
         [leaseId]: now.getTime() + limits.leaseMs,
@@ -272,33 +264,61 @@ export class FirestoreQuotaStore implements QuotaStore {
     return pseudonymousUserId(subject, this.hmacKey);
   }
 
-  async snapshot(subject: string, now: Date = new Date()): Promise<QuotaSnapshot> {
+  async snapshot(
+    subject: string,
+    _now: Date = new Date(),
+    policy: QuotaPolicy = "limited",
+  ): Promise<QuotaSnapshot> {
     try {
+      if (policy === "unlimited") {
+        await this.firestore.collection("evalgpt_quota").doc("global").get();
+        return quotaSnapshot({ totalCount: 0 }, this.limits, policy);
+      }
       const document = await this.firestore.collection("evalgpt_quota_users").doc(this.userId(subject)).get();
-      const user = normalizedUser(document.exists ? document.data() : undefined, now);
-      return quotaSnapshot(user, this.limits, now);
+      const user = normalizedUser(document.exists ? document.data() : undefined);
+      return quotaSnapshot(user, this.limits, policy);
     } catch (error) {
       throw storeUnavailable(error);
     }
   }
 
-  async reserve(subject: string, now: Date = new Date()): Promise<QuotaReservation> {
+  async reserve(
+    subject: string,
+    now: Date = new Date(),
+    policy: QuotaPolicy = "limited",
+  ): Promise<QuotaReservation> {
     const leaseId = randomUUID();
     try {
       return await this.firestore.runTransaction(async (transaction) => {
         const globalRef = this.firestore.collection("evalgpt_quota").doc("global");
-        const userRef = this.firestore.collection("evalgpt_quota_users").doc(this.userId(subject));
-        const [globalDocument, userDocument] = await transaction.getAll(globalRef, userRef);
-        const user = normalizedUser(userDocument.exists ? userDocument.data() : undefined, now);
+        const userRef = policy === "limited"
+          ? this.firestore.collection("evalgpt_quota_users").doc(this.userId(subject))
+          : null;
+        const [globalDocument, userDocument] = userRef
+          ? await transaction.getAll(globalRef, userRef)
+          : [await transaction.get(globalRef), null];
+        const user = normalizedUser(
+          userDocument?.exists ? userDocument.data() : undefined,
+        );
         const global = normalizedGlobal(globalDocument.exists ? globalDocument.data() : undefined, now);
-        checkReservation(user, global, this.limits, now);
-        const admitted = admittedRecords(user, global, leaseId, this.limits, now);
+        checkReservation(user, global, this.limits, now, policy);
+        const admitted = admittedRecords(
+          user,
+          global,
+          leaseId,
+          this.limits,
+          now,
+          policy,
+        );
         const expiresAt = new Date(now.getTime() + this.limits.ttlMs);
-        transaction.set(userRef, {
-          ...admitted.user,
-          updatedAt: now,
-          expiresAt,
-        });
+        if (userRef) {
+          // The pseudonymous counter enforces a one-time allowance and therefore
+          // intentionally has no TTL or timestamp. It contains no email, token,
+          // activity history, or PRD data.
+          transaction.set(userRef, {
+            totalCount: admitted.user.totalCount,
+          });
+        }
         transaction.set(globalRef, {
           ...admitted.global,
           updatedAt: now,
@@ -306,7 +326,7 @@ export class FirestoreQuotaStore implements QuotaStore {
         });
         return {
           leaseId,
-          quota: quotaSnapshot(admitted.user, this.limits, now),
+          quota: quotaSnapshot(admitted.user, this.limits, policy),
         };
       }, { maxAttempts: 5 });
     } catch (error) {
@@ -375,20 +395,42 @@ export class InMemoryQuotaStore implements QuotaStore {
     }
   }
 
-  async snapshot(subject: string, now: Date = new Date()): Promise<QuotaSnapshot> {
-    return this.exclusive(() => quotaSnapshot(normalizedUser(this.users.get(subject), now), this.limits, now));
+  async snapshot(
+    subject: string,
+    _now: Date = new Date(),
+    policy: QuotaPolicy = "limited",
+  ): Promise<QuotaSnapshot> {
+    return this.exclusive(() => quotaSnapshot(
+      normalizedUser(this.users.get(subject)),
+      this.limits,
+      policy,
+    ));
   }
 
-  async reserve(subject: string, now: Date = new Date()): Promise<QuotaReservation> {
+  async reserve(
+    subject: string,
+    now: Date = new Date(),
+    policy: QuotaPolicy = "limited",
+  ): Promise<QuotaReservation> {
     return this.exclusive(() => {
-      const user = normalizedUser(this.users.get(subject), now);
+      const user = normalizedUser(this.users.get(subject));
       const global = normalizedGlobal(this.global, now);
-      checkReservation(user, global, this.limits, now);
+      checkReservation(user, global, this.limits, now, policy);
       const leaseId = randomUUID();
-      const admitted = admittedRecords(user, global, leaseId, this.limits, now);
-      this.users.set(subject, admitted.user);
+      const admitted = admittedRecords(
+        user,
+        global,
+        leaseId,
+        this.limits,
+        now,
+        policy,
+      );
+      if (policy === "limited") this.users.set(subject, admitted.user);
       this.global = admitted.global;
-      return { leaseId, quota: quotaSnapshot(admitted.user, this.limits, now) };
+      return {
+        leaseId,
+        quota: quotaSnapshot(admitted.user, this.limits, policy),
+      };
     });
   }
 
