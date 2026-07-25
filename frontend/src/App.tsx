@@ -86,7 +86,7 @@ export default function App() {
         </nav>
         {auth.authRequired && (
           <div className="session-controls">
-            <span>{auth.access?.identity.email || "Workspace account"}</span>
+            <span>{auth.access?.identity.email || "Google account"}</span>
             <button type="button" onClick={auth.signOut}>Sign out</button>
           </div>
         )}
@@ -217,7 +217,7 @@ export default function App() {
             {PUBLIC_EVALUATIONS_ENABLED ? (
               <>
                 <p>EvalGPT processes uploads in memory for the active evaluation and does not write source documents, extracted text, findings, or evidence to application storage, analytics, or browser local storage.</p>
-                <p>Workspace authentication is kept in this tab&apos;s memory. Firestore stores only HMAC-pseudonymous quota counters and short-lived concurrency leases, with a 90-day inactivity TTL.</p>
+                <p>Google sign-in is kept in this tab&apos;s memory. Firestore retains only HMAC-pseudonymous guest evaluation counts for the one-time allowance and short-lived capacity leases; PRDs and results are not stored.</p>
                 <p>The production subprocessor and exact retention behavior are published only after they are verified for the deployed API account. EvalGPT does not claim provider-side zero retention or no training without that verification.</p>
                 <p>Closing or refreshing the page loses the report unless you export it.</p>
               </>

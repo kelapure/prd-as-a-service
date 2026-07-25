@@ -238,7 +238,7 @@ export function WorkspaceAuthProvider({ children }: { children: ReactNode }) {
         setToken(null);
         setStatus("denied");
       } else {
-        setAccessError(error instanceof Error ? error.message : "Quota status is unavailable.");
+        setAccessError(error instanceof Error ? error.message : "Allowance status is unavailable.");
       }
     }
   }, [token]);

@@ -20,14 +20,20 @@ function verifier(): WorkspaceTokenVerifier {
   return {
     async verify(token) {
       if (token === "valid-token") {
-        return { sub: "subject-1", email: "person@8090.inc", domain: "8090.inc" };
+        return {
+          sub: "subject-1",
+          email: "person@8090.inc",
+          domain: "8090.inc",
+          tier: "internal",
+        };
       }
       if (token === "external-token") {
-        throw new WorkspaceAuthError(
-          "workspace_not_allowed",
-          "This account does not have access. Use your authorized work account.",
-          403,
-        );
+        return {
+          sub: "subject-2",
+          email: "person@gmail.com",
+          domain: "gmail.com",
+          tier: "external",
+        };
       }
       if (token === "expired-token") {
         throw new WorkspaceAuthError(
@@ -56,7 +62,7 @@ function healthyRuntimeFetch(): typeof fetch {
     );
 }
 
-test("anonymous and external uploads are rejected before multipart parsing or runtime access", async () => {
+test("anonymous and invalid uploads are rejected before multipart parsing or runtime access", async () => {
   let runtimeCalls = 0;
   const server = await buildServer({
     authRequired: true,
@@ -70,7 +76,7 @@ test("anonymous and external uploads are rejected before multipart parsing or ru
   try {
     for (const expected of [
       { authorization: undefined, status: 401, code: "auth_required" },
-      { authorization: "Bearer external-token", status: 403, code: "workspace_not_allowed" },
+      { authorization: "Bearer invalid-token", status: 401, code: "auth_required" },
       { authorization: "Bearer expired-token", status: 401, code: "token_expired" },
     ]) {
       const response = await server.inject({
@@ -91,11 +97,13 @@ test("anonymous and external uploads are rejected before multipart parsing or ru
   }
 });
 
-test("access returns only the signed-in work email and durable quota status", async () => {
+test("access returns the internal tier without an evaluation count limit", async () => {
   const store = new InMemoryQuotaStore();
   const now = new Date("2026-07-24T12:00:00.000Z");
   const first = await store.reserve("subject-1", now);
   await store.release(first.leaseId, now);
+  const guestStart = await store.reserve("subject-2", now, "limited");
+  await store.release(guestStart.leaseId, now);
   const server = await buildServer({
     authRequired: true,
     verifyIdentity: verifier(),
@@ -112,8 +120,42 @@ test("access returns only the signed-in work email and durable quota status", as
     assert.equal(response.statusCode, 200);
     assert.deepEqual(response.json(), {
       access: "allowed",
-      identity: { email: "person@8090.inc" },
+      identity: { email: "person@8090.inc", tier: "internal" },
       quota: {
+        policy: "unlimited",
+        limit: null,
+        used: 0,
+        remaining: null,
+        resetsAt: null,
+        daily: {
+          limit: 3,
+          used: 0,
+          remaining: 3,
+          resetsAt: "2026-07-25T00:00:00.000Z",
+        },
+        monthly: {
+          limit: 10,
+          used: 0,
+          remaining: 10,
+          resetsAt: "2026-08-01T00:00:00.000Z",
+        },
+      },
+    });
+    const external = await server.inject({
+      method: "GET",
+      url: "/api/access",
+      headers: { authorization: "Bearer external-token" },
+    });
+    assert.equal(external.statusCode, 200);
+    assert.deepEqual(external.json(), {
+      access: "allowed",
+      identity: { email: "person@gmail.com", tier: "external" },
+      quota: {
+        policy: "limited",
+        limit: 3,
+        used: 1,
+        remaining: 2,
+        resetsAt: null,
         daily: {
           limit: 3,
           used: 1,
@@ -121,9 +163,9 @@ test("access returns only the signed-in work email and durable quota status", as
           resetsAt: "2026-07-25T00:00:00.000Z",
         },
         monthly: {
-          limit: 10,
+          limit: 3,
           used: 1,
-          remaining: 9,
+          remaining: 2,
           resetsAt: "2026-08-01T00:00:00.000Z",
         },
       },
@@ -141,8 +183,14 @@ test("quota failures have stable codes and Retry-After headers", async () => {
       });
     },
     async reserve() {
-      throw new QuotaError("daily_limit_reached", "Daily limit reached", {
-        retryAfterSeconds: 43,
+      throw new QuotaError("evaluation_limit_reached", "Evaluation limit reached", {
+        quota: {
+          policy: "limited",
+          limit: 3,
+          used: 3,
+          remaining: 0,
+          resetsAt: null,
+        },
       });
     },
     async release() {},
@@ -182,8 +230,9 @@ test("quota failures have stable codes and Retry-After headers", async () => {
       ].join("\r\n"),
     });
     assert.equal(evaluation.statusCode, 429);
-    assert.equal(evaluation.json().code, "daily_limit_reached");
-    assert.equal(evaluation.headers["retry-after"], "43");
+    assert.equal(evaluation.json().code, "evaluation_limit_reached");
+    assert.equal(evaluation.headers["retry-after"], undefined);
+    assert.equal(evaluation.json().retryable, false);
   } finally {
     await server.close();
   }
@@ -194,8 +243,11 @@ test("mandatory PRD Score is checked before an evaluation consumes quota", async
   const quotaStore: QuotaStore = {
     async snapshot() {
       return {
-        daily: { limit: 3, used: 0, remaining: 3, resetsAt: "2026-07-25T00:00:00.000Z" },
-        monthly: { limit: 10, used: 0, remaining: 10, resetsAt: "2026-08-01T00:00:00.000Z" },
+        policy: "limited",
+        limit: 3,
+        used: 0,
+        remaining: 3,
+        resetsAt: null,
       };
     },
     async reserve() {
@@ -261,13 +313,13 @@ test("downstream failure consumes one admitted start and always releases concurr
       form.append("prd_text", `Synthetic PRD body for admitted downstream failure number ${run}.`);
       const response = await fetch(`http://127.0.0.1:${port}/api/prd-judge/evaluate`, {
         method: "POST",
-        headers: { authorization: "Bearer valid-token" },
+        headers: { authorization: "Bearer external-token" },
         body: form,
       });
       assert.equal(response.status, 503);
     }
-    const quota = await store.snapshot("subject-1", now);
-    assert.equal(quota.daily.used, 2);
+    const quota = await store.snapshot("subject-2", now, "limited");
+    assert.equal(quota.used, 2);
   } finally {
     await server.close();
   }

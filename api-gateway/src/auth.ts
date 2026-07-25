@@ -12,6 +12,7 @@ export interface WorkspaceIdentity {
   sub: string;
   email: string;
   domain: string;
+  tier: "internal" | "external";
 }
 
 export interface WorkspaceTokenVerifier {
@@ -38,7 +39,7 @@ export function bearerToken(authorization: string | undefined): string {
   if (!authorization) {
     throw new WorkspaceAuthError(
       "auth_required",
-      "Sign in with your work Google account to continue.",
+      "Sign in with Google to continue.",
       401,
     );
   }
@@ -81,26 +82,32 @@ export function validateWorkspaceClaims(
   }
 
   const email = payload.email?.trim().toLowerCase();
-  const domain = payload.hd?.trim().toLowerCase();
-  const expectedDomain = allowedDomain.trim().toLowerCase();
+  const hostedDomain = payload.hd?.trim().toLowerCase() || "";
+  const internalDomain = allowedDomain.trim().toLowerCase();
+  const emailParts = email?.split("@") || [];
   if (
     payload.email_verified !== true
-    || domain !== expectedDomain
     || !email
-    || !email.endsWith(`@${expectedDomain}`)
-    || email.slice(0, -expectedDomain.length - 1).length === 0
+    || emailParts.length !== 2
+    || !emailParts[0]
+    || !emailParts[1]
   ) {
     throw new WorkspaceAuthError(
-      "workspace_not_allowed",
-      "This account does not have access. Use your authorized work account.",
-      403,
+      "auth_required",
+      "Google could not verify this account.",
+      401,
     );
   }
   if (!payload.sub?.trim()) {
     throw new WorkspaceAuthError("auth_required", "The Google sign-in token is invalid.", 401);
   }
 
-  return { sub: payload.sub, email, domain };
+  return {
+    sub: payload.sub,
+    email,
+    domain: hostedDomain || emailParts[1],
+    tier: hostedDomain === internalDomain ? "internal" : "external",
+  };
 }
 
 export function createGoogleWorkspaceVerifier(
@@ -110,7 +117,9 @@ export function createGoogleWorkspaceVerifier(
   now: () => Date = () => new Date(),
 ): WorkspaceTokenVerifier {
   if (!audience.trim()) throw new Error("GOOGLE_OAUTH_CLIENT_ID is required");
-  if (!allowedDomain.trim()) throw new Error("GOOGLE_WORKSPACE_DOMAIN is required");
+  if (!allowedDomain.trim()) {
+    throw new Error("INTERNAL_GOOGLE_WORKSPACE_DOMAIN is required");
+  }
 
   return {
     async verify(token: string): Promise<WorkspaceIdentity> {

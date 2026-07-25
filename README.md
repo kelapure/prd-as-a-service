@@ -1,8 +1,8 @@
 # EvalGPT PRD Judge
 
-EvalGPT is an internal 8090 product for deciding whether a PRD is ready to build. The entire experience requires a verified Google Workspace identity whose hosted-domain claim is exactly `8090.inc`.
+EvalGPT decides whether a PRD is ready to build. Any verified Google account can sign in. Identities whose Google hosted-domain claim is exactly `8090.inc` receive unlimited evaluation starts; every other verified Google account receives three evaluation starts total.
 
-Google ID tokens live only in React memory. EvalGPT has no profiles, saved evaluations, payment, or persistent sharing. Firestore stores only HMAC-pseudonymous quota counters and short-lived concurrency leases; PRD files, extracted text, findings, evidence, filenames, email addresses, and tokens never enter application storage.
+Google ID tokens live only in React memory. EvalGPT has no profiles, saved evaluations, payment, or persistent sharing. Firestore retains only an HMAC-pseudonymous lifetime counter for external accounts, plus short-lived capacity leases. PRD files, extracted text, findings, evidence, filenames, email addresses, and tokens never enter application storage.
 
 ## Product contract
 
@@ -11,7 +11,7 @@ Google ID tokens live only in React memory. EvalGPT has no profiles, saved evalu
 - Draft strength: PRD Score independently evaluates the same supplied evidence against its absolute-mode rubric and applies deterministic arithmetic to model-owned criterion ratings. It never changes the verdict or readiness score.
 - Evidence: every status=used quote is verified against the uploaded PRD or supplied evidence before a score is computed.
 - Secondary diagnostic: PRD Eval Rubric v2, C1-C12. It never overrides the judge verdict.
-- Privacy: Workspace authentication adds access control, not an EvalGPT account. Inputs and results remain in process/browser memory for the active run only.
+- Privacy: Google authentication adds access control, not an EvalGPT account. Inputs and results remain in process/browser memory for the active run only.
 - Model safety: one release-bakeoff winner is allowlisted. There is no automatic fallback to an unvalidated model.
 
 ## Architecture
@@ -22,7 +22,8 @@ Google ID tokens live only in React memory. EvalGPT has no profiles, saved evalu
             v
     Fastify public API gateway (Cloud Run)
             |
-            | verified hd=8090.inc + Firestore quota transaction
+            | verified Google identity + server-owned access tier
+            | Firestore allowance/capacity transaction
             |
             | IAM identity token + optional internal token
             v
@@ -36,13 +37,13 @@ Google ID tokens live only in React memory. EvalGPT has no profiles, saved evalu
 
 ### Components
 
-- frontend/ — 8090-branded Workspace sign-in gate, in-memory credential handling, quota and reauthentication states, progressive result disclosure, and browser-side HTML/PDF/JSON exports.
+- frontend/ — Google sign-in gate, in-memory credential handling, allowance and reauthentication states, progressive result disclosure, and browser-side HTML/PDF/JSON exports.
 - api-gateway/ — Google token validation before multipart parsing, Firestore-backed quotas, content-free logging, upload limits, route-specific IP rate limits, kill switch, cancellation, health checks, and SSE proxying.
 - judge-runtime/ — in-memory PDF/DOCX/Markdown/text extraction, figure/page support, isolated Judge/rubric/PRD Score model calls, canonical validators, and deterministic calculations.
 - judge-runtime/bundle/ — integrity-checked snapshots exported from `salesfactory-agents/prd_judge` and `salesfactory-agents/prd_score`, each with a source commit and file hashes.
 - tests/ — contract fixtures and full local-stack smoke test.
 
-The retired `/api/evalprd/*`, Stripe, profile, saved-evaluation, and document-history routes remain absent. `GET /api/access` is the only identity-facing product endpoint and returns the verified work email plus quota status.
+The retired `/api/evalprd/*`, Stripe, profile, saved-evaluation, and document-history routes remain absent. `GET /api/access` is the only identity-facing product endpoint and returns the verified email, server-classified access tier, and allowance status.
 
 ## Local development
 
@@ -66,7 +67,7 @@ Prerequisites: Node.js 20+, Python 3.12.
     VITE_PUBLIC_EVALUATIONS_ENABLED=true \
       VITE_WORKSPACE_AUTH_REQUIRED=false npm run dev
 
-Open http://localhost:3000. This explicitly disabled local-auth configuration is for fixture development only. Deployed previews and production must use `WORKSPACE_AUTH_REQUIRED=true`, `VITE_WORKSPACE_AUTH_REQUIRED=true`, the internal Google OAuth client ID, Firestore, and the quota HMAC secret.
+Open http://localhost:3000. This explicitly disabled local-auth configuration is for fixture development only. Deployed previews and production must use `WORKSPACE_AUTH_REQUIRED=true`, `VITE_WORKSPACE_AUTH_REQUIRED=true`, an External-audience Google OAuth client ID, Firestore, and the quota HMAC secret.
 
 ## Model-backed runtime
 
@@ -135,7 +136,7 @@ POST /api/prd-judge/evaluate accepts multipart input:
 
 The streamed response emits progress, complete, or error events. The final envelope is `evalgpt-prd-judge/v2`; the frontend fails closed and asks the user to reload if a complete event carries any other envelope version. A production completion must contain a validated PRD Score report with `status=complete` or `status=not_scored`; the runtime and frontend reject missing reports and the retired `unavailable` partial-result shape. The top-level `report`, `readiness_score`, `rubric`, and `prd_score` fields remain separate; consumers must not average, blend, or use PRD Score to rewrite the Judge verdict.
 
-`GET /api/access` requires the same bearer token and returns the verified work email plus daily and monthly quota windows. The gateway admits at most three starts per user per UTC day, ten per calendar month, fifty organization-wide per UTC day, and two concurrent evaluations. Every admitted start counts even if it is cancelled or fails downstream. Abandoned leases expire after twelve minutes.
+`GET /api/access` requires the same bearer token and returns the verified email, server-classified tier, and allowance status. Internal hosted-domain identities bypass user and guest-global count limits. Every other verified Google identity receives three starts total, with no reset; every admitted start counts even if it is cancelled or fails downstream. External starts also share a fifty-start UTC-day safety ceiling. All tiers share two concurrent slots, and abandoned leases expire after twelve minutes.
 
 ## Deployment
 

@@ -1,5 +1,50 @@
 # Fable UX review record
 
+## Google access tiers
+
+Plan review: 2026-07-25
+Model: `claude-fable-5`, xhigh effort
+Status: `FINAL FABLE APPROVAL: PASS`
+
+Fable reviewed the proposed change from a single-workspace gate to two
+server-owned access tiers before implementation. It required the signed-out
+gate to state the allowance before sign-in, internal identities to see a
+simple no-limits treatment, external identities to see an explicit one-time
+three-evaluation allowance with no reset language, and exhaustion to be a
+terminal state rather than a retry prompt.
+
+The implementation follows those requirements without showing the internal
+domain in product copy. The gateway classifies only the signed Google `hd`
+claim, never an email suffix. Internal identities bypass user and guest-global
+count exhaustion while retaining concurrency and kill-switch safeguards.
+Other verified Google identities receive three admitted starts total.
+Firestore retains only the HMAC-pseudonymous total count for a guest identity;
+it stores no timestamp, email, token, filename, document, finding, or evidence.
+
+The fresh-context final review inspected the exact no-traffic App Engine
+preview
+`google-tiers-152feec-20260725-dot-dompe-dev-439304.uc.r.appspot.com` and
+gateway revision `evalgpt-api-gateway-00013-ket`. Live HTTP inspection covered
+the deployed assets, security policy, health response, and unauthenticated
+failure behavior. Real Google sign-in had already verified both deployed
+classification paths: an internal identity rendered `Team member · no
+evaluation limits`, while a Gmail identity rendered `3 of 3 guest evaluations
+remaining · one-time allowance · does not reset`.
+
+Fable inspected the implementation and fixture-backed browser evidence for
+the guest remaining and exhausted states, capacity busy, kill switch,
+allowance-store failure, expired-token recovery with selected-file
+preservation, sign-out, privacy copy, keyboard behavior, and absence of
+visible organization branding. It found no P0 or P1 issues and returned
+`FINAL FABLE APPROVAL: PASS`.
+
+Fable recorded five non-blocking follow-ups: remove the temporary legacy quota
+response after the frontend cutover; add an explicit browser assertion for
+the allowance-store-unavailable sign-in state; derive the exhausted-state
+numeral from the configured guest limit; document how pre-tier guest starts
+are migrated into the lifetime total; and remove or clarify unreachable
+legacy denial copy. None changes the approved deployed contract.
+
 ## Removal of visible 8090 branding
 
 Plan and final review: 2026-07-25

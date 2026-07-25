@@ -2,16 +2,18 @@
 
 Every applicable checkbox is blocking for production traffic. Evidence belongs in the release issue or pull request.
 
-## Workspace authentication
+## Google authentication and access tiers
 
-- [ ] The Google OAuth consent screen is Internal to the `8090.inc` organization.
+- [ ] Google Auth Platform audience is External and the production app is published.
 - [ ] Authorized JavaScript origins contain only production, the exact preview, and approved local origins.
 - [ ] Anonymous requests receive `401 auth_required` before multipart parsing.
 - [ ] Expired tokens receive `401 token_expired`.
-- [ ] Gmail, `dfyautomation.io`, missing `hd`, aliases, subdomains, unverified email, wrong audience, wrong issuer, malformed, and forged tokens are denied.
-- [ ] Only verified tokens with `hd=8090.inc`, the configured audience, valid issuer/expiration, verified email, and stable `sub` are admitted.
+- [ ] Verified Gmail and external Workspace accounts are admitted to the limited tier.
+- [ ] Exact `hd=8090.inc` identities are classified as internal; email suffixes are not used as the membership authority.
+- [ ] Unverified email, wrong audience, wrong issuer, missing subject, malformed, and forged tokens are denied.
+- [ ] The configured audience, issuer, expiration, verified email, and stable `sub` are validated for every tier.
 - [ ] The ID token exists only in browser memory and never enters local storage, session storage, cookies, analytics, error reporting, or logs.
-- [ ] `GET /api/access` returns only the signed-in work email plus daily/monthly quota status.
+- [ ] `GET /api/access` returns only the signed-in email, server-owned tier, and allowance status.
 - [ ] Sign-out clears in-memory identity and disables Google automatic account selection.
 - [ ] Token-expiry recovery preserves locally selected files and pasted content.
 - [ ] `/api/health` remains unauthenticated and content-free.
@@ -22,12 +24,14 @@ Every applicable checkbox is blocking for production traffic. Evidence belongs i
 - [ ] The gateway service account has `roles/datastore.user` and no unnecessary Firestore role.
 - [ ] User document IDs are HMAC-SHA256 digests of Google `sub`; raw `sub`, email, token, filename, PRD content, findings, and evidence are absent from Firestore.
 - [ ] The HMAC key is supplied from Secret Manager and contains at least 32 random bytes.
-- [ ] Transactions enforce 3 starts per user per UTC day, 10 per calendar month, 50 globally per UTC day, and 2 active global leases across revisions.
+- [ ] Transactions enforce three lifetime starts for each external identity, fifty external starts per UTC day, and two active global leases across revisions.
+- [ ] Internal identities bypass user and external-global count exhaustion while still acquiring a concurrency lease.
 - [ ] Capacity rejections do not consume a start; every admitted start counts once even on cancellation or downstream failure.
 - [ ] Concurrency is released in `finally`, and abandoned leases expire after 12 minutes.
-- [ ] `expiresAt` TTL policies are enabled for `evalgpt_quota_users` and `evalgpt_quota`; inactivity retention is 90 days.
+- [ ] External user documents contain only `totalCount`; they intentionally omit timestamps and `expiresAt` so the one-time allowance does not reset and no activity history is retained.
+- [ ] `expiresAt` TTL is enabled for global capacity metadata; lease/capacity retention is 90 days.
 - [ ] Firestore outage fails closed with `503 quota_store_unavailable`; no per-instance fallback is active when authentication is required.
-- [ ] Limit responses use stable error codes and valid `Retry-After` headers.
+- [ ] Terminal external exhaustion uses `evaluation_limit_reached` without `Retry-After`; retryable capacity failures include valid `Retry-After`.
 - [ ] Route-specific IP burst limits exclude health checks and do not trust unconfigured forwarding headers.
 
 ## Judgment and evidence
@@ -90,7 +94,7 @@ Every applicable checkbox is blocking for production traffic. Evidence belongs i
 - [ ] Auth-capable gateway deploys with enforcement off before the frontend canary.
 - [ ] Authenticated frontend passes 10 percent, then 50 percent, then 100 percent observation windows.
 - [ ] Gateway mandatory authentication is enabled only after the authenticated frontend reaches 100 percent.
-- [ ] Real 8090, external Google, anonymous, quota, multi-revision, Judge, and PRD Score checks pass after cutover.
+- [ ] Real internal, Gmail, external Workspace, anonymous, allowance, multi-revision, Judge, and PRD Score checks pass after cutover.
 - [ ] Rollback never restores anonymous access; evaluation failure uses `EVALUATIONS_ENABLED=false`.
 
 ## Claims

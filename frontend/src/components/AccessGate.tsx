@@ -23,23 +23,23 @@ export function AccessGate() {
           <p className="eyebrow">PRD Judge</p>
           <h1 id="access-title">
             {denied
-              ? "This account does not have access."
+              ? "This Google account could not be verified."
               : failed
                 ? "Sign-in is temporarily unavailable."
                 : "Know if your PRD is ready to build."}
           </h1>
           {denied ? (
             <p className="access-lede">
-              Sign out of Google, then choose your authorized work account.
+              Sign out of Google, then choose another account.
             </p>
           ) : failed ? (
             <p className="access-lede">
-              {accessError || "EvalGPT could not verify Google Workspace access. Try again shortly."}
+              {accessError || "EvalGPT could not verify Google sign-in. Try again shortly."}
             </p>
           ) : (
             <p className="access-lede">
-              EvalGPT gives you a readiness verdict, a deterministic score, and an
-              evidence-backed path to GO. Access is limited to authorized staff.
+              Sign in with Google. Team members evaluate without limits. Guest accounts
+              include three evaluations total.
             </p>
           )}
 
@@ -47,12 +47,12 @@ export function AccessGate() {
             {waiting ? (
               <p className="access-status" role="status">
                 {status === "verifying"
-                  ? "Verifying workspace access…"
+                  ? "Verifying your Google account…"
                   : "Preparing secure sign-in…"}
               </p>
             ) : (
               <>
-                <p>Sign in with your work Google account to continue.</p>
+                <p>Sign in with Google to continue.</p>
                 {gisReady ? <GoogleSignInButton /> : (
                   <p className="access-status" role="status">Google sign-in is loading…</p>
                 )}
@@ -62,7 +62,7 @@ export function AccessGate() {
 
           <p className="access-privacy">
             Your sign-in stays in this browser tab&apos;s memory only. EvalGPT stores your
-            evaluation-start count and nothing else about you or your documents.
+            pseudonymous guest evaluation count and nothing else about you or your documents.
           </p>
         </section>
       </main>

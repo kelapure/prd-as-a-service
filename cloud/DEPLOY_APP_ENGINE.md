@@ -1,4 +1,4 @@
-# Deploy Workspace-restricted EvalGPT
+# Deploy Google-authenticated EvalGPT
 
 EvalGPT has three services:
 
@@ -36,9 +36,9 @@ export OLD_GATEWAY_REVISION="$(gcloud run services describe evalgpt-api-gateway 
 
 Record those values in the release issue.
 
-## 2. Create the internal Google OAuth client
+## 2. Configure the External Google OAuth audience
 
-In Google Cloud Console, configure the OAuth consent screen as **Internal** for the `8090.inc` organization. Create a **Web application** OAuth client for Google Identity Services.
+In Google Auth Platform, configure the app audience as **External** and publish it for production. Sign in with Google requests only basic identity data (`openid`, email, and profile), so Google permits external sign-in without adding test users even while the app is in Testing; production should still be published before public traffic. Create or reuse a **Web application** OAuth client for Google Identity Services.
 
 Authorized JavaScript origins must include:
 
@@ -46,10 +46,10 @@ Authorized JavaScript origins must include:
 - the exact App Engine preview origin for this release;
 - `http://localhost:3000` for local development.
 
-Do not add `dfyautomation.io`, Gmail, wildcard domains, subdomains, or redirect URIs that are not used. The browser receives only the OAuth client ID; it does not use or ship a client secret.
+Do not add wildcard origins or redirect URIs that are not used. The browser receives only the OAuth client ID; it does not use or ship a client secret.
 
 ```bash
-export GOOGLE_OAUTH_CLIENT_ID="<internal-web-client>.apps.googleusercontent.com"
+export GOOGLE_OAUTH_CLIENT_ID="<external-web-client>.apps.googleusercontent.com"
 export RELEASE_ID="evalgpt-$(git rev-parse --short HEAD)"
 export FRONTEND_PREVIEW_URL="https://$RELEASE_ID-dot-$APP_HOST"
 ```
@@ -76,12 +76,6 @@ gcloud projects add-iam-policy-binding "$PROJECT_ID" \
   --role=roles/datastore.user
 
 gcloud firestore fields ttls update expiresAt \
-  --collection-group=evalgpt_quota_users \
-  --enable-ttl \
-  --database='(default)' \
-  --project "$PROJECT_ID"
-
-gcloud firestore fields ttls update expiresAt \
   --collection-group=evalgpt_quota \
   --enable-ttl \
   --database='(default)' \
@@ -102,7 +96,7 @@ gcloud secrets add-iam-policy-binding evalgpt-quota-hmac-key \
   --project "$PROJECT_ID"
 ```
 
-Do not inspect or log the secret. Rotating it starts a new pseudonymous quota namespace, so rotate only through an explicit capacity-reset procedure.
+Do not inspect or log the secret. External lifetime allowances depend on this stable pseudonymous namespace. Rotate only through an explicit dual-key migration or an approved allowance reset.
 
 ## 4. Verify the private Judge and PRD Score runtime
 
@@ -128,9 +122,12 @@ Verify the runtime health response reports:
 
 Do not continue if PRD Score is disabled or either model/bundle pin differs from the reviewed release.
 
-## 5. Deploy the auth-capable gateway with enforcement off
+## 5. Deploy an auth-enforced, no-traffic gateway preview
 
-This first revision supports `/api/access`, token verification, and Firestore quotas, while the existing frontend is still serving traffic.
+Authentication must remain mandatory throughout the rollout. The new gateway
+temporarily includes the retired daily/monthly fields alongside the tier-aware
+quota contract so the currently deployed frontend remains functional while
+traffic moves between revisions.
 
 ```bash
 export GATEWAY_IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/evalgpt/api-gateway:$RELEASE_ID"
@@ -144,17 +141,27 @@ gcloud run deploy evalgpt-api-gateway \
   --project "$PROJECT_ID" \
   --service-account "$GATEWAY_SA" \
   --allow-unauthenticated \
+  --no-traffic \
+  --tag "$RELEASE_ID" \
   --timeout 600 \
   --concurrency 8 \
   --max-instances 10 \
   --set-secrets "QUOTA_IDENTITY_HMAC_KEY=evalgpt-quota-hmac-key:latest" \
-  --set-env-vars "ALLOWED_ORIGIN=https://evalgpt.com,$FRONTEND_PREVIEW_URL,WORKSPACE_AUTH_REQUIRED=false,GOOGLE_OAUTH_CLIENT_ID=$GOOGLE_OAUTH_CLIENT_ID,GOOGLE_WORKSPACE_DOMAIN=8090.inc,USER_DAILY_RUN_LIMIT=3,USER_MONTHLY_RUN_LIMIT=10,GLOBAL_DAILY_RUN_LIMIT=50,GLOBAL_CONCURRENT_RUN_LIMIT=2,QUOTA_LEASE_MS=720000,QUOTA_TTL_MS=7776000000,ACCESS_RATE_LIMIT_MAX=60,ACCESS_RATE_LIMIT_WINDOW_MS=60000,EVALUATE_RATE_LIMIT_MAX=20,EVALUATE_RATE_LIMIT_WINDOW_MS=600000,TRUST_PROXY_HOPS=2,EVALUATIONS_ENABLED=true,EVALUATION_TIMEOUT_MS=570000,USE_GOOGLE_IDENTITY_TOKEN=true,PRD_JUDGE_RUNTIME_URL=$RUNTIME_URL,PRD_JUDGE_RUNTIME_AUDIENCE=$RUNTIME_URL"
+  --set-env-vars "ALLOWED_ORIGIN=https://evalgpt.com,$FRONTEND_PREVIEW_URL,WORKSPACE_AUTH_REQUIRED=true,GOOGLE_OAUTH_CLIENT_ID=$GOOGLE_OAUTH_CLIENT_ID,INTERNAL_GOOGLE_WORKSPACE_DOMAIN=8090.inc,EXTERNAL_TOTAL_RUN_LIMIT=3,GLOBAL_DAILY_RUN_LIMIT=50,GLOBAL_CONCURRENT_RUN_LIMIT=2,QUOTA_LEASE_MS=720000,QUOTA_TTL_MS=7776000000,ACCESS_RATE_LIMIT_MAX=60,ACCESS_RATE_LIMIT_WINDOW_MS=60000,EVALUATE_RATE_LIMIT_MAX=20,EVALUATE_RATE_LIMIT_WINDOW_MS=600000,TRUST_PROXY_HOPS=2,EVALUATIONS_ENABLED=true,EVALUATION_TIMEOUT_MS=570000,USE_GOOGLE_IDENTITY_TOKEN=true,PRD_JUDGE_RUNTIME_URL=$RUNTIME_URL,PRD_JUDGE_RUNTIME_AUDIENCE=$RUNTIME_URL"
 
 export GATEWAY_URL="$(gcloud run services describe evalgpt-api-gateway \
   --region "$REGION" --project "$PROJECT_ID" --format='value(status.url)')"
+export NEW_GATEWAY_REVISION="$(gcloud run revisions list \
+  --service evalgpt-api-gateway --region "$REGION" --project "$PROJECT_ID" \
+  --sort-by='~metadata.creationTimestamp' --limit=1 \
+  --format='value(metadata.name)')"
+# Record the tagged revision URL printed by the deploy command:
+export GATEWAY_PREVIEW_URL="<tagged-revision-url>"
 ```
 
-At this stage, `/api/access` must work with an 8090 token, but the old frontend can still submit anonymously. Keep this transition short.
+Against the tagged URL, `/api/access` must return `unlimited` for an internal
+hosted-domain token and `limited` for a verified external Google token. An
+anonymous multipart request must receive `401 auth_required` before parsing.
 
 ## 6. Build and deploy the authenticated frontend preview
 
@@ -165,7 +172,7 @@ cat > .env.production.local <<EOF
 VITE_PUBLIC_EVALUATIONS_ENABLED=true
 VITE_WORKSPACE_AUTH_REQUIRED=true
 VITE_GOOGLE_CLIENT_ID=$GOOGLE_OAUTH_CLIENT_ID
-VITE_API_BASE=$GATEWAY_URL
+VITE_API_BASE=$GATEWAY_PREVIEW_URL
 EOF
 
 npm ci
@@ -182,9 +189,10 @@ gcloud app deploy app.yaml \
 
 Against the exact preview:
 
-- an anonymous visitor sees only the 8090 sign-in gate;
-- a verified `@8090.inc` account sees the product and quota status;
-- Gmail, `dfyautomation.io`, missing-`hd`, aliases, and subdomains are denied;
+- an anonymous visitor sees only the Google sign-in gate;
+- an exact `hd=8090.inc` identity sees `Team member · no evaluation limits`;
+- verified Gmail and other Workspace identities receive three total guest evaluations;
+- an external account with no remaining allowance sees the terminal exhausted state;
 - ID tokens do not enter local or session storage;
 - selected documents survive token-expiry reauthentication;
 - Judge and PRD Score both execute and the result remains correctly ordered;
@@ -192,36 +200,64 @@ Against the exact preview:
 
 Run the required fresh-context Fable review against the deployed preview. Resolve every P0/P1 and rerun. If Fable is unavailable, use Opus 5 at xhigh effort and keep release blocked on every P0/P1.
 
-## 7. Canary the authenticated frontend
+## 7. Canary the auth-enforced gateway
 
-Advance only after each observation window remains healthy.
+Advance the reviewed gateway revision only while the currently deployed
+frontend remains healthy. The compatibility fields in `/api/access` prevent a
+contract gap during this step.
 
 ```bash
+gcloud run services update-traffic evalgpt-api-gateway \
+  --region "$REGION" --project "$PROJECT_ID" \
+  --to-revisions "$OLD_GATEWAY_REVISION=90,$NEW_GATEWAY_REVISION=10"
+
+gcloud run services update-traffic evalgpt-api-gateway \
+  --region "$REGION" --project "$PROJECT_ID" \
+  --to-revisions "$OLD_GATEWAY_REVISION=50,$NEW_GATEWAY_REVISION=50"
+
+gcloud run services update-traffic evalgpt-api-gateway \
+  --region "$REGION" --project "$PROJECT_ID" \
+  --to-revisions "$NEW_GATEWAY_REVISION=100"
+```
+
+## 8. Build and canary the production frontend
+
+After the stable gateway URL serves the new contract, rebuild the same reviewed
+frontend source with `VITE_API_BASE=$GATEWAY_URL` and deploy it under a new
+production version ID. Advance only after each observation window remains
+healthy.
+
+```bash
+export FRONTEND_RELEASE_ID="$RELEASE_ID-prod"
+cat > frontend/.env.production.local <<EOF
+VITE_PUBLIC_EVALUATIONS_ENABLED=true
+VITE_WORKSPACE_AUTH_REQUIRED=true
+VITE_GOOGLE_CLIENT_ID=$GOOGLE_OAUTH_CLIENT_ID
+VITE_API_BASE=$GATEWAY_URL
+EOF
+
+(cd frontend && npm run build)
+gcloud app deploy frontend/app.yaml \
+  --project "$PROJECT_ID" \
+  --version "$FRONTEND_RELEASE_ID" \
+  --no-promote \
+  --quiet
+
 gcloud app services set-traffic default \
-  --splits "$OLD_FRONTEND=0.90,$RELEASE_ID=0.10" \
+  --splits "$OLD_FRONTEND=0.90,$FRONTEND_RELEASE_ID=0.10" \
   --split-by=random --migrate --project "$PROJECT_ID"
 
 gcloud app services set-traffic default \
-  --splits "$OLD_FRONTEND=0.50,$RELEASE_ID=0.50" \
+  --splits "$OLD_FRONTEND=0.50,$FRONTEND_RELEASE_ID=0.50" \
   --split-by=random --migrate --project "$PROJECT_ID"
 
 gcloud app services set-traffic default \
-  --splits "$RELEASE_ID=1" \
+  --splits "$FRONTEND_RELEASE_ID=1" \
   --migrate --project "$PROJECT_ID"
 ```
 
-## 8. Cut over mandatory gateway authentication
-
-After the authenticated frontend reaches 100 percent, enable gateway enforcement in one cutover:
-
-```bash
-gcloud run services update evalgpt-api-gateway \
-  --region "$REGION" \
-  --project "$PROJECT_ID" \
-  --update-env-vars "WORKSPACE_AUTH_REQUIRED=true"
-```
-
-Verify immediately:
+Authentication was never disabled. Verify it again after both services reach
+100 percent:
 
 ```bash
 curl -i -X POST "$GATEWAY_URL/api/prd-judge/evaluate"
@@ -230,11 +266,11 @@ curl -i -X POST "$GATEWAY_URL/api/prd-judge/evaluate"
 
 Then verify with real browser sessions that:
 
-- an 8090 account succeeds;
-- an external Google account receives `403 workspace_not_allowed`;
+- an exact `hd=8090.inc` account can run repeatedly without user/global-count exhaustion;
+- a Gmail account and a non-8090 Workspace account both succeed;
+- each external identity is rejected with `429 evaluation_limit_reached` after three admitted starts;
 - quota counts remain consistent across multiple gateway revisions/instances;
-- the fourth daily and eleventh monthly user starts are rejected;
-- the fifty-first global daily start is rejected;
+- the fifty-first external global daily start is rejected without blocking internal users;
 - a third simultaneous evaluation receives `429 capacity_busy`;
 - Firestore outage returns `503 quota_store_unavailable`;
 - `/api/health` remains unauthenticated and content-free.
