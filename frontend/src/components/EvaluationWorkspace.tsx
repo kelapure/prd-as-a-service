@@ -169,12 +169,12 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
             <p className="eyebrow">Workspace access</p>
             <h3>
               {auth.status === "denied"
-                ? "Use your @8090.inc account."
+                ? "Use your authorized work account."
                 : "Your Google sign-in expired."}
             </h3>
             <p>
               {auth.status === "denied"
-                ? "This account is not part of the permitted 8090 Workspace."
+                ? "This account is not part of the permitted workspace."
                 : "Your selected documents are still here. Sign in again to continue."}
             </p>
             <GoogleSignInButton />
@@ -329,7 +329,7 @@ export function EvaluationWorkspace({ onResult }: EvaluationWorkspaceProps) {
             </button>
           )}
           <span className="field-note">
-            25 MB combined limit{auth.authRequired ? " · 8090 Workspace access required" : ""}
+            25 MB combined limit{auth.authRequired ? " · Workspace access required" : ""}
           </span>
         </div>
       </form>

@@ -1,5 +1,24 @@
 # Fable UX review record
 
+## Removal of visible 8090 branding
+
+Plan and final review: 2026-07-25
+Model: `claude-fable-5`, xhigh effort
+Status: `FINAL FABLE APPROVAL: PASS`
+
+The user requested removal of 8090 from the site with every other behavior
+unchanged. Fable's plan review found three blocking completeness issues: the
+signed-in footer mark also had to be removed, gateway-authored denial copy
+could still surface the domain, and the proposed denial lede duplicated its
+heading. The implementation resolved all three.
+
+The fresh-context final review inspected the working-tree diff, production
+build, and signed-out gate pixels. It confirmed that all four visible marks
+were removed; product-authored UI and auth-response copy contains no 8090;
+the denial state remains clear and actionable; and exact server-side
+`hd=8090.inc` enforcement, the signed-in user's real email, quotas, Judge,
+PRD Score, exports, hierarchy, and all other behavior remain unchanged.
+
 ## 8090 Workspace access and quota review
 
 Prototype review: 2026-07-24

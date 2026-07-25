@@ -122,7 +122,7 @@ try {
         contentType: "application/json",
         body: JSON.stringify({
           code: "workspace_not_allowed",
-          error: "EvalGPT is available only to verified @8090.inc Google Workspace accounts.",
+          error: "This account does not have access. Use your authorized work account.",
         }),
       });
     }
@@ -201,7 +201,8 @@ try {
   await page.goto(origin, { waitUntil: "networkidle" });
 
   assert.equal(await page.locator("h1").innerText(), "Know if your PRD is ready to build.");
-  assert.equal(await page.getByText("PRD Judge · 8090 internal", { exact: true }).count(), 1);
+  assert.equal(await page.getByText("PRD Judge", { exact: true }).count(), 1);
+  assert.equal(await page.getByText(/8090/i).count(), 0);
   assert.equal(await page.getByRole("navigation").count(), 0, "signed-out users must not see app navigation");
   assert.equal(await page.locator(".evaluation-form").count(), 0, "signed-out users must not see uploads");
   assert.deepEqual(
@@ -269,7 +270,8 @@ try {
   await page.getByRole("button", { name: "Example result" }).first().click();
   await page.locator("#judge-result").waitFor();
   await page.getByRole("button", { name: "Sign out" }).click();
-  await page.getByText("PRD Judge · 8090 internal", { exact: true }).waitFor();
+  await page.getByText("PRD Judge", { exact: true }).waitFor();
+  assert.equal(await page.getByText(/8090/i).count(), 0);
   assert.equal(await page.locator(".evaluation-form").count(), 0);
   assert.equal(await page.locator("#judge-result").count(), 0, "sign-out must clear the prior report");
   assert.equal(await page.evaluate(() => window.__evalgptAutoSelectDisabled), true);
