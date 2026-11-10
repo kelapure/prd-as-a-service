@@ -1,5 +1,7 @@
 # EvalGPT PRD Judge
 
+**[Calibration Report](CALIBRATION.md)** — dev-split results and known weaknesses.
+
 EvalGPT decides whether a PRD is ready to build. Any verified Google account can sign in. Identities whose Google hosted-domain claim is exactly `8090.inc` receive unlimited evaluation starts; every other verified Google account receives three evaluation starts total.
 
 Google ID tokens live only in React memory. EvalGPT has no profiles, saved evaluations, payment, or persistent sharing. Firestore retains only an HMAC-pseudonymous lifetime counter for external accounts, plus short-lived capacity leases. PRD files, extracted text, findings, evidence, filenames, email addresses, and tokens never enter application storage.
